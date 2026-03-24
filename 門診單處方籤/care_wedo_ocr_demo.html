@@ -1,0 +1,192 @@
+
+<div style="padding: 1rem 0; max-width: 480px; margin: 0 auto;">
+
+  <div style="display:flex; align-items:center; gap:10px; margin-bottom:1.5rem;">
+    <div style="width:36px;height:36px;border-radius:10px;background:var(--color-background-info);display:flex;align-items:center;justify-content:center;font-size:16px;">🌿</div>
+    <div>
+      <p style="margin:0;font-weight:500;font-size:15px;color:var(--color-text-primary);">Care WEDO — OCR 引擎</p>
+      <p style="margin:0;font-size:12px;color:var(--color-text-secondary);">拍照上傳 → Claude 自動解析單據</p>
+    </div>
+  </div>
+
+  <div id="upload-zone" style="border:1.5px dashed var(--color-border-secondary);border-radius:var(--border-radius-lg);padding:2rem 1rem;text-align:center;cursor:pointer;transition:background 0.15s;" onclick="document.getElementById('file-input').click()">
+    <p style="font-size:28px;margin:0 0 8px;">📷</p>
+    <p style="margin:0;font-size:14px;font-weight:500;color:var(--color-text-primary);">點擊上傳醫療單據</p>
+    <p style="margin:4px 0 0;font-size:12px;color:var(--color-text-secondary);">支援 JPG / PNG，可多張</p>
+    <input type="file" id="file-input" accept="image/*" multiple style="display:none" onchange="handleFiles(event)">
+  </div>
+
+  <div id="preview-area" style="display:none;margin-top:1rem;"></div>
+
+  <div id="analyze-btn-wrap" style="display:none;margin-top:1rem;">
+    <button id="analyze-btn" onclick="analyzeImages()" style="width:100%;padding:10px;font-size:14px;font-weight:500;">
+      開始 AI 解析 ↗
+    </button>
+  </div>
+
+  <div id="status-msg" style="display:none;margin-top:1rem;padding:10px 14px;border-radius:var(--border-radius-md);background:var(--color-background-secondary);font-size:13px;color:var(--color-text-secondary);"></div>
+
+  <div id="result-area" style="display:none;margin-top:1.5rem;"></div>
+
+</div>
+
+<script>
+let uploadedFiles = [];
+let base64Images = [];
+
+const uploadZone = document.getElementById('upload-zone');
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.style.background = 'var(--color-background-secondary)'; });
+uploadZone.addEventListener('dragleave', () => { uploadZone.style.background = ''; });
+uploadZone.addEventListener('drop', e => { e.preventDefault(); uploadZone.style.background = ''; handleFilesFromDrop(e.dataTransfer.files); });
+
+function handleFiles(e) { handleFilesFromDrop(e.target.files); }
+
+function handleFilesFromDrop(files) {
+  uploadedFiles = Array.from(files);
+  base64Images = [];
+  const preview = document.getElementById('preview-area');
+  preview.style.display = 'block';
+  preview.innerHTML = '<p style="font-size:12px;color:var(--color-text-secondary);margin:0 0 8px;">已選擇 ' + uploadedFiles.length + ' 張</p><div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+    uploadedFiles.map((f, i) => `<div style="width:60px;height:60px;border-radius:var(--border-radius-md);border:0.5px solid var(--color-border-tertiary);overflow:hidden;position:relative;" id="thumb-${i}"><p style="margin:4px;font-size:10px;color:var(--color-text-secondary);">${f.name.slice(0,8)}…</p></div>`).join('') + '</div>';
+
+  let loaded = 0;
+  uploadedFiles.forEach((f, i) => {
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const b64 = ev.target.result.split(',')[1];
+      base64Images[i] = b64;
+      const thumb = document.getElementById('thumb-' + i);
+      if (thumb) {
+        thumb.innerHTML = '';
+        const img = document.createElement('img');
+        img.src = ev.target.result;
+        img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+        thumb.appendChild(img);
+      }
+      loaded++;
+      if (loaded === uploadedFiles.length) {
+        document.getElementById('analyze-btn-wrap').style.display = 'block';
+      }
+    };
+    reader.readAsDataURL(f);
+  });
+}
+
+async function analyzeImages() {
+  const btn = document.getElementById('analyze-btn');
+  const status = document.getElementById('status-msg');
+  const result = document.getElementById('result-area');
+  btn.disabled = true;
+  btn.textContent = '解析中…';
+  status.style.display = 'block';
+  status.textContent = '正在呼叫 Claude API 進行 OCR 解析…';
+  result.style.display = 'none';
+
+  const content = [
+    ...base64Images.map(b64 => ({
+      type: 'image',
+      source: { type: 'base64', media_type: 'image/jpeg', data: b64 }
+    })),
+    {
+      type: 'text',
+      text: `你是一個醫療單據解析專家。請仔細辨識這些台灣醫療單據圖片並以JSON格式回傳。
+
+只回傳純JSON，不要有任何說明文字或markdown。格式如下：
+{
+  "patient": { "name": "...", "age": "...", "id": "..." },
+  "visit_date": "...",
+  "department": "...",
+  "doctor": "...",
+  "diagnoses": ["..."],
+  "medicines": [{"name":"...","use":"...","freq":"...","qty":"...","days":0}],
+  "exams": [{"type":"...","location":"...","date":"...","time":"...","notes":"..."}],
+  "reminders": [{"date":"...","label":"...","desc":"...","urgent":false}],
+  "next_visit": {"date":"...","dept":"...","doctor":"...","note":"..."}
+}`
+    }
+  ];
+
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{ role: 'user', content }]
+      })
+    });
+
+    if (!resp.ok) throw new Error('API error ' + resp.status);
+    const data = await resp.json();
+    const raw = data.content.find(b => b.type === 'text')?.text || '';
+    let parsed;
+    try {
+      parsed = JSON.parse(raw.replace(/```json|```/g, '').trim());
+    } catch {
+      throw new Error('JSON 解析失敗：' + raw.slice(0, 100));
+    }
+
+    status.textContent = '解析完成！共識別 ' + (parsed.medicines?.length || 0) + ' 種藥・' + (parsed.reminders?.length || 0) + ' 個提醒';
+    renderResult(parsed);
+
+  } catch (err) {
+    status.style.background = 'var(--color-background-danger)';
+    status.style.color = 'var(--color-text-danger)';
+    status.textContent = '錯誤：' + err.message;
+    btn.disabled = false;
+    btn.textContent = '重新解析 ↗';
+  }
+}
+
+function renderResult(d) {
+  const result = document.getElementById('result-area');
+  result.style.display = 'block';
+
+  const meds = (d.medicines || []).map(m => `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:10px 0;border-bottom:0.5px solid var(--color-border-tertiary);">
+      <div>
+        <p style="margin:0;font-size:13px;font-weight:500;color:var(--color-text-primary);">${m.name}</p>
+        <p style="margin:2px 0 0;font-size:11px;color:var(--color-text-secondary);">${m.use || ''} · ${m.freq || ''}</p>
+      </div>
+      <div style="font-size:12px;color:var(--color-text-secondary);text-align:right;">${m.qty || ''}<br>${m.days ? m.days+'天' : ''}</div>
+    </div>`).join('');
+
+  const reminders = (d.reminders || []).map(r => `
+    <div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:0.5px solid var(--color-border-tertiary);">
+      <div style="width:8px;height:8px;border-radius:50%;background:${r.urgent ? 'var(--color-background-danger)' : 'var(--color-background-info)'};flex-shrink:0;margin-top:5px;"></div>
+      <div>
+        <p style="margin:0;font-size:12px;font-weight:500;color:${r.urgent ? 'var(--color-text-danger)' : 'var(--color-text-info)'};">${r.date}</p>
+        <p style="margin:2px 0 0;font-size:13px;color:var(--color-text-primary);">${r.label}</p>
+        <p style="margin:2px 0 0;font-size:11px;color:var(--color-text-secondary);">${r.desc}</p>
+      </div>
+    </div>`).join('');
+
+  result.innerHTML = `
+    <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:1rem 1.25rem;margin-bottom:1rem;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+        <div style="width:36px;height:36px;border-radius:50%;background:var(--color-background-info);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:500;color:var(--color-text-info);">${(d.patient?.name||'？').charAt(0)}</div>
+        <div>
+          <p style="margin:0;font-weight:500;font-size:15px;color:var(--color-text-primary);">${d.patient?.name || '—'}</p>
+          <p style="margin:0;font-size:12px;color:var(--color-text-secondary);">${d.patient?.age || ''}・${d.department || ''}・${d.visit_date || ''}</p>
+        </div>
+      </div>
+      ${d.diagnoses?.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;">${d.diagnoses.map(dx => `<span style="font-size:11px;padding:2px 8px;border-radius:20px;background:var(--color-background-danger);color:var(--color-text-danger);border:0.5px solid var(--color-border-danger);">${dx}</span>`).join('')}</div>` : ''}
+    </div>
+
+    ${meds ? `<div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:1rem 1.25rem;margin-bottom:1rem;">
+      <p style="margin:0 0 4px;font-size:12px;font-weight:500;color:var(--color-text-secondary);">藥物清單 (${d.medicines.length} 種)</p>
+      ${meds}
+    </div>` : ''}
+
+    ${reminders ? `<div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:1rem 1.25rem;margin-bottom:1rem;">
+      <p style="margin:0 0 4px;font-size:12px;font-weight:500;color:var(--color-text-secondary);">提醒事項 (${d.reminders.length} 個)</p>
+      ${reminders}
+    </div>` : ''}
+
+    <button onclick="sendPrompt('Care WEDO OCR 解析結果：' + JSON.stringify(${JSON.stringify(d)}) + '\\n\\n請幫我把這份解析結果整理成給家屬的 LINE 訊息草稿')" style="width:100%;padding:10px;font-size:13px;">
+      產生 LINE 家屬通知草稿 ↗
+    </button>
+  `;
+}
+</script>

@@ -1,0 +1,68 @@
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;800&family=PingFang+TC:wght@400;500;600&display=swap');
+
+:root {
+  --bg-color: #0f1117;
+  --text-primary: #f0f0f0;
+  --text-secondary: #aaa;
+  --text-muted: #888;
+  
+  --primary: #4fc3f7;
+  --primary-gradient: linear-gradient(135deg, #4fc3f7, #0288d1);
+  --primary-transparent: rgba(79, 195, 247, 0.2);
+  
+  --success: #27ae60;
+  --success-gradient: linear-gradient(135deg, #00c853, #00695c);
+  --success-transparent: rgba(39, 174, 96, 0.3);
+  
+  --danger: #ff6b6b;
+  --danger-bg: rgba(255, 107, 107, 0.08);
+  --danger-transparent: rgba(255, 107, 107, 0.25);
+  
+  --warning: #e74c3c;
+  --warning-bg: rgba(231, 76, 60, 0.1);
+  --warning-border: rgba(231, 76, 60, 0.3);
+  
+  --purple: #9b59b6;
+  --purple-bg: rgba(155, 89, 182, 0.07);
+  --purple-border: rgba(155, 89, 182, 0.2);
+  
+  --header-gradient: linear-gradient(135deg, #1a2744 0%, #0d1f3c 100%);
+  --card-bg: rgba(255, 255, 255, 0.05);
+  --card-border: rgba(255, 255, 255, 0.08);
+  --card-bg-done: rgba(255, 255, 255, 0.03);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background-color: var(--bg-color);
+  color: var(--text-primary);
+  font-family: 'Noto Sans TC', 'PingFang TC', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  padding-bottom: 80px; 
+}
+
+@keyframes spin { 
+  from { transform: rotate(0deg); } 
+  to { transform: rotate(360deg); } 
+}
+
+.spin-animation {
+  animation: spin 1s linear infinite;
+  display: inline-block;
+}
+
+.timeline-line {
+  width: 1px;
+  flex: 1;
+  background: rgba(255,255,255,0.08);
+  min-height: 20px;
+  margin-top: 4px;
+}
