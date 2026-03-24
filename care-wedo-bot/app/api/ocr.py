@@ -6,7 +6,7 @@ Care WEDO — OCR API 端點
 import base64
 import logging
 from flask import Blueprint, request, jsonify
-from app.services.claude_ocr import parse_medical_images
+from app.services.gemini_ocr import parse_medical_images
 
 logger = logging.getLogger(__name__)
 ocr_bp = Blueprint("ocr", __name__)

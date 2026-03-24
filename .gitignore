@@ -13,3 +13,6 @@ care-wedo-app/.env.local
 
 # OS
 .DS_Store
+
+# Documents
+門診單處方籤/
