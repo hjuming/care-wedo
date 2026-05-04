@@ -1,27 +1,37 @@
-# Care WEDO Cloudflare + Supabase MVP Runbook
+# Care WEDO — Cloudflare + Supabase 部署 Runbook
+
+> **版本**：Phase 3 完工，V1.0 Beta 開發中  
+> **最後更新**：2026-05-05
+
+---
 
 ## 目標架構
 
-- Frontend：Cloudflare Pages，部署 `care-wedo-app/dist`
-- API：Cloudflare Pages Functions，路徑維持 `/api/*`
-- Database：Supabase Postgres
-- OCR：Gemini Vision API，由 Cloudflare Function 呼叫
-- Legacy：原本 Flask/Railway 程式保留作備援，不再是 Cloudflare 上線必要路徑
+| 層 | 服務 | 說明 |
+|---|---|---|
+| 前端 | Cloudflare Pages | React + Vite，`care-wedo-app/dist` |
+| API | Cloudflare Pages Functions | TypeScript，路徑 `/api/*` |
+| 資料庫 | Supabase (PostgreSQL) | RLS 已啟用 |
+| OCR | Gemini Vision API | 由 Cloudflare Function 呼叫 |
+| 推播 | LINE Messaging API | Push + Reply |
+| Cron | GitHub Actions | 每日觸發 `/api/cron/*` |
+
+---
 
 ## Supabase 設定
 
 1. 建立 Supabase project。
-2. 到 SQL Editor 執行 `supabase/schema.sql`。
-   - 若是既有資料庫，請先執行 `supabase/migration_add_care_profiles.sql`，補上家庭照護對象與 `profile_id` 欄位。
-3. 到 Project Settings → API，取得：
+2. 到 **SQL Editor** 執行 `supabase/schema.sql`。
+   - 若是既有資料庫（僅有 Phase 1–2 的 `users`、`appointments`、`medications`），執行 `supabase/migration_add_care_profiles.sql` 補上家庭照護對象欄位。
+3. 到 **Project Settings → API** 取得：
    - `SUPABASE_URL`
    - `SUPABASE_SERVICE_ROLE_KEY`
 
-注意：`SUPABASE_SERVICE_ROLE_KEY` 只能放在 Cloudflare 環境變數，不可放進前端 `.env`。
+> **重要**：`SUPABASE_SERVICE_ROLE_KEY` 只能放在 Cloudflare 後端環境變數，**絕對不可** 放進前端 `.env`。
 
-## Cloudflare Pages 設定
+---
 
-連接 GitHub repo 後設定：
+## Cloudflare Pages 建置設定
 
 | 欄位 | 值 |
 |---|---|
@@ -31,71 +41,139 @@
 | Root directory | repo root |
 | Functions directory | `functions` |
 
-## Cloudflare 環境變數
+---
 
-在 Pages project → Settings → Environment variables 新增：
+## 環境變數清單
+
+### Cloudflare Pages（後端 Functions）
+
+在 **Pages project → Settings → Environment variables** 設定：
 
 ```bash
-GOOGLE_API_KEY=[REDACTED]
+# AI OCR
+GOOGLE_API_KEY=<Gemini API Key>
 GEMINI_MODEL_NAME=gemini-2.5-flash
+
+# 資料庫
 SUPABASE_URL=https://你的-project.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=[REDACTED]
-LINE_CHANNEL_ACCESS_TOKEN=[REDACTED]
-LINE_CHANNEL_SECRET=[REDACTED]
-LINE_LOGIN_CHANNEL_ID=[REDACTED]
-CRON_SECRET=[自己設定的一組密碼，用來保護排程API]
+SUPABASE_SERVICE_ROLE_KEY=<Service Role Key>
+
+# LINE Bot（Webhook 與推播）
+LINE_CHANNEL_ACCESS_TOKEN=<Messaging API Token>
+LINE_CHANNEL_SECRET=<Messaging API Secret>
+
+# LINE Login（LIFF 身分驗證）
+LINE_LOGIN_CHANNEL_ID=<Login Channel ID>
+
+# Cron 排程保護
+CRON_SECRET=<自訂密碼，用於保護排程 API>
 ```
 
-前端維持同網域 `/api`，通常不需要設定 `VITE_API_BASE`。
-若要啟用 LINE LIFF 個人化 Dashboard，Cloudflare Pages 前端建置環境需另設：
+### Cloudflare Pages（前端建置）
+
+在 **Pages project → Settings → Environment variables（Build）** 另外設定：
 
 ```bash
-VITE_LINE_LIFF_ID=[REDACTED]
+# LINE LIFF 個人化 Dashboard
+# 不設定則自動進入 demo 模式（展示用）
+VITE_LINE_LIFF_ID=<LIFF App ID>
 ```
 
-若暫時不用 LINE Bot，只需要前四個變數即可。若要回填 LINE Webhook URL，必須加上 `LINE_CHANNEL_ACCESS_TOKEN` 與 `LINE_CHANNEL_SECRET`。
-若要啟用 LIFF Dashboard 身分驗證，必須加上 `LINE_LOGIN_CHANNEL_ID`。
+> **V1.0 Beta 注意**：正式開放前，`VITE_LINE_LIFF_ID` 必須設定。未設定時 `/app` 任何人都能以 demo 模式進入後台。
 
-## LINE Webhook URL
+---
 
-LINE Developers Console → Messaging API → Webhook settings：
+## LINE Developers Console 設定
 
-```text
-https://care.wedopr.com/callback
+### Messaging API（LINE Bot）
+
+1. Webhook URL：`https://care.wedopr.com/callback`
+2. 開啟 `Use webhook`
+3. 點 `Verify` 確認收到 200
+
+### LIFF App
+
+1. 在 LINE Login Channel 建立 LIFF App
+2. Endpoint URL：`https://care.wedopr.com/app`
+3. Scope：`profile`、`openid`
+4. 將 LIFF App ID 填入 Cloudflare 前端建置環境變數 `VITE_LINE_LIFF_ID`
+
+---
+
+## GitHub Actions Cron 設定
+
+Cron Job 透過 `.github/workflows/` 每日觸發：
+
+```bash
+# 早安健康簡報（08:00 台灣時間 = UTC 00:00）
+curl -X POST https://care.wedopr.com/api/cron/reminders \
+  -H "Authorization: Bearer <CRON_SECRET>"
+
+# 晚安空腹提醒（20:00 台灣時間 = UTC 12:00）
+curl -X POST https://care.wedopr.com/api/cron/evening \
+  -H "Authorization: Bearer <CRON_SECRET>"
 ```
 
-設定後：
+---
 
-1. 開啟 `Use webhook`。
-2. 點 `Verify`，成功時會收到 200 回應。
-3. 到 LINE 對 Bot 傳文字，應收到 Care WEDO 回覆。
+## 上線驗收清單
 
-## 上線驗證
+### 基礎功能
 
-部署完成後依序檢查：
+- [ ] `GET /api/health` 回應 `{"status":"ok"}`
+- [ ] 首頁 `https://care.wedopr.com/` 正常開啟（Landing Page）
+- [ ] `https://care.wedopr.com/app` 未登入時導向 `/login`（⚠️ Beta 前必須實作）
+- [ ] `https://care.wedopr.com/login` 頁面可正常顯示
 
-1. `GET /api/health` 回 `{"status":"ok"}`
-2. 首頁可開啟。
-3. 掃描圖片後，`/api/ocr` 回 `success: true`。
-4. Supabase `appointments` 或 `medications` 有新增資料。
-5. 重新整理首頁，dashboard 讀到 Supabase 資料。
-6. 用 LINE 登入後，側邊欄可看到「正在看的資料」，並能切換爸爸、媽媽或其他照護對象。
+### LIFF 登入流程
+
+- [ ] 從 LINE 開啟 LIFF URL，正確取得使用者 profile
+- [ ] Dashboard 顯示當前使用者的專屬資料（非 demo 資料）
+- [ ] `VITE_LINE_LIFF_ID` 已設定於 Cloudflare 建置環境
+
+### OCR 解析
+
+- [ ] 上傳門診掛號單，`/api/ocr/` 回應 `success: true`
+- [ ] Supabase `appointments` 資料表有新增或更新的紀錄
+- [ ] 重複上傳相同日期/科別單據，資料正確 upsert（不重複）
+- [ ] OCR 解析後，LINE Bot 正確推播摘要給使用者（實機驗證）
+
+### Cron 推播
+
+- [ ] 手動觸發 `POST /api/cron/reminders`，LINE 收到早安健康簡報
+- [ ] 手動觸發 `POST /api/cron/evening`，LINE 收到晚安空腹提醒（有隔天空腹需求者）
+- [ ] 過期預約正確標記為 `expired`
+
+### 家庭群組
+
+- [ ] 建立群組，取得邀請碼
+- [ ] 使用邀請碼加入群組
+- [ ] 新增照護對象，切換後 Dashboard 資料正確切換
+
+### 資料持久化（⚠️ Beta 前必須實作）
+
+- [ ] 點「完成」後重整頁面，狀態維持 `completed`
+- [ ] 可新增預約並立即顯示於 Dashboard
+- [ ] 可刪除預約，Supabase 資料確實移除
+
+---
+
+## V1.0 Beta 前的已知缺口
+
+以下問題在正式開放前**必須**修復，詳見 `DEVELOPMENT_PLAN.md`：
+
+1. **`/app` 無登入閘門**：`routing.js` 與 `App.jsx` 未檢查身分，未登入即進 demo 後台
+2. **API 無全域驗證**：`functions/api/_middleware.ts` 只做 CORS，未驗證 JWT
+3. **待辦完成不持久化**：`handleComplete()` 只更新前端 state（`App.jsx` line 498）
+4. **缺少 `PATCH /api/appointments/:id`**：前端無法同步狀態變更至資料庫
+5. **無方案限制**：所有使用者享有相同功能，無 quota 或 entitlement 機制
+6. **法規頁面缺失**：無隱私政策、服務條款、非醫療診斷聲明
+
+---
 
 ## 已知取捨
 
-- Cloudflare 版不跑 Python Flask，也不使用本機 Tesseract。
-- OCR 以 Gemini Vision 直接解析圖片，部署更輕，較適合 MVP。
-- LINE Webhook 尚未搬到 Cloudflare Functions；第一版先確保 Web MVP 上線。
-
-## 主動推播提醒 (Cron)
-
-要讓系統每天主動提醒長輩回診或領藥：
-1. 必須在 Cloudflare Pages 的設定中加入 `CRON_SECRET` 變數。
-2. 由於 Cloudflare Pages Functions 不原生支援 Dashboard Cron Triggers，您可以使用外部服務（例如 GitHub Actions、IFTTT，或另建一個簡易的 Cloudflare Worker）每天定時發送以下請求：
-
-```bash
-curl -X POST https://care.wedopr.com/api/cron/reminders \\
-  -H "Authorization: Bearer <你的CRON_SECRET>"
-```
-
-執行後，系統會自動抓出「明天」的所有待辦行程，發送 LINE Push 給綁定的使用者，並將已過期的行程標記為 `expired`（保留供查詢）。
+- Cloudflare Pages Functions 不使用 Python Flask，OCR 直接用 Gemini Vision
+- Cron 使用 GitHub Actions 外部觸發，而非 Cloudflare Cron Triggers（Pages 不原生支援）
+- LIFF 未設定時，系統靜默進入 demo 模式；正式環境必須設定 `VITE_LINE_LIFF_ID`
+- Service Role Key 跳過 RLS，需確保所有後端查詢邏輯不允許跨群組存取

@@ -1,10 +1,13 @@
 import {
   AppointmentRow,
   CareProfileRow,
+  FREE_OCR_MONTHLY_LIMIT,
   MedicationRow,
   getBearerToken,
   getAccessibleProfiles,
+  getMonthlyOcrUsage,
   getOrCreateDefaultUser,
+  getUserPlan,
   serializeCareProfile,
   serializeAppointment,
   serializeMedication,
@@ -107,6 +110,19 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       return label;
     });
 
+    // Fetch plan info for authenticated users
+    let plan = "free";
+    let ocrUsed = 0;
+    const ocrLimit = FREE_OCR_MONTHLY_LIMIT;
+    if (identity) {
+      const [planInfo, usage] = await Promise.all([
+        getUserPlan(env, userId),
+        getMonthlyOcrUsage(env, userId),
+      ]);
+      plan = planInfo.plan;
+      ocrUsed = usage;
+    }
+
     return Response.json({
       patient: {
         name: selectedProfile?.display_name || identity?.name || "家人",
@@ -115,6 +131,9 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
         diagnoses: [],
       },
       mode: identity ? "personal" : "demo",
+      plan,
+      ocr_used: ocrUsed,
+      ocr_limit: plan === "paid" ? null : ocrLimit,
       active_profile_id: activeProfileId,
       care_profiles: profiles.map(serializeCareProfile),
       appointments: appointments.map(serializeAppointment),

@@ -2,6 +2,16 @@ const LIFF_ID = import.meta.env?.VITE_LINE_LIFF_ID || "";
 
 export async function initLineIdentity() {
   if (!LIFF_ID) {
+    // 正式環境沒有 LIFF_ID 代表設定不完整，不允許進入後台
+    if (import.meta.env.PROD) {
+      return {
+        status: "unauthenticated",
+        idToken: null,
+        profile: null,
+        message: "請從 LINE 開啟此頁面，或先加入 Care WEDO LINE 小管家。",
+      };
+    }
+    // 本機開發環境允許 demo 模式便於測試
     return {
       status: "demo",
       idToken: null,
@@ -29,9 +39,9 @@ export async function initLineIdentity() {
   ]);
 
   return {
-    status: idToken ? "authenticated" : "demo",
+    status: idToken ? "authenticated" : "unauthenticated",
     idToken,
     profile,
-    message: idToken ? null : "暫時還沒連上 LINE，先顯示範例畫面。",
+    message: idToken ? null : "無法取得 LINE 身分，請重新從 LINE 開啟頁面。",
   };
 }

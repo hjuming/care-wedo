@@ -5,11 +5,12 @@ import GroupSettings from "./components/GroupSettings";
 import LoginSetup from "./components/LoginSetup";
 import OcrResult from "./components/OcrResult";
 import { patientData, medicines, timeline as initialTimeline, checklist as initialChecklist } from "./data/patient";
-import { fetchDashboard, ocrAnalyze } from "./services/api";
+import { fetchDashboard, ocrAnalyze, patchAppointment, updateProfile } from "./services/api";
 import { initLineIdentity } from "./services/liff";
-import heroImage from "./assets/hero-bg.png";
+import PrivacyPage from "./components/PrivacyPage";
+import TermsPage from "./components/TermsPage";
 import aiAvatar from "./assets/ai-avatar.png";
-import { updateProfile } from "./services/api";
+import { resolveCareWedoRoute } from "./routing";
 
 
 const SECTIONS = [
@@ -18,21 +19,6 @@ const SECTIONS = [
   { id: "meds", label: "吃藥提醒", icon: "○", color: "#c57b37" }, // 橘
   { id: "records", label: "看過什麼", icon: "≡", color: "#6b46c1" }, // 紫
   { id: "settings", label: "家人設定", icon: "⚙", color: "#744210" }, // 褐
-];
-
-const paidFeatureGroups = [
-  {
-    title: "家人一起看",
-    items: ["邀請子女一起管理", "有人上傳單據，全家都看得到", "重要提醒一起收到"],
-  },
-  {
-    title: "爸媽專屬資料",
-    items: ["設定稱呼與頭像", "記下常去醫院與常看科別", "記下過敏、空腹、帶卡等提醒"],
-  },
-  {
-    title: "找資料更快",
-    items: ["搜尋藥名、醫院、科別", "查以前看過什麼", "整理給家人看的簡單摘要"],
-  },
 ];
 
 function typeLabel(type) {
@@ -96,7 +82,316 @@ function matchSearch(item, query) {
   return Object.values(item).join(" ").toLowerCase().includes(query.toLowerCase());
 }
 
+const AVATAR_MAX_SOURCE_SIZE = 5 * 1024 * 1024;
+const AVATAR_CANVAS_SIZE = 480;
+
+function getAvatarName(avatarUrl) {
+  const match = avatarUrl?.match(/^data:[^;,]+;name=([^;]+);base64,/);
+  return match ? decodeURIComponent(match[1]) : "";
+}
+
+function setAvatarName(avatarUrl, name) {
+  if (!avatarUrl) return "";
+  const cleanName = encodeURIComponent((name || "照護對象頭像").trim().slice(0, 80));
+  const withoutName = avatarUrl.replace(/^data:([^;,]+);name=[^;]+(;base64,)/, "data:$1$2");
+  return withoutName.replace(/^data:([^;,]+)(;base64,)/, `data:$1;name=${cleanName}$2`);
+}
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("無法讀取圖片檔案"));
+    reader.readAsDataURL(file);
+  });
+}
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("圖片格式無法處理"));
+    image.src = src;
+  });
+}
+
+async function prepareAvatarDataUrl(file) {
+  if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+    throw new Error("請上傳 JPG、PNG 或 WebP 圖片。");
+  }
+  if (file.size > AVATAR_MAX_SOURCE_SIZE) {
+    throw new Error("頭像原始檔不可超過 5MB。");
+  }
+
+  const sourceUrl = await fileToDataUrl(file);
+  const image = await loadImage(sourceUrl);
+  const scale = Math.min(AVATAR_CANVAS_SIZE / image.width, AVATAR_CANVAS_SIZE / image.height, 1);
+  const width = Math.max(1, Math.round(image.width * scale));
+  const height = Math.max(1, Math.round(image.height * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  context.drawImage(image, 0, 0, width, height);
+
+  return setAvatarName(canvas.toDataURL("image/jpeg", 0.84), file.name.replace(/\.[^.]+$/, ""));
+}
+
+const LANDING_PROBLEMS = [
+  {
+    title: "提醒散在不同地方",
+    copy: "回診、抽血、領藥、帶卡、空腹，常常靠家人各自記，忙起來就容易漏。",
+  },
+  {
+    title: "醫療資料很難回頭找",
+    copy: "藥袋、處方箋、檢查單與照片分散在 LINE、相簿和紙本裡，下一次看診又重新整理一次。",
+  },
+  {
+    title: "照護責任集中在一個人身上",
+    copy: "誰提醒了、誰陪診了、誰知道最新狀況，家人之間沒有同一份清楚紀錄。",
+  },
+];
+
+const LANDING_SOLUTIONS = [
+  "拍照解析看診單、藥袋與檢查提醒",
+  "整理回診、用藥、領藥與空腹注意事項",
+  "建立長輩健康時間線，方便家人回顧",
+  "登入後建立家庭群組，共享照護進度",
+];
+
+const FREE_FEATURES = [
+  ["LINE 對話使用", true, true],
+  ["圖片 AI 解析", "每月有限次數", "較高額度"],
+  ["看診單重點摘要", true, true],
+  ["用藥資訊整理", "基礎摘要", "完整保存"],
+  ["長期記憶", false, true],
+  ["家庭群組共享", false, true],
+  ["多位照護對象", false, true],
+  ["健康時間線", false, true],
+  ["管理頁 Dashboard", false, true],
+];
+
+const LANDING_FAQS = [
+  {
+    question: "Care WEDO 可以診斷疾病嗎？",
+    answer: "不可以。Care WEDO 是照護資訊整理與提醒工具，不取代醫師診斷、藥師建議或正式醫療判斷。",
+  },
+  {
+    question: "免費版和收費版差在哪？",
+    answer: "免費版適合先透過 LINE 體驗圖片摘要與對話提醒；收費版適合長期照護，提供記憶、家庭群組、照護對象與健康時間線。",
+  },
+  {
+    question: "長輩一定要會用系統嗎？",
+    answer: "不一定。家人可以負責建立資料與管理提醒，長輩只需要透過熟悉的 LINE 接收重點訊息。",
+  },
+  {
+    question: "圖片和紀錄會被保存嗎？",
+    answer: "免費版以對話體驗為主，不提供完整長期記憶；登入後的收費版才會把照護資料保存為家庭可管理的紀錄。",
+  },
+];
+
+function FeatureValue({ value }) {
+  if (value === true) return <span className="feature-yes">有</span>;
+  if (value === false) return <span className="feature-no">無</span>;
+  return <span>{value}</span>;
+}
+
+function LandingPage() {
+  return (
+    <main className="landing-shell">
+      <nav className="landing-nav" aria-label="Care WEDO 入口導覽">
+        <a href="/" className="brand-home">Care WEDO</a>
+        <div className="landing-nav-links">
+          <a href="#features">功能</a>
+          <a href="#plans">方案</a>
+          <a href="#faq">FAQ</a>
+          <a href="/login" className="nav-login-link">登入 / 註冊</a>
+        </div>
+      </nav>
+
+      <section className="landing-hero" aria-label="Care WEDO 首頁">
+        <div className="landing-hero-copy">
+          <span className="landing-version">V 1.0</span>
+          <h1>Care WEDO 陪你照顧最重要的人</h1>
+          <p>
+            結合 AI 照護提醒、醫療紀錄整理與家庭共享，協助家人更有秩序地陪伴長輩面對看診、用藥與日常健康管理。
+          </p>
+          <div className="landing-cta-row">
+            <a className="primary-action" href="https://lin.ee/xzbyyvf" target="_blank" rel="noopener noreferrer">
+              免費使用 LINE 照護小管家
+            </a>
+            <a className="secondary-action" href="/login">建立家庭照護空間</a>
+          </div>
+          <p className="landing-trust-copy">AI 協助整理，家人安心陪伴。不取代醫師，也不取代家人。</p>
+        </div>
+        <div className="landing-hero-panel" aria-label="照護重點預覽">
+          <div className="care-note-card primary-note">
+            <span>今日照護</span>
+            <strong>下午 3:20 回診</strong>
+            <p>記得帶健保卡、慢箋與近期檢查單。</p>
+          </div>
+          <div className="care-note-card">
+            <span>AI 整理</span>
+            <strong>藥袋照片已摘要</strong>
+            <p>用藥時間、注意事項、領藥日會整理成清單。</p>
+          </div>
+          <div className="family-sync-card">
+            <strong>家人同步</strong>
+            <p>爸爸、媽媽、子女都看同一份照護紀錄。</p>
+          </div>
+        </div>
+      </section>
+
+      <section className="landing-section" id="features">
+        <div className="section-kicker">照護痛點</div>
+        <h2>照顧長輩，最累的常常不是事情本身。</h2>
+        <div className="landing-card-grid">
+          {LANDING_PROBLEMS.map((item) => (
+            <article key={item.title} className="landing-card">
+              <h3>{item.title}</h3>
+              <p>{item.copy}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="landing-section solution-band">
+        <div>
+          <div className="section-kicker">Care WEDO 的角色</div>
+          <h2>把照護資訊整理成家人看得懂的日常清單。</h2>
+          <p>
+            AI 負責協助分類、摘要與提醒；家人保留判斷與陪伴。Care WEDO 讓資訊更清楚，讓照護不再只靠一個人硬撐。
+          </p>
+        </div>
+        <ul className="solution-list">
+          {LANDING_SOLUTIONS.map((item) => <li key={item}>{item}</li>)}
+        </ul>
+      </section>
+
+      <section className="landing-section plan-section" id="plans">
+        <div className="section-kicker">免費與收費</div>
+        <h2>先用 LINE 試試，需要長期管理時再建立家庭照護空間。</h2>
+        <div className="plan-cards">
+          <article className="plan-card">
+            <span>免費版</span>
+            <h3>LINE 照護小管家</h3>
+            <p>適合第一次體驗，透過 LINE 傳送看診單或藥袋照片，讓 AI 協助整理重點。</p>
+            <a href="https://lin.ee/xzbyyvf" target="_blank" rel="noopener noreferrer">免費開始</a>
+          </article>
+          <article className="plan-card featured-plan">
+            <span>收費版</span>
+            <h3>家庭照護空間</h3>
+            <p>適合長期照顧父母、長輩或慢性病家人的家庭，登入後可保存、共享、追蹤照護紀錄。</p>
+            <a href="/login">建立照護空間</a>
+          </article>
+        </div>
+
+        <div className="feature-table" role="table" aria-label="Care WEDO 免費版與收費版功能對照">
+          <div className="feature-row table-head" role="row">
+            <strong>功能</strong>
+            <strong>免費版</strong>
+            <strong>收費版</strong>
+          </div>
+          {FREE_FEATURES.map(([feature, free, paid]) => (
+            <div className="feature-row" role="row" key={feature}>
+              <span>{feature}</span>
+              <FeatureValue value={free} />
+              <FeatureValue value={paid} />
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="landing-section belief-section">
+        <h2>科技不該讓照護變冷。</h2>
+        <p>
+          Care WEDO 相信，AI 最好的角色不是取代醫師，也不是取代家人，而是幫家庭把重要資訊整理清楚，讓陪伴少一點慌亂，多一點安心。
+        </p>
+      </section>
+
+      <section className="landing-section faq-section" id="faq">
+        <div className="section-kicker">常見問題</div>
+        <h2>開始使用前，你可能會想知道</h2>
+        <div className="faq-list">
+          {LANDING_FAQS.map((item) => (
+            <details key={item.question} className="faq-item">
+              <summary>{item.question}</summary>
+              <p>{item.answer}</p>
+            </details>
+          ))}
+        </div>
+      </section>
+
+      <footer className="landing-footer">
+        <strong>Care WEDO</strong>
+        <span>讓照護資訊更清楚，讓家庭陪伴更安心。</span>
+        <div className="landing-footer-links">
+          <a href="/login">登入 / 註冊</a>
+          <a href="/privacy">隱私政策</a>
+          <a href="/terms">服務條款</a>
+        </div>
+      </footer>
+    </main>
+  );
+}
+
+function LoginPage() {
+  return (
+    <main className="login-route-shell">
+      <nav className="landing-nav login-route-nav" aria-label="Care WEDO 登入導覽">
+        <a href="/" className="brand-home">Care WEDO</a>
+        <a href="/" className="nav-login-link">回首頁</a>
+      </nav>
+
+      <section className="login-route-card" aria-label="登入 Care WEDO">
+        <div className="login-route-copy">
+          <span className="landing-version">V 1.0</span>
+          <h1>登入 Care WEDO，建立你的家庭照護空間</h1>
+          <p>
+            Care WEDO 目前以 LINE 作為登入與通知入口。請先加入 LINE 照護小管家，從 LINE 開啟後即可建立照護對象、保存紀錄與管理家庭群組。
+          </p>
+          <div className="login-route-actions">
+            <a className="primary-action" href="https://lin.ee/xzbyyvf" target="_blank" rel="noopener noreferrer">
+              點此前往 LINE 照護小管家
+            </a>
+            <a className="secondary-action" href="/app">
+              從 LINE 開啟後，進入管理頁
+            </a>
+          </div>
+        </div>
+
+        <div className="login-route-steps">
+          <article>
+            <span>1</span>
+            <strong>加入 LINE 小管家</strong>
+            <p>先用 LINE 開啟 Care WEDO，系統會取得登入狀態。</p>
+          </article>
+          <article>
+            <span>2</span>
+            <strong>建立主要照護對象</strong>
+            <p>輸入爸爸、媽媽或長輩稱呼，建立第一份照護紀錄。</p>
+          </article>
+          <article>
+            <span>3</span>
+            <strong>邀請家人一起管理</strong>
+            <p>付費功能可建立家庭群組，共享提醒、照片摘要與健康時間線。</p>
+          </article>
+        </div>
+      </section>
+    </main>
+  );
+}
+
 export default function App() {
+  const route = resolveCareWedoRoute(window.location.pathname);
+  if (route === "app") return <DashboardApp />;
+  if (route === "login") return <LoginPage />;
+  if (route === "privacy") return <PrivacyPage />;
+  if (route === "terms") return <TermsPage />;
+  return <LandingPage />;
+}
+
+function DashboardApp() {
   const fileInputRef = useRef(null);
   const [activeSection, setActiveSection] = useState("overview");
   const [searchQuery, setSearchQuery] = useState("");
@@ -107,6 +402,7 @@ export default function App() {
   const [ocrError, setOcrError] = useState(null);
   const [dashboard, setDashboard] = useState(null);
   const [dashboardError, setDashboardError] = useState(null);
+  const [activeProfileId, setActiveProfileId] = useState(null);
   const [identity, setIdentity] = useState({ status: "loading", idToken: null, profile: null, message: null });
   const [showEditProfile, setShowEditProfile] = useState(false);
 
@@ -126,14 +422,12 @@ export default function App() {
   }, []);
 
   async function handleProfileUpdate(updates) {
-    if (!activeProfileId) return;
-    try {
-      await updateProfile(activeProfileId, updates, { idToken: identity.idToken });
-      await loadDashboard(identity, activeProfileId);
-      setShowEditProfile(false);
-    } catch (err) {
-      alert(err.message);
+    if (!activeProfileId) {
+      throw new Error("請先使用 LINE 登入並建立照護對象後再儲存。");
     }
+    await updateProfile(activeProfileId, updates, { idToken: identity.idToken });
+    await loadDashboard(identity, activeProfileId);
+    setShowEditProfile(false);
   }
 
   useEffect(() => {
@@ -143,10 +437,31 @@ export default function App() {
       try {
         const lineIdentity = await initLineIdentity();
         if (!active || lineIdentity.status === "redirecting") return;
+
+        // 登入閘門：unauthenticated 一律導向 /login
+        if (lineIdentity.status === "unauthenticated") {
+          if (!active) return;
+          setIdentity(lineIdentity);
+          window.location.replace("/login");
+          return;
+        }
+
         setIdentity(lineIdentity);
         await loadDashboard(lineIdentity);
       } catch (err) {
         if (!active) return;
+        // 正式環境發生錯誤代表無法驗證身分，導向 /login
+        if (import.meta.env.PROD) {
+          setIdentity({
+            status: "unauthenticated",
+            idToken: null,
+            profile: null,
+            message: err instanceof Error ? err.message : "登入失敗，請重新嘗試。",
+          });
+          window.location.replace("/login");
+          return;
+        }
+        // 本機開發環境降級為 demo 模式
         setIdentity({
           status: "demo",
           idToken: null,
@@ -178,7 +493,6 @@ export default function App() {
   const careProfiles = dashboard?.care_profiles || [];
   const selectedProfile = careProfiles.find((profile) => profile.id === activeProfileId) || careProfiles[0] || null;
   const nextAppointment = useMemo(() => {
-    const now = new Date();
     return appointments
       .filter(apt => apt.status !== "completed" && apt.date)
       .sort((a, b) => {
@@ -186,7 +500,7 @@ export default function App() {
           const dateA = new Date(a.date.includes("-") ? `${a.date}T${a.time || "00:00"}` : a.date);
           const dateB = new Date(b.date.includes("-") ? `${b.date}T${b.time || "00:00"}` : b.date);
           return dateA.getTime() - dateB.getTime();
-        } catch (e) {
+        } catch {
           return 0;
         }
       })[0];
@@ -202,17 +516,29 @@ export default function App() {
       if (!prev) return prev;
       return {
         ...prev,
-        appointments: prev.appointments.map(apt => 
+        appointments: prev.appointments.map(apt =>
           apt.id === aptId ? { ...apt, status: "completed" } : apt
         )
       };
     });
 
+    // demo-prefixed IDs are local-only; skip API call
+    if (String(aptId).startsWith("demo-")) return;
+
     try {
-      // In a real app, call PATCH /api/appointments/:id
-      // For now, we update local state which is linked to dashboard
+      await patchAppointment(aptId, { status: "completed" }, { idToken: identity.idToken });
     } catch (err) {
       console.error("Failed to complete task", err);
+      // Rollback optimistic update on failure
+      setDashboard(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          appointments: prev.appointments.map(apt =>
+            apt.id === aptId ? { ...apt, status: "upcoming" } : apt
+          )
+        };
+      });
     }
   }
 
@@ -275,46 +601,49 @@ export default function App() {
       <section className="care-hero" aria-label="Care WEDO 健康小管家">
         <div className="hero-copy">
           <div className="brand-row">
-            <img src={heroImage} alt="Care WEDO" className="brand-mark" />
-            <span className="beta-pill">目前免費試用</span>
+            <a href="/" className="brand-home" aria-label="回到 Care WEDO 首頁">
+              Care WEDO
+            </a>
+            <div className="hero-top-actions">
+              <span className="beta-pill">V 1.0</span>
+              <a
+                href="https://lin.ee/xzbyyvf"
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`login-mini-status ${isPersonalMode ? "authenticated" : ""}`}
+              >
+                <img src={identity.profile?.pictureUrl || aiAvatar} alt="" />
+                <div className="status-info">
+                  <span className="status-label">點此前往</span>
+                  <span className="status-subtext">照護小管家</span>
+                </div>
+              </a>
+            </div>
           </div>
           <h1>
-            LINE 一鍵上傳看診單，
+            把看診單拍一下，
             <br className="phone-break" />
-            Care WEDO 幫您整理提醒。
+            全家照護不漏接。
           </h1>
           <p>
-            直接從 LINE 拍照上傳，系統會自動記住看診、吃藥、空腹、帶卡等重要事項。
+            Care WEDO 會把回診、用藥、空腹與帶卡提醒整理成清楚的每日照護清單。
             <br className="phone-break" />
-            讓爸爸媽媽和家人都能看清今天該做的事。
+            長輩看得懂，家人也能同步掌握。
           </p>
           <div className="hero-highlights">
-            <span>大字提醒</span>
-            <span>拍照上傳即可</span>
-            <span>家人一起看</span>
+            <span>看診行程</span>
+            <span>用藥提醒</span>
+            <span>家人同步</span>
           </div>
           <div className="hero-actions">
             <button className="primary-action" type="button" onClick={() => setActiveSection("calendar")}>
-              看今天重點
+              查看今日照護
             </button>
             <button className="secondary-action" type="button" onClick={() => fileInputRef.current?.click()} disabled={scanning}>
-              {scanning ? "正在整理單子..." : scanned ? `已整理 ${scanCount} 張` : "拍照上傳單子"}
+              {scanning ? "正在整理單據..." : scanned ? `已整理 ${scanCount} 張` : "上傳看診單"}
             </button>
           </div>
         </div>
-
-        <a 
-          href="https://lin.ee/xzbyyvf" 
-          target="_blank" 
-          rel="noopener noreferrer" 
-          className={`login-mini-status ${isPersonalMode ? "authenticated" : ""}`}
-        >
-          <img src={identity.profile?.pictureUrl || aiAvatar} alt="LINE" />
-          <div className="status-info">
-            <span className="status-label">{isPersonalMode ? identity.profile?.displayName || "已登入" : "尚未登入"}</span>
-            <span className="status-subtext">點此前往 LINE 機器人</span>
-          </div>
-        </a>
       </section>
 
       {(dashboardError || identity.message || ocrError) && (
@@ -424,18 +753,64 @@ export default function App() {
           profile={selectedProfile}
           onClose={() => setShowEditProfile(false)}
           onSave={handleProfileUpdate}
+          canPersist={Boolean(activeProfileId)}
         />
       )}
     </main>
   );
 }
 
-function ProfileEditModal({ profile, onClose, onSave }) {
+function ProfileEditModal({ profile, onClose, onSave, canPersist }) {
   const [formData, setFormData] = useState({
     display_name: profile?.display_name || "",
     avatar_url: profile?.avatar_url || "",
     notes: profile?.notes || "",
   });
+  const [avatarName, setAvatarNameValue] = useState(getAvatarName(profile?.avatar_url) || "主要照護者頭像");
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleAvatarUpload(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    setUploading(true);
+    setError("");
+    try {
+      const avatarUrl = await prepareAvatarDataUrl(file);
+      const name = getAvatarName(avatarUrl) || file.name.replace(/\.[^.]+$/, "");
+      setAvatarNameValue(name);
+      setFormData((current) => ({ ...current, avatar_url: avatarUrl }));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function handleAvatarNameChange(value) {
+    setAvatarNameValue(value);
+    if (formData.avatar_url) {
+      setFormData((current) => ({ ...current, avatar_url: setAvatarName(current.avatar_url, value) }));
+    }
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    setError("");
+    try {
+      await onSave({
+        ...formData,
+        avatar_url: formData.avatar_url ? setAvatarName(formData.avatar_url, avatarName) : null,
+      });
+    } catch (err) {
+      setError(err.message || "無法儲存修改");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <div className="modal-overlay">
@@ -445,6 +820,11 @@ function ProfileEditModal({ profile, onClose, onSave }) {
           <button type="button" onClick={onClose} className="btn-close">✕</button>
         </div>
         <div className="modal-body">
+          {!canPersist && (
+            <p className="error-msg">目前是範例畫面。請先從 LINE 登入並建立照護對象，才能把修改存進資料庫。</p>
+          )}
+          {error && <p className="error-msg">{error}</p>}
+
           <div className="form-group">
             <label>顯示名稱 (如：洪爸爸)</label>
             <input 
@@ -453,14 +833,42 @@ function ProfileEditModal({ profile, onClose, onSave }) {
               placeholder="請輸入稱呼"
             />
           </div>
-          <div className="form-group">
-            <label>頭像圖片連結 (URL)</label>
-            <input 
-              value={formData.avatar_url} 
-              onChange={(e) => setFormData({ ...formData, avatar_url: e.target.value })} 
-              placeholder="https://..."
-            />
+
+          <div className="avatar-manager">
+            <div className="avatar-preview-frame">
+              <img src={formData.avatar_url || aiAvatar} alt="主要照護者頭像預覽" />
+            </div>
+            <div className="avatar-controls">
+              <div className="form-group">
+                <label>圖片名稱</label>
+                <input
+                  value={avatarName}
+                  onChange={(e) => handleAvatarNameChange(e.target.value)}
+                  placeholder="例如：爸爸生活照"
+                  disabled={!formData.avatar_url}
+                />
+              </div>
+              <div className="avatar-actions">
+                <label className="secondary-action avatar-upload-action">
+                  {uploading ? "處理圖片中..." : "上傳頭像"}
+                  <input type="file" accept="image/jpeg,image/png,image/webp" onChange={handleAvatarUpload} />
+                </label>
+                <button
+                  type="button"
+                  className="inline-action"
+                  onClick={() => {
+                    setAvatarNameValue("主要照護者頭像");
+                    setFormData((current) => ({ ...current, avatar_url: null }));
+                  }}
+                  disabled={!formData.avatar_url}
+                >
+                  刪除圖片
+                </button>
+              </div>
+              <p className="helper-copy">系統會自動壓縮圖片後存入照護對象資料，適合上傳清楚的正面頭像。</p>
+            </div>
           </div>
+
           <div className="form-group">
             <label>重要附註 (會顯示在側邊欄)</label>
             <textarea 
@@ -472,8 +880,10 @@ function ProfileEditModal({ profile, onClose, onSave }) {
           </div>
         </div>
         <div className="modal-footer">
-          <button type="button" className="secondary-action" onClick={onClose}>取消</button>
-          <button type="button" className="primary-action" onClick={() => onSave(formData)}>儲存修改</button>
+          <button type="button" className="secondary-action" onClick={onClose} disabled={saving}>取消</button>
+          <button type="button" className="primary-action" onClick={handleSave} disabled={saving || uploading}>
+            {saving ? "儲存中..." : "儲存修改"}
+          </button>
         </div>
       </div>
     </div>

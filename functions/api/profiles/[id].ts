@@ -1,4 +1,4 @@
-import { Env, getBearerToken, verifyLineIdToken, getOrCreateDefaultUser, supabaseFetch } from "../../_shared/supabase";
+import { Env, getAccessibleProfiles, getBearerToken, getOrCreateDefaultUser, supabaseFetch, verifyLineIdToken } from "../../_shared/supabase";
 
 export const onRequestPatch: PagesFunction<Env> = async (context) => {
   const { env, request, params } = context;
@@ -17,6 +17,12 @@ export const onRequestPatch: PagesFunction<Env> = async (context) => {
       userId = await getOrCreateDefaultUser(env, identity.lineUserId);
     } else {
       userId = await getOrCreateDefaultUser(env);
+    }
+
+    const accessibleProfiles = await getAccessibleProfiles(env, userId);
+    const canManageProfile = accessibleProfiles.some((profile) => String(profile.id) === String(profileId));
+    if (!canManageProfile) {
+      return Response.json({ error: "請先使用 LINE 登入並建立照護對象後再儲存。" }, { status: 403 });
     }
 
     const updates = await request.json<any>();

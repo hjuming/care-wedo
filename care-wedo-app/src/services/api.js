@@ -133,6 +133,63 @@ export async function createCareProfile({ idToken, groupId, displayName, relatio
   return resp.json();
 }
 
+/**
+ * 取得群組成員清單
+ */
+export async function getGroupMembers({ idToken, groupId }) {
+  const resp = await fetch(`${API_BASE}/groups`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+    },
+    body: JSON.stringify({ action: "get_members", group_id: groupId }),
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(err.error || "無法取得成員清單");
+  }
+  return resp.json();
+}
+
+/**
+ * 移除群組成員（僅 admin 可執行）
+ */
+export async function removeMember({ idToken, groupId, targetUserId }) {
+  const resp = await fetch(`${API_BASE}/groups`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+    },
+    body: JSON.stringify({ action: "remove_member", group_id: groupId, target_user_id: targetUserId }),
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(err.error || "移除成員失敗");
+  }
+  return resp.json();
+}
+
+/**
+ * 重新產生邀請碼（僅 admin 可執行）
+ */
+export async function regenerateInvite({ idToken, groupId }) {
+  const resp = await fetch(`${API_BASE}/groups`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+    },
+    body: JSON.stringify({ action: "regenerate_invite", group_id: groupId }),
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(err.error || "重新產生邀請碼失敗");
+  }
+  return resp.json();
+}
+
 export async function updateMembership({ idToken, groupId, updates }) {
   const resp = await fetch(`${API_BASE}/groups`, {
     method: "POST",
@@ -185,21 +242,60 @@ export async function initFamily({ idToken, familyName, primaryCareName }) {
 }
 
 /**
- * 更新照護對象的資訊（如：名稱、頭像、附註）
+ * 更新預約狀態或內容（例如標記為已完成）
  */
-export async function updateProfile(profileId, updates, { idToken }) {
-  const response = await fetch(`${API_BASE}/profiles/${profileId}`, {
+export async function patchAppointment(id, updates, { idToken }) {
+  const headers = { "Content-Type": "application/json" };
+  if (idToken) headers.Authorization = `Bearer ${idToken}`;
+
+  const response = await fetch(`${API_BASE}/appointments/${id}`, {
     method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: idToken ? `Bearer ${idToken}` : "",
-    },
+    headers,
     body: JSON.stringify(updates),
   });
   if (!response.ok) {
-    const error = await response.text();
-    throw new Error(error || "無法更新資料");
+    const error = await response.json().catch(async () => ({ error: await response.text() }));
+    throw new Error(error.error || "無法更新預約");
   }
   return response.json();
 }
 
+/**
+ * 更新藥物資訊（例如停用藥物）
+ */
+export async function patchMedication(id, updates, { idToken }) {
+  const headers = { "Content-Type": "application/json" };
+  if (idToken) headers.Authorization = `Bearer ${idToken}`;
+
+  const response = await fetch(`${API_BASE}/medications/${id}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify(updates),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(async () => ({ error: await response.text() }));
+    throw new Error(error.error || "無法更新藥物");
+  }
+  return response.json();
+}
+
+/**
+ * 更新照護對象的資訊（如：名稱、頭像、附註）
+ */
+export async function updateProfile(profileId, updates, { idToken }) {
+  const headers = { "Content-Type": "application/json" };
+  if (idToken) {
+    headers.Authorization = `Bearer ${idToken}`;
+  }
+
+  const response = await fetch(`${API_BASE}/profiles/${profileId}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify(updates),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(async () => ({ error: await response.text() }));
+    throw new Error(error.error || "無法更新資料");
+  }
+  return response.json();
+}

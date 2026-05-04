@@ -2,8 +2,15 @@ create table if not exists public.users (
   id bigserial primary key,
   line_user_id text unique,
   name text,
+  plan text not null default 'free',
+  plan_expires_at timestamptz,
   created_at timestamptz not null default now()
 );
+
+-- Migration: add plan columns if upgrading from earlier schema
+alter table public.users
+  add column if not exists plan text not null default 'free',
+  add column if not exists plan_expires_at timestamptz;
 
 create table if not exists public.family_groups (
   id bigserial primary key,

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { createCareProfile, fetchGroups, updateMembership } from "../services/api";
+import { createCareProfile, fetchGroups, regenerateInvite, removeMember, updateMembership } from "../services/api";
 
 export default function GroupSettings({ identity, onGroupChange, onProfileCreated }) {
   const [data, setData] = useState({ groups: [], care_profiles: [], user_memberships: [] });
@@ -95,6 +95,32 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
     }
   }
 
+  async function handleRemoveMember(groupId, targetUserId) {
+    if (!window.confirm("確定要移除這位成員嗎？移除後他們將無法再查看此群組的資料。")) return;
+    setError(null);
+    setSuccess(null);
+    try {
+      await removeMember({ idToken: identity.idToken, groupId, targetUserId });
+      setSuccess("成員已移除。");
+      await loadGroups();
+    } catch (err) {
+      setError(err.message || "移除成員失敗");
+    }
+  }
+
+  async function handleRegenerateInvite(groupId) {
+    if (!window.confirm("確定要重新產生邀請碼嗎？舊的邀請碼將立即失效。")) return;
+    setError(null);
+    setSuccess(null);
+    try {
+      await regenerateInvite({ idToken: identity.idToken, groupId });
+      setSuccess("邀請碼已更新。");
+      await loadGroups();
+    } catch (err) {
+      setError(err.message || "重新產生邀請碼失敗");
+    }
+  }
+
   if (identity.status === "demo") {
     return (
       <div className="group-settings-card">
@@ -113,15 +139,17 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
         
         {data.groups?.length ? (
           data.groups.map((group) => {
-            const members = getMembersByGroup(group.id);
             const membership = data.user_memberships?.find((m) => m.group_id === group.id);
+            const isAdmin = membership?.role === "admin";
+            // Use enriched members list from group if available, else fall back to memberships
+            const members = group.members || getMembersByGroup(group.id);
             return (
               <div key={group.id} className="settings-group-card">
                 <div className="settings-group-header">
                   <div>
                     <strong>{group.name}</strong>
                     <p className="small-copy">
-                      {membership?.role === "admin" ? "👑 群組管理者" : "👨‍👩‍👧‍👦 成員"}・{members.length} 人
+                      {isAdmin ? "👑 群組管理者" : "👨‍👩‍👧‍👦 成員"}・{members.length} 人
                     </p>
                   </div>
                 </div>
@@ -137,6 +165,15 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
                     >
                       {copiedCode === group.invite_code ? "✓ 已複製" : "複製"}
                     </button>
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        className="btn-secondary-sm"
+                        onClick={() => handleRegenerateInvite(group.id)}
+                      >
+                        重新產生
+                      </button>
+                    )}
                   </div>
                   <p className="helper-copy">分享邀請碼給家人，他們就能加入這個群組。</p>
                 </div>
@@ -144,16 +181,26 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
                 <div className="members-list">
                   <label>群組成員</label>
                   <div className="members-grid">
-                    {members.map((m, idx) => (
-                      <div key={idx} className="member-item">
-                        <span className="member-role">
-                          {m.role === "admin" ? "👑" : "👤"}
-                        </span>
-                        <span className="member-label">
-                          {m.role === "admin" ? "管理者" : "成員"}
-                        </span>
-                      </div>
-                    ))}
+                    {members.map((m, idx) => {
+                      const displayName = m.user?.name || (m.user?.line_user_id ? `LINE 用戶 …${m.user.line_user_id.slice(-4)}` : `成員 ${idx + 1}`);
+                      return (
+                        <div key={m.user_id ?? idx} className="member-item">
+                          <span className="member-role">
+                            {m.role === "admin" ? "👑" : "👤"}
+                          </span>
+                          <span className="member-label">{displayName}</span>
+                          {isAdmin && m.role !== "admin" && (
+                            <button
+                              type="button"
+                              className="btn-danger-sm"
+                              onClick={() => handleRemoveMember(group.id, m.user_id)}
+                            >
+                              移除
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
 

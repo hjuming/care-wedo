@@ -348,6 +348,73 @@ export async function updateUserFamilyGroupMembership(
   return rows[0];
 }
 
+export type AppointmentUpdateFields = Partial<Pick<AppointmentRow,
+  "status" | "type" | "date" | "time" | "hospital" | "department" |
+  "doctor" | "number" | "location" | "fasting_required" | "fasting_hours" | "notes" | "reminder_text"
+>>;
+
+export type MedicationUpdateFields = Partial<Pick<MedicationRow,
+  "active" | "name" | "dosage" | "frequency" | "purpose" | "warnings" | "reminder_text"
+>>;
+
+export async function patchAppointment(
+  env: Env,
+  id: number,
+  userId: number,
+  groupIds: number[],
+  updates: AppointmentUpdateFields,
+): Promise<AppointmentRow> {
+  // Verify ownership: appointment must belong to this user or one of their groups
+  const filters = [`user_id=eq.${userId}`];
+  if (groupIds.length > 0) filters.push(`group_id=in.(${groupIds.join(",")})`);
+  const owned = await supabaseFetch<AppointmentRow[]>(
+    env,
+    `appointments?id=eq.${id}&or=(${filters.join(",")})&select=id&limit=1`,
+  );
+  if (owned.length === 0) throw new Error("找不到該預約或您沒有修改權限");
+
+  const rows = await supabaseFetch<AppointmentRow[]>(
+    env,
+    `appointments?id=eq.${id}&select=*`,
+    {
+      method: "PATCH",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify(updates),
+    },
+  );
+  if (!rows || rows.length === 0) throw new Error("更新預約失敗");
+  return rows[0];
+}
+
+export async function patchMedication(
+  env: Env,
+  id: number,
+  userId: number,
+  groupIds: number[],
+  updates: MedicationUpdateFields,
+): Promise<MedicationRow> {
+  // Verify ownership
+  const filters = [`user_id=eq.${userId}`];
+  if (groupIds.length > 0) filters.push(`group_id=in.(${groupIds.join(",")})`);
+  const owned = await supabaseFetch<MedicationRow[]>(
+    env,
+    `medications?id=eq.${id}&or=(${filters.join(",")})&select=id&limit=1`,
+  );
+  if (owned.length === 0) throw new Error("找不到該藥物或您沒有修改權限");
+
+  const rows = await supabaseFetch<MedicationRow[]>(
+    env,
+    `medications?id=eq.${id}&select=*`,
+    {
+      method: "PATCH",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify(updates),
+    },
+  );
+  if (!rows || rows.length === 0) throw new Error("更新藥物失敗");
+  return rows[0];
+}
+
 export function serializeAppointment(row: AppointmentRow) {
   return {
     id: row.id,
@@ -395,4 +462,55 @@ export function serializeCareProfile(row: CareProfileRow) {
     notes: row.notes,
     is_default: row.is_default,
   };
+}
+
+// ─── Plan / Quota ────────────────────────────────────────────────────────────
+
+export const FREE_OCR_MONTHLY_LIMIT = 10;
+
+type UserPlanRow = { plan: string; plan_expires_at: string | null };
+
+export async function getUserPlan(env: Env, userId: number): Promise<{ plan: string; planExpiresAt: string | null }> {
+  const rows = await supabaseFetch<UserPlanRow[]>(
+    env,
+    `users?id=eq.${userId}&select=plan,plan_expires_at&limit=1`,
+  );
+  const row = rows[0];
+  if (!row) return { plan: "free", planExpiresAt: null };
+
+  // If plan has expired, treat as free
+  if (row.plan === "paid" && row.plan_expires_at) {
+    const expires = new Date(row.plan_expires_at);
+    if (expires < new Date()) return { plan: "free", planExpiresAt: row.plan_expires_at };
+  }
+  return { plan: row.plan || "free", planExpiresAt: row.plan_expires_at };
+}
+
+export async function getMonthlyOcrUsage(env: Env, userId: number): Promise<number> {
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+  // Count appointments created this month via OCR (those with a reminder_text set by OCR)
+  // We use created_at as proxy — OCR-created records share the same timestamp window
+  const apts = await supabaseFetch<Array<{ id: number }>>(
+    env,
+    `appointments?user_id=eq.${userId}&created_at=gte.${startOfMonth}&select=id`,
+  );
+  const meds = await supabaseFetch<Array<{ id: number }>>(
+    env,
+    `medications?user_id=eq.${userId}&created_at=gte.${startOfMonth}&select=id`,
+  );
+  // Each OCR call typically creates 1-3 records; we count total records as usage proxy
+  // A more precise approach would require a dedicated ocr_usage table (Sprint 2+)
+  return apts.length + meds.length;
+}
+
+export async function checkOcrQuota(env: Env, userId: number): Promise<void> {
+  const { plan } = await getUserPlan(env, userId);
+  if (plan === "paid") return; // paid users have unlimited OCR
+
+  const used = await getMonthlyOcrUsage(env, userId);
+  if (used >= FREE_OCR_MONTHLY_LIMIT) {
+    throw new Error(`本月免費次數已用完（${FREE_OCR_MONTHLY_LIMIT} 次），升級付費方案可無限使用。`);
+  }
 }

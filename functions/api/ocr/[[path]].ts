@@ -1,4 +1,5 @@
 import {
+  checkOcrQuota,
   getAccessibleProfiles,
   getBearerToken,
   getOrCreateDefaultUser,
@@ -237,6 +238,16 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const token = getBearerToken(request);
     const identity = token ? await verifyLineIdToken(env, token) : null;
     const userId = await getOrCreateDefaultUser(env, identity?.lineUserId);
+
+    // Check OCR quota for free plan users
+    try {
+      await checkOcrQuota(env, userId);
+    } catch (quotaError) {
+      return Response.json(
+        { error: quotaError instanceof Error ? quotaError.message : "超過使用次數限制" },
+        { status: 429 },
+      );
+    }
 
     const data = await parseMedicalImages(env, images);
     const saved = await saveParsedData(env, data, userId, requestedProfileId);
