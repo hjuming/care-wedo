@@ -26,3 +26,12 @@ export async function ocrAnalyze(files) {
 
   return res.json();
 }
+
+export async function fetchDashboard() {
+  const res = await fetch(`${API_BASE}/dashboard`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `API 錯誤 (${res.status})`);
+  }
+  return res.json();
+}

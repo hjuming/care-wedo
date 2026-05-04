@@ -1,12 +1,13 @@
 """
 Care WEDO — OCR API 端點
-前端上傳圖片 → Claude Vision 解析 → 回傳結構化 JSON
+前端上傳圖片 → Gemini Vision 解析 → 回傳結構化 JSON
 """
 
 import base64
 import logging
 from flask import Blueprint, request, jsonify
 from app.services.gemini_ocr import parse_medical_images
+from app.services.persistence import save_parsed_data
 
 logger = logging.getLogger(__name__)
 ocr_bp = Blueprint("ocr", __name__)
@@ -20,7 +21,7 @@ MAX_FILES = 5
 @ocr_bp.route("/", methods=["POST"])
 def ocr_analyze():
     """
-    接收圖片（multipart/form-data 或 JSON base64），呼叫 Claude OCR 解析。
+    接收圖片（multipart/form-data 或 JSON base64），呼叫 Gemini OCR 解析。
 
     支援兩種上傳方式：
     1. multipart/form-data：欄位名 images（可多張）
@@ -81,4 +82,5 @@ def ocr_analyze():
     if "error" in result:
         return jsonify(result), 422
 
-    return jsonify({"success": True, "data": result})
+    saved = save_parsed_data(result)
+    return jsonify({"success": True, "data": result, "saved": saved})

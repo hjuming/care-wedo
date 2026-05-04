@@ -5,7 +5,7 @@
 export default function OcrResult({ data, onClose }) {
   if (!data) return null;
 
-  const { patient, department, doctor, visit_date, diagnoses, medications, appointments, exams, reminders, next_visit } = data;
+  const { patient, department, visit_date, diagnoses, medications, appointments, exams, reminders, next_visit } = data;
 
   return (
     <div style={{ padding: "0 20px 20px" }}>

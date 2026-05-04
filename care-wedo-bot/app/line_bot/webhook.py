@@ -4,7 +4,7 @@ from linebot.v3.exceptions import InvalidSignatureError
 from linebot.v3.webhooks import MessageEvent, TextMessageContent, ImageMessageContent
 import logging
 
-from app.services.notification import reply_text, push_text, get_messaging_api, reply_flex
+from app.services.notification import reply_text, push_text, get_messaging_api, reply_flex, push_flex
 from app.services.ai_parser import parse_medical_image, parse_medical_text, answer_query
 from app.models import db, User, Appointment
 from app.line_bot.flex_messages import scan_result, voice_answer, appointment_carousel
@@ -15,7 +15,10 @@ line_bp = Blueprint('line_bot', __name__)
 
 # 初始化 Handler (需要延遲到 create_app 時，但這裡先設好封裝)
 def get_handler():
-    return WebhookHandler(current_app.config['LINE_CHANNEL_SECRET'])
+    secret = current_app.config.get("LINE_CHANNEL_SECRET")
+    if not secret:
+        raise RuntimeError("LINE_CHANNEL_SECRET is not configured")
+    return WebhookHandler(secret)
 
 @line_bp.route("/callback", methods=["POST"])
 def callback():
@@ -54,11 +57,10 @@ def register_handlers(handler):
         
         if "error" not in parsed:
             _save_parsed_data(user.id, parsed)
-            # 使用 scan_result Flex Message
             flex_content = scan_result(parsed)
-            reply_flex(event.reply_token, "解析結果", flex_content)
+            push_flex(line_user_id, "解析結果", flex_content)
         else:
-            reply_text(event.reply_token, parsed["error"])
+            push_text(line_user_id, parsed["error"])
 
     @handler.add(MessageEvent, message=TextMessageContent)
     def handle_text(event):

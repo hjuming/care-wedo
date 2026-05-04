@@ -4,11 +4,13 @@ __pycache__/
 venv/
 .venv/
 care-wedo-bot/.env
+care-wedo-bot/instance/
 
 # Node / React
 node_modules/
 dist/
 care-wedo-app/.env*
+!care-wedo-app/.env.example
 care-wedo-app/.env.local
 
 # OS

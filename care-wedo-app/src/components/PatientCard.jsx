@@ -18,10 +18,12 @@ export default function PatientCard({ patient }) {
       }}>洪</div>
       <div>
         <div style={{ fontWeight: 700, fontSize: 16 }}>{patient.name}</div>
-        <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>{patient.age}歲・{patient.dept}</div>
+        <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+          {[patient.age && `${patient.age}歲`, patient.dept].filter(Boolean).join("・")}
+        </div>
       </div>
       <div style={{ marginLeft: "auto", display: "flex", flexDirection: "column", gap: 4 }}>
-        {patient.diagnoses.map((d, i) => (
+        {(patient.diagnoses || []).map((d, i) => (
           <div key={i} style={{
             fontSize: 10,
             background: i === 0 ? "var(--warning-bg)" : "var(--primary-transparent)",

@@ -1,0 +1,10 @@
+.git
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.venv
+**/node_modules
+**/dist
+care-wedo-bot/.env
+care-wedo-app/.env*
+開發文件

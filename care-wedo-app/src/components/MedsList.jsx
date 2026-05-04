@@ -51,13 +51,15 @@ export default function MedsList({ medicines }) {
               borderRadius: 20,
               color: "#ccc",
             }}>⏱ {med.freq}</div>
-            <div style={{
-              fontSize: 11,
-              background: "rgba(255,255,255,0.07)",
-              padding: "3px 10px",
-              borderRadius: 20,
-              color: "#ccc",
-            }}>📅 {med.days}天份</div>
+            {med.days && (
+              <div style={{
+                fontSize: 11,
+                background: "rgba(255,255,255,0.07)",
+                padding: "3px 10px",
+                borderRadius: 20,
+                color: "#ccc",
+              }}>📅 {med.days}天份</div>
+            )}
           </div>
         </div>
       ))}
