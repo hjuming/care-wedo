@@ -72,7 +72,7 @@ async function parseMedicalImages(env: Env, images: Array<{ data: string; media_
     throw new Error("GOOGLE_API_KEY is not configured.");
   }
 
-  const model = env.GEMINI_MODEL_NAME || "gemini-2.0-flash";
+  const model = env.GEMINI_MODEL_NAME || "gemini-3.0-flash";
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${env.GOOGLE_API_KEY}`;
   const response = await fetch(endpoint, {
     method: "POST",
