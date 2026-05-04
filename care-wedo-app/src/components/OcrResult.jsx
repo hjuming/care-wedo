@@ -1,3 +1,5 @@
+import aiAvatar from '../assets/ai-avatar.png';
+
 /**
  * OCR 解析結果顯示元件
  * 顯示 Claude 解析出的醫療單據結構化資訊
@@ -14,9 +16,12 @@ export default function OcrResult({ data, onClose }) {
         display: "flex", justifyContent: "space-between", alignItems: "center",
         margin: "16px 0 12px",
       }}>
-        <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>
-          AI 解析結果
-        </p>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <img src={aiAvatar} alt="AI Avatar" style={{ width: 24, height: 24, borderRadius: "50%", objectFit: "cover" }} />
+          <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>
+            AI 照護管家解析結果
+          </p>
+        </div>
         <button onClick={onClose} style={{
           background: "none", border: "none", fontSize: 12, color: "var(--text-secondary)",
           cursor: "pointer", padding: "4px 8px",

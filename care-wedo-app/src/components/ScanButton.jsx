@@ -1,5 +1,7 @@
 import { useRef } from "react";
 
+import aiAvatar from '../assets/ai-avatar.png';
+
 export default function ScanButton({ scanning, scanned, scanCount, onFilesSelected }) {
   const inputRef = useRef(null);
 
@@ -52,7 +54,7 @@ export default function ScanButton({ scanning, scanned, scanCount, onFilesSelect
       >
         {scanning ? (
           <>
-            <span className="spin-animation">⟳</span>
+            <img src={aiAvatar} alt="AI" className="pulse-animation" style={{ width: 20, height: 20, borderRadius: "50%", objectFit: "cover" }} />
             AI 解析中…
           </>
         ) : scanned && scanCount > 0 ? (
