@@ -21,3 +21,4 @@ care-wedo-app/.env.local
 
 # Environment Variables
 .env
+.wrangler/
