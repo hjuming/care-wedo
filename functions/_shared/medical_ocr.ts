@@ -122,6 +122,7 @@ export async function parseMedicalImages(env: Env, images: Array<{ data: string;
 export async function saveParsedData(env: Env, parsed: ParsedMedicalData, lineUserId?: string) {
   const userId = await getOrCreateDefaultUser(env, lineUserId);
   const careContext = await resolveDefaultCareContext(env, userId);
+  const saved = { appointment_ids: [] as number[], medication_ids: [] as number[], profileName: careContext.profileName || "家人" };
 
   if (parsed.appointments?.length) {
     // 1. 取得該使用者現有的行程，用以比對防呆。
@@ -177,6 +178,7 @@ export async function saveParsedData(env: Env, parsed: ParsedMedicalData, lineUs
             method: "PATCH",
             body: JSON.stringify(payload)
           });
+          saved.appointment_ids.push(duplicate.id);
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           if (!message.includes("appointments.profile_id") && !message.includes("appointments.group_id")) {
@@ -188,14 +190,17 @@ export async function saveParsedData(env: Env, parsed: ParsedMedicalData, lineUs
             method: "PATCH",
             body: JSON.stringify(payload)
           });
+          saved.appointment_ids.push(duplicate.id);
         }
       } else {
         // 新增資料
         try {
-          await supabaseFetch(env, "appointments", {
+          const inserted = await supabaseFetch<Array<{id: number}>>(env, "appointments?select=id", {
             method: "POST",
+            headers: { Prefer: "return=representation" },
             body: JSON.stringify([payload])
           });
+          if (inserted?.[0]?.id) saved.appointment_ids.push(inserted[0].id);
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           if (!message.includes("appointments.profile_id") && !message.includes("appointments.group_id")) {
@@ -203,10 +208,12 @@ export async function saveParsedData(env: Env, parsed: ParsedMedicalData, lineUs
           }
           delete payload.profile_id;
           delete payload.group_id;
-          await supabaseFetch(env, "appointments", {
+          const inserted = await supabaseFetch<Array<{id: number}>>(env, "appointments?select=id", {
             method: "POST",
+            headers: { Prefer: "return=representation" },
             body: JSON.stringify([payload])
           });
+          if (inserted?.[0]?.id) saved.appointment_ids.push(inserted[0].id);
         }
       }
     }
@@ -243,6 +250,7 @@ export async function saveParsedData(env: Env, parsed: ParsedMedicalData, lineUs
             method: "PATCH",
             body: JSON.stringify(payload)
           });
+          saved.medication_ids.push(duplicate.id);
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           if (!message.includes("medications.profile_id") && !message.includes("medications.group_id")) {
@@ -254,13 +262,16 @@ export async function saveParsedData(env: Env, parsed: ParsedMedicalData, lineUs
             method: "PATCH",
             body: JSON.stringify(payload)
           });
+          saved.medication_ids.push(duplicate.id);
         }
       } else {
         try {
-          await supabaseFetch(env, "medications", {
+          const inserted = await supabaseFetch<Array<{id: number}>>(env, "medications?select=id", {
             method: "POST",
+            headers: { Prefer: "return=representation" },
             body: JSON.stringify([payload])
           });
+          if (inserted?.[0]?.id) saved.medication_ids.push(inserted[0].id);
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           if (!message.includes("medications.profile_id") && !message.includes("medications.group_id")) {
@@ -268,12 +279,16 @@ export async function saveParsedData(env: Env, parsed: ParsedMedicalData, lineUs
           }
           delete payload.profile_id;
           delete payload.group_id;
-          await supabaseFetch(env, "medications", {
+          const inserted = await supabaseFetch<Array<{id: number}>>(env, "medications?select=id", {
             method: "POST",
+            headers: { Prefer: "return=representation" },
             body: JSON.stringify([payload])
           });
+          if (inserted?.[0]?.id) saved.medication_ids.push(inserted[0].id);
         }
       }
     }
   }
+
+  return saved;
 }

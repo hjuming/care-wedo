@@ -256,7 +256,7 @@ export async function ensureGroupDefaultProfile(
   });
 }
 
-export async function resolveDefaultCareContext(env: Env, userId: number): Promise<CareContext> {
+export async function resolveDefaultCareContext(env: Env, userId: number): Promise<{ groupId: number | null; profileId: number | null; profileName?: string }> {
   const memberships = await getUserMemberships(env, userId);
   const primaryGroupId = memberships[0]?.group_id || null;
 
@@ -265,7 +265,7 @@ export async function resolveDefaultCareContext(env: Env, userId: number): Promi
   }
 
   const profile = await ensureGroupDefaultProfile(env, primaryGroupId, userId);
-  return { groupId: primaryGroupId, profileId: profile.id };
+  return { groupId: primaryGroupId, profileId: profile.id, profileName: profile.display_name };
 }
 
 export async function createGroup(env: Env, userId: number, name: string): Promise<GroupRow> {

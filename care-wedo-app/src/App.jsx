@@ -560,20 +560,34 @@ function DashboardApp() {
     };
   }, [loadDashboard]);
 
-  const patient = dashboard?.patient?.name ? dashboard.patient : patientData;
-  const appointments = useMemo(() => {
-    const source = dashboard?.appointments?.length ? dashboard.appointments : initialTimeline;
-    return source.map(normalizeAppointment).filter((item) => matchSearch(item, searchQuery));
-  }, [dashboard, searchQuery]);
-
-  const medications = useMemo(() => {
-    const source = dashboard?.medications?.length ? dashboard.medications : medicines;
-    return source.map(normalizeMedication).filter((item) => matchSearch(item, searchQuery));
-  }, [dashboard, searchQuery]);
-
-  const checklistItems = dashboard?.checklist?.length ? dashboard.checklist : initialChecklist;
+  const isPersonalMode = dashboard?.mode === "personal" || identity.status === "authenticated";
   const careProfiles = dashboard?.care_profiles || [];
   const selectedProfile = careProfiles.find((profile) => profile.id === activeProfileId) || careProfiles[0] || null;
+
+  const patient = (isPersonalMode && dashboard) 
+    ? { ...dashboard.patient, name: selectedProfile?.display_name || dashboard.patient.name } 
+    : (dashboard?.patient?.name ? dashboard.patient : patientData);
+  const appointments = useMemo(() => {
+    let source = [];
+    if (isPersonalMode && dashboard) {
+      source = dashboard.appointments || [];
+    } else {
+      source = dashboard?.appointments?.length ? dashboard.appointments : initialTimeline;
+    }
+    return source.map(normalizeAppointment).filter((item) => matchSearch(item, searchQuery));
+  }, [dashboard, searchQuery, isPersonalMode]);
+
+  const medications = useMemo(() => {
+    let source = [];
+    if (isPersonalMode && dashboard) {
+      source = dashboard.medications || [];
+    } else {
+      source = dashboard?.medications?.length ? dashboard.medications : medicines;
+    }
+    return source.map(normalizeMedication).filter((item) => matchSearch(item, searchQuery));
+  }, [dashboard, searchQuery, isPersonalMode]);
+
+  const checklistItems = (isPersonalMode && dashboard) ? (dashboard.checklist || []) : (dashboard?.checklist?.length ? dashboard.checklist : initialChecklist);
   const nextAppointment = useMemo(() => {
     return appointments
       .filter(apt => apt.status !== "completed" && apt.date)
@@ -590,7 +604,6 @@ function DashboardApp() {
 
   const urgentItems = appointments.filter((item) => (item.fasting_required || item.type === "refill_reminder") && item.status !== "completed").slice(0, 3);
   const records = appointments.filter((item) => item.status === "completed");
-  const isPersonalMode = dashboard?.mode === "personal" || identity.status === "authenticated";
 
   async function handleComplete(aptId) {
     // Optimistic UI update

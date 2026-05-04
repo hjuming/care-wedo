@@ -1,4 +1,5 @@
 import { parseMedicalImages, saveParsedData, Env as OcrEnv } from "./_shared/medical_ocr";
+import { getAccessibleProfiles, getOrCreateDefaultUser, supabaseFetch } from "./_shared/supabase";
 
 type Env = OcrEnv & {
   LINE_CHANNEL_ACCESS_TOKEN?: string;
@@ -13,6 +14,9 @@ type LineEvent = {
     type: string;
     text?: string;
     id?: string;
+  };
+  postback?: {
+    data: string;
   };
 };
 
@@ -82,9 +86,14 @@ async function replyText(env: Env, replyToken: string, text: string) {
 }
 
 /** 用 Push API 主動推送訊息給使用者（不需要 replyToken） */
-async function pushText(env: Env, userId: string, text: string) {
+async function pushText(env: Env, userId: string, text: string, quickReply?: any) {
   if (!env.LINE_CHANNEL_ACCESS_TOKEN) {
     throw new Error("LINE_CHANNEL_ACCESS_TOKEN is not configured.");
+  }
+
+  const message: any = { type: "text", text };
+  if (quickReply) {
+    message.quickReply = quickReply;
   }
 
   const response = await fetch("https://api.line.me/v2/bot/message/push", {
@@ -95,7 +104,7 @@ async function pushText(env: Env, userId: string, text: string) {
     },
     body: JSON.stringify({
       to: userId,
-      messages: [{ type: "text", text }],
+      messages: [message],
     }),
   });
 
@@ -121,7 +130,7 @@ async function fetchLineContent(env: Env, messageId: string): Promise<string> {
 }
 
 /** 將解析結果格式化成易讀的摘要 */
-function formatResultSummary(parsed: import("./_shared/medical_ocr").ParsedMedicalData): string {
+function formatResultSummary(parsed: import("./_shared/medical_ocr").ParsedMedicalData, profileName: string): string {
   const lines: string[] = [`${DEFAULT_RECIPIENT}，我幫您把單子整理好了。\n`];
 
   if (parsed.appointments?.length) {
@@ -156,28 +165,89 @@ function formatResultSummary(parsed: import("./_shared/medical_ocr").ParsedMedic
     lines.push("");
   }
 
-  lines.push("想看完整清單，點這裡：https://care.wedopr.com");
+  lines.push(`💡 這筆資料已存入【${profileName}】的紀錄中。`);
+  lines.push("想看完整清單或修改，請點這裡：https://care.wedopr.com");
   return lines.join("\n");
 }
 
 /** 處理圖片 OCR（背景執行，用 Push API 回傳結果） */
 async function processImageOCR(env: Env, event: LineEvent) {
-  const userId = event.source.userId;
+  const lineUserId = event.source.userId;
   try {
     const base64Image = await fetchLineContent(env, event.message!.id!);
     const parsedData = await parseMedicalImages(env, [{ data: base64Image, media_type: "image/jpeg" }]);
-    await saveParsedData(env, parsedData, userId);
+    const saved = await saveParsedData(env, parsedData, lineUserId);
+    const userId = await getOrCreateDefaultUser(env, lineUserId);
+    const profiles = await getAccessibleProfiles(env, userId);
 
-    const reply = formatResultSummary(parsedData);
-    await pushText(env, userId, reply);
+    const reply = formatResultSummary(parsedData, saved.profileName);
+
+    let quickReply = undefined;
+    const aptIds = saved.appointment_ids.join(",");
+    const medIds = saved.medication_ids.join(",");
+    
+    if (profiles.length > 1 && (aptIds.length > 0 || medIds.length > 0)) {
+      const otherProfiles = profiles.filter(p => p.display_name !== saved.profileName).slice(0, 5); // LINE limit is 13, but let's take 5
+      
+      quickReply = {
+        items: otherProfiles.map(p => {
+          const actionData = new URLSearchParams();
+          actionData.set("action", "reassign");
+          actionData.set("p", String(p.id));
+          if (aptIds) actionData.set("a", aptIds);
+          if (medIds) actionData.set("m", medIds);
+
+          return {
+            type: "action",
+            action: {
+              type: "postback",
+              label: p.display_name,
+              data: actionData.toString().slice(0, 300), // Ensure max 300 chars
+              displayText: `這是 ${p.display_name} 的紀錄`
+            }
+          };
+        })
+      };
+    }
+
+    await pushText(env, lineUserId, reply, quickReply);
   } catch (error) {
     console.error("OCR Error:", error);
     const msg = error instanceof Error ? error.message : "未知錯誤";
-    await pushText(env, userId, `${DEFAULT_RECIPIENT}，這張照片我暫時看不清楚。\n\n可以再拍一次嗎？盡量讓整張單子平放、字清楚一點。\n\n系統訊息：${msg}`);
+    await pushText(env, lineUserId, `${DEFAULT_RECIPIENT}，這張照片我暫時看不清楚。\n\n可以再拍一次嗎？盡量讓整張單子平放、字清楚一點。\n\n系統訊息：${msg}`);
   }
 }
 
 async function handleEvent(env: Env, event: LineEvent, waitUntil: (promise: Promise<any>) => void) {
+  if (event.type === "postback" && event.postback?.data && event.replyToken) {
+    const params = new URLSearchParams(event.postback.data);
+    if (params.get("action") === "reassign") {
+      const targetProfileId = params.get("p");
+      const aptIds = params.get("a");
+      const medIds = params.get("m");
+      
+      try {
+        if (aptIds && targetProfileId) {
+          await supabaseFetch(env, `appointments?id=in.(${aptIds})`, {
+            method: "PATCH",
+            body: JSON.stringify({ profile_id: Number(targetProfileId) })
+          });
+        }
+        if (medIds && targetProfileId) {
+          await supabaseFetch(env, `medications?id=in.(${medIds})`, {
+            method: "PATCH",
+            body: JSON.stringify({ profile_id: Number(targetProfileId) })
+          });
+        }
+        await replyText(env, event.replyToken, `沒問題，已經幫您歸類好了！`);
+      } catch (err) {
+        console.error("Reassign error:", err);
+        await replyText(env, event.replyToken, `抱歉，歸類時發生錯誤，請稍後再試。`);
+      }
+      return;
+    }
+  }
+
   if (event.type !== "message" || !event.replyToken) return;
 
   if (event.message?.type === "image" && event.message.id) {
