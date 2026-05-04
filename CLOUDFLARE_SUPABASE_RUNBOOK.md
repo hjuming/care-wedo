@@ -39,9 +39,27 @@ GOOGLE_API_KEY=[REDACTED]
 GEMINI_MODEL_NAME=gemini-2.0-flash
 SUPABASE_URL=https://你的-project.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=[REDACTED]
+LINE_CHANNEL_ACCESS_TOKEN=[REDACTED]
+LINE_CHANNEL_SECRET=[REDACTED]
 ```
 
 前端維持同網域 `/api`，通常不需要設定 `VITE_API_BASE`。
+
+若暫時不用 LINE Bot，只需要前四個變數即可。若要回填 LINE Webhook URL，必須加上 `LINE_CHANNEL_ACCESS_TOKEN` 與 `LINE_CHANNEL_SECRET`。
+
+## LINE Webhook URL
+
+LINE Developers Console → Messaging API → Webhook settings：
+
+```text
+https://care.wedopr.com/callback
+```
+
+設定後：
+
+1. 開啟 `Use webhook`。
+2. 點 `Verify`，成功時會收到 200 回應。
+3. 到 LINE 對 Bot 傳文字，應收到 Care WEDO 回覆。
 
 ## 上線驗證
 
