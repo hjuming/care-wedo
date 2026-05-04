@@ -45,15 +45,18 @@ function typeIcon(type) {
   return "診";
 }
 
-function formatDateLabel(value) {
+function formatDateLabel(value, time = "") {
   if (!value) return "日期待確認";
   const date = new Date(`${value}T00:00:00+08:00`);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("zh-TW", {
-    month: "long",
-    day: "numeric",
-    weekday: "short",
-  }).format(date);
+  
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  const dayName = ["日", "一", "二", "三", "四", "五", "六"][date.getDay()];
+  
+  const base = `${yyyy}/${mm}/${dd} (${dayName})`;
+  return time ? `${base} ${time}` : base;
 }
 
 function normalizeAppointment(apt, index) {
@@ -253,28 +256,18 @@ export default function App() {
           </div>
         </div>
 
-        <aside className="login-panel" aria-label="LINE 登入狀態">
-          <img src={aiAvatar} alt="健康小管家" className="assistant-avatar" />
-          <div>
-            <p className="panel-eyebrow">LINE 健康小管家</p>
-            <h2>{isPersonalMode ? "已用 LINE 登入" : "用 LINE 登入後就能看"}</h2>
-            <p className="panel-copy">
-              {isPersonalMode
-                ? "這裡只會顯示您的看診、吃藥和領藥提醒。"
-                : (
-                  <>
-                    從 LINE 打開後，
-                    <br className="phone-break" />
-                    就會進到自己的頁面。
-                  </>
-                )}
-            </p>
+        <a 
+          href="https://lin.ee/xzbyyvf" 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          className={`login-mini-status ${isPersonalMode ? "authenticated" : ""}`}
+        >
+          <img src={identity.profile?.pictureUrl || aiAvatar} alt="LINE" />
+          <div className="status-info">
+            <span className="status-label">{isPersonalMode ? identity.profile?.displayName || "已登入" : "尚未登入"}</span>
+            <span className="status-subtext">點此前往 LINE 機器人</span>
           </div>
-          <div className="login-status">
-            <span className={isPersonalMode ? "status-dot online" : "status-dot"} />
-            {isPersonalMode ? "已登入" : "範例畫面"}
-          </div>
-        </aside>
+        </a>
       </section>
 
       {(dashboardError || identity.message || ocrError) && (
@@ -292,7 +285,7 @@ export default function App() {
           <div className="profile-block">
             <img src={identity.profile?.pictureUrl || aiAvatar} alt="個人頭像" className="profile-avatar" />
             <div>
-              <p className="profile-name">{selectedProfile?.display_name || patient.name || "親愛的爸爸 / 媽媽"}</p>
+              <p className="profile-name">{selectedProfile?.display_name || patient.name || "洪爸爸"}</p>
               <p className="profile-note">{patient.dept || "常看科別待補"}・{patient.age || "年齡待補"}</p>
             </div>
           </div>
@@ -316,12 +309,6 @@ export default function App() {
               </button>
             ))}
           </nav>
-
-          <div className="plan-panel">
-            <p className="panel-eyebrow">目前免費試用</p>
-            <strong>NT$30 / 使用者 / 月</strong>
-            <p>之後完整頁面會改為付費。沒有訂閱時，還是可以用 LINE 拍照解析單子。</p>
-          </div>
         </aside>
 
         <section className="content-area">
@@ -384,7 +371,7 @@ function ProfileSwitcher({ profiles, activeProfileId, onChange }) {
     return (
       <div className="profile-switcher empty">
         <p className="panel-eyebrow">正在看的資料</p>
-        <strong>親愛的爸爸 / 媽媽</strong>
+        <strong>洪爸爸</strong>
         <span>之後可加入爸爸、媽媽、阿公、阿嬤或自己的資料。</span>
       </div>
     );
@@ -478,22 +465,65 @@ function OverviewView({ nextAppointment, urgentItems, medications, checklistItem
 }
 
 function CalendarView({ appointments }) {
+  const [currentDate, setCurrentDate] = useState(new Date());
+
+  const year = currentDate.getFullYear();
+  const month = currentDate.getMonth();
+
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const firstDayOfMonth = new Date(year, month, 1).getDay(); // 0 (Sun) to 6 (Sat)
+  const adjustedFirstDay = firstDayOfMonth === 0 ? 6 : firstDayOfMonth - 1; // Adjust to Mon starting
+
+  const calendarDays = Array.from({ length: 42 }, (_, i) => {
+    const dayNumber = i - adjustedFirstDay + 1;
+    if (dayNumber > 0 && dayNumber <= daysInMonth) {
+      return dayNumber;
+    }
+    return null;
+  });
+
+  function changeMonth(offset) {
+    const nextDate = new Date(year, month + offset, 1);
+    setCurrentDate(nextDate);
+  }
+
+  function scrollToDate(day) {
+    const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    const element = document.getElementById(`event-${dateStr}`);
+    if (element) {
+      element.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }
+
   return (
     <div className="calendar-layout">
       <section className="calendar-board" aria-label="月曆預覽">
         <div className="calendar-head">
-          <strong>看診和領藥日曆</strong>
-          <span>拍照後會自動整理</span>
+          <div className="month-nav">
+            <button type="button" onClick={() => changeMonth(-1)}>❮</button>
+            <strong>{year} 年 {month + 1} 月</strong>
+            <button type="button" onClick={() => changeMonth(1)}>❯</button>
+          </div>
+          <button type="button" className="btn-today" onClick={() => setCurrentDate(new Date())}>回到今天</button>
         </div>
         <div className="calendar-weekdays">
           {["一", "二", "三", "四", "五", "六", "日"].map((day) => <span key={day}>{day}</span>)}
         </div>
         <div className="calendar-days">
-          {Array.from({ length: 35 }, (_, index) => {
-            const day = index + 1;
-            const hasEvent = appointments.some((apt) => apt.date?.endsWith(String(day).padStart(2, "0")));
+          {calendarDays.map((day, index) => {
+            if (!day) return <div key={`empty-${index}`} className="calendar-day empty" />;
+            
+            const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+            const hasEvent = appointments.some((apt) => apt.date === dateStr);
+            const isToday = new Date().toDateString() === new Date(year, month, day).toDateString();
+            
             return (
-              <button key={day} type="button" className={hasEvent ? "calendar-day has-event" : "calendar-day"}>
+              <button 
+                key={day} 
+                type="button" 
+                className={`calendar-day ${hasEvent ? "has-event" : ""} ${isToday ? "is-today" : ""}`}
+                onClick={() => scrollToDate(day)}
+              >
                 {day}
               </button>
             );
@@ -503,10 +533,10 @@ function CalendarView({ appointments }) {
 
       <section className="event-list" aria-label="看診和領藥清單">
         {appointments.length ? appointments.map((apt) => (
-          <article key={apt.id} className="event-row">
+          <article key={apt.id} id={`event-${apt.date}`} className="event-row">
             <div className="event-type">{typeIcon(apt.type)}</div>
             <div>
-              <p className="event-date">{formatDateLabel(apt.date)} {apt.time}</p>
+              <p className="event-date">{formatDateLabel(apt.date, apt.time)}</p>
               <h3>{apt.department}</h3>
               <p>{[apt.hospital, apt.doctor && `${apt.doctor}醫師`, apt.number && `${apt.number}號`].filter(Boolean).join(" ｜ ")}</p>
               {apt.location && <p className="location-line">地點：{apt.location}</p>}
@@ -570,7 +600,7 @@ function SettingsView({ patient, identity, isPersonalMode, careProfiles, selecte
           <img src={identity.profile?.pictureUrl || aiAvatar} alt="個人頭像" />
           <div>
             <label>稱呼</label>
-            <strong>{selectedProfile?.display_name || patient.name || "親愛的爸爸 / 媽媽"}</strong>
+            <strong>{selectedProfile?.display_name || patient.name || "洪爸爸"}</strong>
             <label>LINE 狀態</label>
             <strong>{isPersonalMode ? "已用 LINE 登入" : "目前是範例畫面"}</strong>
           </div>
@@ -609,16 +639,16 @@ function SettingsView({ patient, identity, isPersonalMode, careProfiles, selecte
       </section>
 
       <section className="summary-panel wide-panel">
-        <p className="panel-eyebrow">之後會開放的功能</p>
-        <div className="paid-feature-grid">
-          {paidFeatureGroups.map((group) => (
-            <article key={group.title} className="paid-feature">
-              <h3>{group.title}</h3>
-              <ul>
-                {group.items.map((item) => <li key={item}>{item}</li>)}
-              </ul>
-            </article>
-          ))}
+        <p className="panel-eyebrow">常見照護提醒</p>
+        <div className="care-tips-grid">
+          <article className="care-tip-card">
+            <h3>過敏與禁忌</h3>
+            <p>設定照護對象的過敏史，讓所有家人在解析單據時都能獲得即時警告。</p>
+          </article>
+          <article className="care-tip-card">
+            <h3>常用醫院</h3>
+            <p>記下常去的醫院與科別，系統會自動歸納並優化之後的看診建議。</p>
+          </article>
         </div>
       </section>
     </div>
