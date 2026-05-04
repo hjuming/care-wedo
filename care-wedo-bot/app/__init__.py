@@ -13,6 +13,17 @@ db = SQLAlchemy()
 migrate = Migrate()
 scheduler = BackgroundScheduler()
 
+
+def is_configured_secret(value):
+    if not value:
+        return False
+    lowered = value.lower()
+    return not (
+        lowered.startswith("your_")
+        or lowered.startswith("change-")
+        or lowered in {"xxx", "placeholder"}
+    )
+
 def create_app(config_name="dev"):
     """Flask App Factory"""
     app = Flask(__name__)
@@ -45,8 +56,10 @@ def create_app(config_name="dev"):
     app.register_blueprint(dashboard_bp, url_prefix="/api")
     app.register_blueprint(medications_bp, url_prefix="/api/medications")
 
-    line_is_configured = bool(
-        app.config.get("LINE_CHANNEL_SECRET") and app.config.get("LINE_CHANNEL_ACCESS_TOKEN")
+    line_is_configured = (
+        not app.config.get("TESTING")
+        and is_configured_secret(app.config.get("LINE_CHANNEL_SECRET"))
+        and is_configured_secret(app.config.get("LINE_CHANNEL_ACCESS_TOKEN"))
     )
     if line_is_configured:
         from app.line_bot.webhook import line_bp, get_handler, register_handlers

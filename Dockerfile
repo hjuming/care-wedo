@@ -18,4 +18,4 @@ COPY care-wedo-bot ./
 COPY --from=frontend /app/care-wedo-app/dist /app/frontend_dist
 
 EXPOSE 5000
-CMD ["sh", "-c", "gunicorn wsgi:app --bind 0.0.0.0:${PORT:-5000} --workers 2 --timeout 120"]
+CMD ["sh", "-c", "python boot.py && gunicorn wsgi:app --bind 0.0.0.0:${PORT:-5000} --workers 2 --timeout 120"]

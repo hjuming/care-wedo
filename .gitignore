@@ -18,3 +18,6 @@ care-wedo-app/.env.local
 
 # Documents
 開發文件/
+
+# Environment Variables
+.env

@@ -4,7 +4,7 @@ from app import create_app, db
 
 def test_gemini_parsing_8_records(monkeypatch):
     """驗證 8 筆真實預約資料的解析準確率業務功能。業務"""
-    app = create_app('dev')
+    app = create_app('test')
     with app.app_context():
         from app.services import ai_parser
 
