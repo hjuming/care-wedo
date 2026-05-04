@@ -124,8 +124,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, waitUnti
         for (const apt of data.apts) {
           if (apt.type === "refill_reminder") {
             msgText += `[慢箋領藥] 明天開始可領藥！\n地點：${apt.hospital || "醫院/社區藥局"}\n`;
+          } else if (apt.type === "inspection") {
+            msgText += `[檢驗排程] ${apt.time || ""} ${apt.hospital || ""} ${apt.department || ""}\n`;
+            if (apt.fasting_required) msgText += `⚠️ 需空腹 ${apt.fasting_hours || 8} 小時\n`;
+            if (apt.notes) msgText += `💡 ${apt.notes}\n`;
           } else {
-            msgText += `[回診] ${apt.time || ""} ${apt.hospital || ""} ${apt.department || ""}\n`;
+            msgText += `[回診看診] ${apt.time || ""} ${apt.hospital || ""} ${apt.department || ""}\n`;
             if (apt.fasting_required) msgText += `⚠️ 需空腹 ${apt.fasting_hours || 8} 小時\n`;
             if (apt.notes) msgText += `💡 ${apt.notes}\n`;
           }
