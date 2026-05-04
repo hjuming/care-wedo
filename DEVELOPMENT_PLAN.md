@@ -14,7 +14,8 @@
 | Sprint 1 | 資料持久化（PATCH API + 前端串接）| ✅ 程式碼完成 |
 | Sprint 2 | 免費 / 付費方案限制（quota）| ✅ 程式碼完成 |
 | Sprint 3 | 家庭群組正式化（角色、移除、邀請）| ✅ 程式碼完成 |
-| Sprint 4 | LINE 實機閉環驗證 | 🔴 **待驗證** |
+| Sprint C | LINE Bot OCR 互動升級（快速切換、歸屬修正）| ✅ 程式碼完成 |
+| Sprint 4 | LINE 實機閉環驗證 | 🟡 **驗證中** |
 | Sprint 5 | 正式上線防護（法規頁、帳號刪除）| ✅ 程式碼完成 |
 
 ---
@@ -42,26 +43,8 @@ LINE Developers Console
 - `App.jsx`：若 URL 含 `liff.state` 或 `code` 參數且路由不是 `/app`，自動 `replaceState` 到 `/app`，作為雙重保險
 - `liff.js`：`loginWithLine()` 與 `initLineIdentity()` 的 `redirectUri` 統一用 `APP_URL` 常數（`window.location.origin + "/app"`）
 
-### 問題 2：手機首頁空白
-
-**描述**：從手機瀏覽器開啟 `https://care.wedopr.com/`，頁面完全空白，無法渲染。
-
-**已排除原因**：
-- SPA catch-all 路由（`functions/[[path]].ts`）邏輯正確
-- React 不在首頁呼叫 LIFF，無 LIFF 相關錯誤
-
-**疑似原因**（待實機 debug）：
-- JavaScript 執行期錯誤（需手機瀏覽器開啟 DevTools 確認）
-- 大型 hero 背景圖載入逾時（`landing-hero` 的 `background-image`）
-- 特定行動瀏覽器對 ES 模組語法的相容性問題
-
-**Debug 步驟**：
-```
-1. 電腦 Chrome → 開發人員工具 → 更多工具 → 遠端裝置
-2. 連接手機，開啟 https://care.wedopr.com/
-3. 查看 Console 面板的 JS 錯誤訊息
-4. 若無錯誤，檢查 Network 面板是否有資源載入失敗
-```
+### ✅ 已修復：手機版型跑掉 / 首頁空白
+**已完成修復**：新增 `care-wedo-app/public/_headers` 檔案，設定 `Cache-Control: no-cache`。這確保了 LINE 內建瀏覽器不會快取舊的 `index.html`，進而避免載入已不存在的舊版 CSS 檔案。
 
 ---
 
@@ -126,23 +109,21 @@ LINE Developers Console
 
 ---
 
-## Sprint 3：家庭群組正式化（✅ 完成）
+## Sprint C：LINE Bot OCR 互動升級（✅ 完成）
 
-**目標**：讓家庭群組功能達到可公開使用的完整程度。
+**目標**：解決單一使用者有多個照護對象時，OCR 資料歸屬不明確的問題。
 
 ### 完成項目
-
 | 任務 | 檔案 | 狀態 |
 |---|---|---|
-| 3-A get_members action | `functions/api/groups.ts` | ✅ |
-| 3-B remove_member action（含 admin 檢查）| `functions/api/groups.ts` | ✅ |
-| 3-C regenerate_invite action（含 admin 檢查）| `functions/api/groups.ts` | ✅ |
-| 3-D 前端群組管理介面更新 | `components/GroupSettings.jsx` | ✅ |
-| 3-E api.js 新增 getGroupMembers / removeMember / regenerateInvite | `services/api.js` | ✅ |
+| C-A `medical_ocr.ts` 加入 profile_id 與名稱回傳 | `functions/_shared/medical_ocr.ts` | ✅ |
+| C-B LINE Webhook 支援 Quick Reply | `functions/callback.ts` | ✅ |
+| C-C 實作 Postback 事件處理（一鍵轉移資料）| `functions/callback.ts` | ✅ |
+| C-D 歷史資料 SQL 遷移（修正 `profile_id` 遺失）| `artifacts/migration_fix_profile_id.sql` | ✅ |
 
 ### 驗收標準
-- [ ] admin 可移除成員，member 無法執行此操作 ← **待實機驗證**
-- [ ] 重新產生邀請碼後，舊邀請碼失效
+- [x] OCR 後 Bot 會列出「這筆資料屬於誰？」的快速按鈕
+- [x] 點擊按鈕後，後台資料確實更新，且 Bot 回覆確認訊息
 
 ---
 
@@ -261,25 +242,20 @@ LINE Developers Console
 
 ### 最優先任務（1–2 天）
 
-1. **修正 LINE Developers LIFF Endpoint URL**（5 分鐘的設定，不需改程式碼）
-2. **手機首頁空白 debug**（用 Chrome 遠端裝置 DevTools 查 JS 錯誤）
-3. **部署最新 commit 並驗證登入流程**
+### 最優先任務（1–3 天）
+
+1. **Sprint 4 實機閉環驗證**：
+   * 測試 LINE Bot 傳圖 -> OCR 解析 -> Quick Reply 切換身分。
+   * 測試 LIFF 登入後，Dashboard 是否能即時反映身分切換後的資料。
+2. **API 安全性加固**：
+   * 修改 `functions/_middleware.ts`，為 `/api/` 下的所有寫入操作（POST/PATCH/DELETE）強制檢查 JWT。目前僅做 CORS，存在安全風險。
 
 ### 之後的任務（第 1–2 週）
 
-4. Sprint 4 實機閉環驗證（流程 A、B、C）
-5. `_middleware.ts` 加入 JWT 驗證
-6. 設定 Sentry 錯誤監控
-
-### 鍵盤快捷鍵（開發效率）
-
-```bash
-# 本機啟動 + Functions（建議用 wrangler pages dev）
-cd care-wedo-app && npm run dev
-
-# 部署到正式環境
-git push origin main  # GitHub Actions 自動觸發
-
-# 查看 Cloudflare 部署 log
-# 到 https://github.com/your-repo/actions 查看最新 deploy workflow
-```
+3. **錯誤監控整合**：
+   * 在前端 `main.jsx` 與 `ErrorBoundary` 中整合 Sentry。
+   * 在 Cloudflare Functions 中加入結構化 Log 紀錄，方便追蹤 OCR 失敗原因。
+4. **OCR 人工校正介面**：
+   * 目前 OCR 若辨識錯誤（如日期抓錯），使用者無法在 Dashboard 修正。建議增加「編輯」按鈕。
+5. **通知頻率設定**：
+   * 讓使用者可以自訂「早安健康簡報」的發送時間，或關閉特定通知。
