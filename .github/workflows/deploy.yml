@@ -31,7 +31,12 @@ jobs:
           VITE_LINE_LIFF_ID: ${{ secrets.VITE_LINE_LIFF_ID }}
 
       - name: Deploy to Cloudflare Pages
-        run: npx wrangler@4 pages deploy care-wedo-app/dist --project-name care-wedo --branch main
+        run: |
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          npx wrangler@4 pages deploy care-wedo-app/dist \
+            --project-name care-wedo \
+            --branch main \
+            --commit-message "deploy $SHORT_SHA"
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
