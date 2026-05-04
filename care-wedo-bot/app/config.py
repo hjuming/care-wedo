@@ -4,6 +4,15 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
+def get_database_url(default_uri):
+    """Normalize platform-provided database URLs for SQLAlchemy 2.x."""
+    database_url = os.getenv("DATABASE_URL", default_uri)
+    if database_url.startswith("postgres://"):
+        return database_url.replace("postgres://", "postgresql://", 1)
+    return database_url
+
+
 class Config:
     """基礎配置類別"""
     SECRET_KEY = os.getenv("SECRET_KEY")
@@ -25,13 +34,13 @@ class DevelopmentConfig(Config):
     """開發環境配置"""
     DEBUG = True
     SECRET_KEY = Config.SECRET_KEY or "care-wedo-dev-secret"
-    SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL", "sqlite:///care_wedo_dev.db")
+    SQLALCHEMY_DATABASE_URI = get_database_url("sqlite:///care_wedo_dev.db")
 
 class ProductionConfig(Config):
     """正式環境配置"""
     DEBUG = False
     SECRET_KEY = Config.SECRET_KEY
-    SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL", "sqlite:///care_wedo_prod.db")
+    SQLALCHEMY_DATABASE_URI = get_database_url("sqlite:///care_wedo_prod.db")
 
     @classmethod
     def init_app(cls):

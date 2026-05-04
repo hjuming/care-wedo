@@ -70,7 +70,7 @@ AUTO_CREATE_DB=true
 | 現象 | 最可能原因 | 修正 |
 |---|---|---|
 | build 成功，但 healthcheck `/api/health` 一直 `service unavailable` | 容器沒有啟動成功，通常是 `SECRET_KEY` 未設定 | 在平台環境變數新增 `SECRET_KEY`，用 32 字元以上隨機字串 |
-| 已設定 `SECRET_KEY` 仍 service unavailable | `DATABASE_URL` 是 PostgreSQL，但映像缺 PostgreSQL driver 或 DB 無法連線 | 專案已加入 `psycopg2-binary`；重新部署，並確認 Railway database 與服務在同一 project |
+| 已設定 `SECRET_KEY` 仍 service unavailable | `DATABASE_URL` 是 PostgreSQL，但映像缺 PostgreSQL driver、URL 使用舊式 `postgres://`，或 DB 無法連線 | 專案已加入 `psycopg2-binary` 並自動轉換 `postgres://`；重新部署，並確認 Railway database 與服務在同一 project |
 | build 成功，但 healthcheck 找不到服務 | app 沒有綁定平台提供的 `$PORT` | Dockerfile 已使用 `${PORT:-5000}`，確認部署的是最新版 |
 | 首頁可開，但 OCR 失敗 | `GOOGLE_API_KEY` 未設定或無效 | 設定 Gemini API key |
 | LINE Webhook 無回應 | LINE token/secret 未設定，或 webhook URL 錯 | 設定 LINE env，URL 用 `https://你的網域/callback` |

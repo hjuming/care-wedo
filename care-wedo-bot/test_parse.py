@@ -20,7 +20,7 @@ genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 model = genai.GenerativeModel("gemini-2.0-flash")
 
 
-def test_text_parsing():
+def run_text_parsing():
     """
     測試：直接貼上你父親的真實預約文字，看 AI 能不能正確解析
     """
@@ -92,7 +92,7 @@ def test_text_parsing():
     return None
 
 
-def test_voice_query(appointments_data: dict):
+def run_voice_query(appointments_data: dict):
     """
     測試：模擬長者的口語問題
     """
@@ -131,18 +131,18 @@ if __name__ == "__main__":
     print("🏥 Care WEDO — Gemini AI 解析測試\n")
 
     # 測試文字解析
-    parsed = test_text_parsing()
+    parsed = run_text_parsing()
 
     # 測試語音查詢
     if parsed:
-        test_voice_query(parsed)
+        run_voice_query(parsed)
     else:
         # 用範例資料測試
         print("\n使用範例資料進行語音查詢測試...")
         if os.path.exists("sample_data.json"):
             with open("sample_data.json", "r", encoding="utf-8") as f:
                 sample = json.load(f)
-            test_voice_query(sample)
+            run_voice_query(sample)
         else:
             print("找不到 sample_data.json")
 
