@@ -388,7 +388,39 @@ function LoginPage() {
 }
 
 export default function App() {
-  const route = resolveCareWedoRoute(window.location.pathname);
+  const [route, setRoute] = useState(() => resolveCareWedoRoute(window.location.pathname));
+
+  useEffect(() => {
+    // 處理瀏覽器上一頁/下一頁
+    const handlePopState = () => setRoute(resolveCareWedoRoute(window.location.pathname));
+    window.addEventListener("popstate", handlePopState);
+
+    // 攔截所有內部 <a> 點擊，改用 pushState 客戶端導航
+    // 不攔截：外部連結、mailto、tel、hash 錨點、target="_blank"
+    const handleClick = (e) => {
+      const anchor = e.target.closest("a[href]");
+      if (!anchor) return;
+      const href = anchor.getAttribute("href");
+      if (
+        !href ||
+        href.startsWith("http") ||
+        href.startsWith("mailto") ||
+        href.startsWith("tel") ||
+        href.startsWith("#") ||
+        anchor.target === "_blank"
+      ) return;
+      e.preventDefault();
+      window.history.pushState(null, "", href);
+      setRoute(resolveCareWedoRoute(href));
+    };
+    document.addEventListener("click", handleClick);
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+      document.removeEventListener("click", handleClick);
+    };
+  }, []);
+
   if (route === "app") return <DashboardApp />;
   if (route === "login") return <LoginPage />;
   if (route === "privacy") return <PrivacyPage />;
