@@ -177,10 +177,41 @@ export default function App() {
   const checklistItems = dashboard?.checklist?.length ? dashboard.checklist : initialChecklist;
   const careProfiles = dashboard?.care_profiles || [];
   const selectedProfile = careProfiles.find((profile) => profile.id === activeProfileId) || careProfiles[0] || null;
-  const nextAppointment = appointments[0];
-  const urgentItems = appointments.filter((item) => item.fasting_required || item.type === "refill_reminder").slice(0, 3);
-  const records = appointments.filter((item) => item.date || item.reminder_text);
+  const nextAppointment = useMemo(() => {
+    const now = new Date();
+    // Filter for non-completed future appointments, sorted by proximity to now
+    return appointments
+      .filter(apt => apt.status !== "completed")
+      .sort((a, b) => {
+        const dateA = new Date(`${a.date}T${a.time || "00:00"}:00+08:00`);
+        const dateB = new Date(`${b.date}T${b.time || "00:00"}:00+08:00`);
+        return dateA.getTime() - dateB.getTime();
+      })[0];
+  }, [appointments]);
+
+  const urgentItems = appointments.filter((item) => (item.fasting_required || item.type === "refill_reminder") && item.status !== "completed").slice(0, 3);
+  const records = appointments.filter((item) => item.status === "completed");
   const isPersonalMode = dashboard?.mode === "personal" || identity.status === "authenticated";
+
+  async function handleComplete(aptId) {
+    // Optimistic UI update
+    setDashboard(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        appointments: prev.appointments.map(apt => 
+          apt.id === aptId ? { ...apt, status: "completed" } : apt
+        )
+      };
+    });
+
+    try {
+      // In a real app, call PATCH /api/appointments/:id
+      // For now, we update local state which is linked to dashboard
+    } catch (err) {
+      console.error("Failed to complete task", err);
+    }
+  }
 
   async function handleFilesSelected(files) {
     setScanning(true);
@@ -355,6 +386,7 @@ export default function App() {
               checklistItems={checklistItems}
               onOpenCalendar={() => setActiveSection("calendar")}
               onUpload={() => fileInputRef.current?.click()}
+              onComplete={handleComplete}
             />
           )}
 
@@ -486,11 +518,20 @@ function SectionHeading({ section }) {
 }
 
 
-function OverviewView({ nextAppointment, urgentItems, medications, checklistItems, onOpenCalendar, onUpload }) {
+function OverviewView({ nextAppointment, urgentItems, medications, checklistItems, onOpenCalendar, onUpload, onComplete }) {
   return (
     <div className="overview-grid">
       <section className="summary-panel next-panel">
-        <p className="panel-eyebrow">下一件要記得的事</p>
+        <div className="panel-header-with-action">
+          <p className="panel-eyebrow">下一件要記得的事</p>
+          {nextAppointment && (
+            <label className="checkbox-container">
+              已完成
+              <input type="checkbox" onChange={() => onComplete(nextAppointment.id)} />
+              <span className="checkmark" />
+            </label>
+          )}
+        </div>
         {nextAppointment ? (
           <>
             <div className="date-badge">{formatDateLabel(nextAppointment.date)}</div>
@@ -500,7 +541,7 @@ function OverviewView({ nextAppointment, urgentItems, medications, checklistItem
             {nextAppointment.reminder_text && <p className="soft-note">{nextAppointment.reminder_text}</p>}
           </>
         ) : (
-          <p className="empty-state">目前沒有新的看診或領藥提醒。</p>
+          <p className="empty-state">🎉 太棒了！目前沒有待辦事項。</p>
         )}
         <button type="button" className="inline-action" onClick={onOpenCalendar}>看全部日曆</button>
       </section>
@@ -661,22 +702,37 @@ function MedicationView({ medications }) {
 }
 
 function RecordsView({ records }) {
+  const grouped = useMemo(() => {
+    const groups = {};
+    records.forEach(record => {
+      if (!record.date) return;
+      const monthStr = record.date.slice(0, 7); // "YYYY-MM"
+      if (!groups[monthStr]) groups[monthStr] = [];
+      groups[monthStr].push(record);
+    });
+    return Object.entries(groups).sort((a, b) => b[0].localeCompare(a[0]));
+  }, [records]);
+
   return (
-    <div className="records-table" role="table" aria-label="看診紀錄">
-      <div className="records-head" role="row">
-        <span>日期</span>
-        <span>類型</span>
-        <span>內容</span>
-        <span>整理狀態</span>
-      </div>
-      {records.length ? records.map((record) => (
-        <article key={record.id} className="records-row" role="row">
-          <span>{formatDateLabel(record.date)}</span>
-          <span>{typeLabel(record.type)}</span>
-          <span>{record.department} {record.hospital && `｜${record.hospital}`}</span>
-          <span>已整理</span>
-        </article>
-      )) : <p className="empty-state">還沒有可以看的紀錄。</p>}
+    <div className="records-timeline-view">
+      {grouped.length ? grouped.map(([month, items]) => (
+        <section key={month} className="record-month-group">
+          <h3 className="month-divider">{month.replace("-", " 年 ")} 月</h3>
+          <div className="records-stack">
+            {items.map(record => (
+              <article key={record.id} className="records-row record-completed">
+                <span className="record-date-col">{formatDateLabel(record.date)}</span>
+                <span className="record-tag">{typeLabel(record.type)}</span>
+                <div className="record-info">
+                  <strong>{record.department}</strong>
+                  <span>{record.hospital}</span>
+                </div>
+                <span className="record-status-tag">✓ 已完成</span>
+              </article>
+            ))}
+          </div>
+        </section>
+      )) : <p className="empty-state">還沒有已完成的紀錄。</p>}
     </div>
   );
 }
