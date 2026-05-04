@@ -437,12 +437,12 @@ input:focus-visible {
 }
 
 .nav-item.active {
-  background: var(--primary);
+  background: var(--item-color, var(--primary));
   color: white;
 }
 
 .nav-item.active span {
-  background: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.25);
 }
 
 .profile-switcher {
@@ -503,6 +503,24 @@ input:focus-visible {
 .toolbar h2 {
   font-size: 36px;
   line-height: 1.2;
+}
+
+.section-heading-row {
+  position: relative;
+  padding-left: 20px;
+}
+
+.section-heading-row::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 10%;
+  bottom: 10%;
+  width: 6px;
+  background: var(--section-color, var(--primary));
+  border-radius: 999px;
+  box-shadow: 0 0 15px var(--section-color);
+  opacity: 0.8;
 }
 
 .search-box {

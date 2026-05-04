@@ -13,11 +13,11 @@ import { updateProfile } from "./services/api";
 
 
 const SECTIONS = [
-  { id: "overview", label: "今天重點", icon: "⌂" },
-  { id: "calendar", label: "看診日曆", icon: "□" },
-  { id: "meds", label: "吃藥提醒", icon: "○" },
-  { id: "records", label: "看過什麼", icon: "≡" },
-  { id: "settings", label: "家人設定", icon: "⚙" },
+  { id: "overview", label: "今天重點", icon: "⌂", color: "#256f5b" }, // 綠
+  { id: "calendar", label: "看診日曆", icon: "□", color: "#2b6cb0" }, // 藍
+  { id: "meds", label: "吃藥提醒", icon: "c57b37" }, // 橘
+  { id: "records", label: "看過什麼", icon: "≡", color: "#6b46c1" }, // 紫
+  { id: "settings", label: "家人設定", icon: "⚙", color: "#744210" }, // 褐
 ];
 
 const paidFeatureGroups = [
@@ -325,6 +325,7 @@ export default function App() {
                 type="button"
                 className={activeSection === section.id ? "nav-item active" : "nav-item"}
                 onClick={() => setActiveSection(section.id)}
+                style={activeSection === section.id ? { "--item-color": section.color } : {}}
               >
                 <span>{section.icon}</span>
                 {section.label}
@@ -333,12 +334,9 @@ export default function App() {
           </nav>
         </aside>
 
-        <section className="content-area">
+        <section className="content-area" data-active-section={activeSection}>
           <div className="toolbar">
-            <div>
-              <p className="panel-eyebrow">Care WEDO 健康小管家</p>
-              <h2>{SECTIONS.find((item) => item.id === activeSection)?.label}</h2>
-            </div>
+            <SectionHeading section={SECTIONS.find(s => s.id === activeSection)} />
             <label className="search-box">
               <span>搜尋</span>
               <input
@@ -477,6 +475,16 @@ function ProfileSwitcher({ profiles, activeProfileId, onChange }) {
     </div>
   );
 }
+
+function SectionHeading({ section }) {
+  return (
+    <div className="section-heading-row" style={{ "--section-color": section.color }}>
+      <p className="panel-eyebrow">Care WEDO 健康小管家</p>
+      <h2>{section.label}</h2>
+    </div>
+  );
+}
+
 
 function OverviewView({ nextAppointment, urgentItems, medications, checklistItems, onOpenCalendar, onUpload }) {
   return (
@@ -663,7 +671,7 @@ function RecordsView({ records }) {
       </div>
       {records.length ? records.map((record) => (
         <article key={record.id} className="records-row" role="row">
-          <span>{record.date || "還沒看到日期"}</span>
+          <span>{formatDateLabel(record.date)}</span>
           <span>{typeLabel(record.type)}</span>
           <span>{record.department} {record.hospital && `｜${record.hospital}`}</span>
           <span>已整理</span>
