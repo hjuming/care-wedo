@@ -648,13 +648,52 @@ input:focus-visible {
 
 .login-route-actions {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 14px;
   margin-top: 30px;
 }
 
 .login-route-actions a {
   text-decoration: none;
+}
+
+.line-login-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: var(--line-green);
+  color: #fff;
+  font-size: 17px;
+  font-weight: 700;
+  border: none;
+  border-radius: 12px;
+  padding: 16px 28px;
+  cursor: pointer;
+  min-height: 56px;
+  transition: background 0.15s, transform 0.1s;
+  letter-spacing: 0.02em;
+}
+
+.line-login-btn:hover:not(:disabled) {
+  background: #05b04e;
+  transform: translateY(-1px);
+}
+
+.line-login-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.login-alt-link {
+  font-size: 15px;
+  color: var(--text-secondary);
+  text-decoration: none;
+  padding: 6px 0;
+}
+
+.login-alt-link:hover {
+  color: var(--primary);
 }
 
 .login-route-steps {

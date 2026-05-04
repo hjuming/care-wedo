@@ -6,7 +6,7 @@ import LoginSetup from "./components/LoginSetup";
 import OcrResult from "./components/OcrResult";
 import { patientData, medicines, timeline as initialTimeline, checklist as initialChecklist } from "./data/patient";
 import { fetchDashboard, ocrAnalyze, patchAppointment, updateProfile } from "./services/api";
-import { initLineIdentity, logoutLineIdentity } from "./services/liff";
+import { initLineIdentity, loginWithLine, logoutLineIdentity } from "./services/liff";
 import PrivacyPage from "./components/PrivacyPage";
 import TermsPage from "./components/TermsPage";
 import aiAvatar from "./assets/ai-avatar.png";
@@ -341,6 +341,20 @@ function LandingPage() {
 }
 
 function LoginPage() {
+  const [loggingIn, setLoggingIn] = useState(false);
+  const [loginError, setLoginError] = useState(null);
+
+  async function handleLineLogin() {
+    setLoggingIn(true);
+    setLoginError(null);
+    try {
+      await loginWithLine();
+    } catch (err) {
+      setLoginError(err instanceof Error ? err.message : "登入失敗，請重試。");
+      setLoggingIn(false);
+    }
+  }
+
   return (
     <main className="login-route-shell">
       <nav className="landing-nav login-route-nav" aria-label="Care WEDO 登入導覽">
@@ -351,16 +365,36 @@ function LoginPage() {
       <section className="login-route-card" aria-label="登入 Care WEDO">
         <div className="login-route-copy">
           <span className="landing-version">V 1.0</span>
-          <h1>登入 Care WEDO，建立你的家庭照護空間</h1>
+          <h1>用 LINE 帳號登入<br />Care WEDO</h1>
           <p>
-            Care WEDO 目前以 LINE 作為登入與通知入口。請先加入 LINE 照護小管家，從 LINE 開啟後即可建立照護對象、保存紀錄與管理家庭群組。
+            點擊下方按鈕，用您的 LINE 帳號登入。登入後即可建立照護對象、保存就診紀錄，並邀請家人共同管理。
           </p>
+
+          {loginError && (
+            <p className="notice-danger" style={{ marginTop: "12px", fontSize: "15px" }}>
+              {loginError}
+            </p>
+          )}
+
           <div className="login-route-actions">
-            <a className="primary-action" href="https://lin.ee/xzbyyvf" target="_blank" rel="noopener noreferrer">
-              點此前往 LINE 照護小管家
-            </a>
-            <a className="secondary-action" href="/app">
-              從 LINE 開啟後，進入管理頁
+            <button
+              type="button"
+              className="line-login-btn"
+              onClick={handleLineLogin}
+              disabled={loggingIn}
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M19.365 9.863c.349 0 .63.285.63.631 0 .345-.281.63-.63.63H17.61v1.125h1.755c.349 0 .63.283.63.63 0 .344-.281.629-.63.629h-2.386c-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.63-.63h2.386c.346 0 .627.285.627.63 0 .349-.281.63-.63.63H17.61v1.125h1.755zm-3.855 3.016c0 .27-.174.51-.432.596-.064.021-.133.031-.199.031-.211 0-.391-.09-.51-.25l-2.443-3.317v2.94c0 .344-.279.629-.631.629-.346 0-.626-.285-.626-.629V8.108c0-.27.173-.51.43-.595.06-.023.136-.033.194-.033.195 0 .375.104.494.254l2.462 3.33V8.108c0-.345.282-.63.63-.63.345 0 .63.285.63.63v4.771zm-5.741 0c0 .344-.282.629-.631.629-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.63-.63.346 0 .628.285.628.63v4.771zm-2.466.629H4.917c-.345 0-.63-.285-.63-.629V8.108c0-.345.285-.63.63-.63.348 0 .63.285.63.63v4.141h1.756c.348 0 .629.283.629.63 0 .344-.281.629-.629.629M24 10.314C24 4.943 18.615.572 12 .572S0 4.943 0 10.314c0 4.811 4.27 8.842 10.035 9.608.391.082.923.258 1.058.59.12.301.079.766.038 1.08l-.164 1.02c-.045.301-.24 1.186 1.049.645 1.291-.539 6.916-4.078 9.436-6.975C23.176 14.393 24 12.458 24 10.314"/>
+              </svg>
+              {loggingIn ? "正在開啟 LINE 登入..." : "用 LINE 帳號登入"}
+            </button>
+            <a
+              className="login-alt-link"
+              href="https://lin.ee/xzbyyvf"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              還沒加入照護小管家？先加入 →
             </a>
           </div>
         </div>
@@ -368,8 +402,8 @@ function LoginPage() {
         <div className="login-route-steps">
           <article>
             <span>1</span>
-            <strong>加入 LINE 小管家</strong>
-            <p>先用 LINE 開啟 Care WEDO，系統會取得登入狀態。</p>
+            <strong>點擊登入按鈕</strong>
+            <p>系統會開啟 LINE 授權畫面，用您的 LINE 帳號確認登入。</p>
           </article>
           <article>
             <span>2</span>
@@ -379,7 +413,7 @@ function LoginPage() {
           <article>
             <span>3</span>
             <strong>邀請家人一起管理</strong>
-            <p>付費功能可建立家庭群組，共享提醒、照片摘要與健康時間線。</p>
+            <p>建立家庭群組，共享提醒、照片摘要與健康時間線。</p>
           </article>
         </div>
       </section>

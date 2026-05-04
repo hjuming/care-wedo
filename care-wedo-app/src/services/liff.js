@@ -1,5 +1,6 @@
 const LIFF_ID = import.meta.env?.VITE_LINE_LIFF_ID || "";
 
+/** 初始化 LIFF 並取得身分。在 DashboardApp boot() 中呼叫。 */
 export async function initLineIdentity() {
   if (!LIFF_ID) {
     if (import.meta.env.PROD) {
@@ -7,10 +8,10 @@ export async function initLineIdentity() {
         status: "unauthenticated",
         idToken: null,
         profile: null,
-        message: "請從 LINE 開啟此頁面，或先加入 Care WEDO LINE 照護小管家。",
+        message: "請點擊下方按鈕，使用 LINE 帳號登入。",
       };
     }
-    // 本機開發環境允許 demo 模式
+    // 本機開發：無 LIFF_ID → demo 模式
     return {
       status: "demo",
       idToken: null,
@@ -23,23 +24,14 @@ export async function initLineIdentity() {
     const { default: liff } = await import("@line/liff");
     await liff.init({ liffId: LIFF_ID });
 
-    // 若不在 LINE App 內開啟，不嘗試 OAuth，直接提示從 LINE 開啟
-    if (!liff.isInClient() && !liff.isLoggedIn()) {
-      return {
-        status: "unauthenticated",
-        idToken: null,
-        profile: null,
-        message: "請從 LINE App 開啟此頁面，才能登入照護後台。",
-      };
-    }
-
     if (!liff.isLoggedIn()) {
-      liff.login();
+      // 無論在 LINE App 內或一般瀏覽器，都觸發 LINE OAuth
+      liff.login({ redirectUri: window.location.origin + "/app" });
       return {
         status: "redirecting",
         idToken: null,
         profile: null,
-        message: "正在幫您打開 LINE 登入。",
+        message: "正在開啟 LINE 登入...",
       };
     }
 
@@ -52,18 +44,44 @@ export async function initLineIdentity() {
       status: idToken ? "authenticated" : "unauthenticated",
       idToken,
       profile,
-      message: idToken ? null : "無法取得 LINE 身分，請重新從 LINE 開啟頁面。",
+      message: idToken ? null : "無法取得 LINE 身分，請重新登入。",
     };
-  } catch {
+  } catch (err) {
     return {
       status: "unauthenticated",
       idToken: null,
       profile: null,
-      message: "請從 LINE App 開啟此頁面，才能登入照護後台。",
+      message: err instanceof Error ? err.message : "LOGIN 初始化失敗，請重新嘗試。",
     };
   }
 }
 
+/** 從登入頁直接觸發 LINE OAuth，登入後導回 /app */
+export async function loginWithLine() {
+  if (!LIFF_ID) {
+    // 開發環境：直接進 /app（demo 模式）
+    window.history.pushState(null, "", "/app");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    return;
+  }
+  try {
+    const { default: liff } = await import("@line/liff");
+    await liff.init({ liffId: LIFF_ID });
+    if (liff.isLoggedIn()) {
+      // 已登入 → 直接進後台
+      window.history.pushState(null, "", "/app");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+      return;
+    }
+    liff.login({ redirectUri: window.location.origin + "/app" });
+  } catch {
+    // 初始化失敗 → 也嘗試進 /app，讓 boot() 顯示錯誤訊息
+    window.history.pushState(null, "", "/app");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  }
+}
+
+/** 登出並導回 /login */
 export async function logoutLineIdentity() {
   if (!LIFF_ID) {
     window.location.replace("/login");
@@ -74,7 +92,7 @@ export async function logoutLineIdentity() {
     await liff.init({ liffId: LIFF_ID });
     if (liff.isLoggedIn()) {
       liff.logout();
-      return; // liff.logout() triggers page reload
+      return; // liff.logout() 會自動 reload
     }
   } catch {
     // ignore
