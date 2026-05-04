@@ -56,6 +56,7 @@ async function verifyLineSignature(request: Request, body: string, env: Env) {
   return timingSafeEqual(signature, expected);
 }
 
+/** 用 replyToken 回覆（只能用一次） */
 async function replyText(env: Env, replyToken: string, text: string) {
   if (!env.LINE_CHANNEL_ACCESS_TOKEN) {
     throw new Error("LINE_CHANNEL_ACCESS_TOKEN is not configured.");
@@ -79,6 +80,30 @@ async function replyText(env: Env, replyToken: string, text: string) {
   }
 }
 
+/** 用 Push API 主動推送訊息給使用者（不需要 replyToken） */
+async function pushText(env: Env, userId: string, text: string) {
+  if (!env.LINE_CHANNEL_ACCESS_TOKEN) {
+    throw new Error("LINE_CHANNEL_ACCESS_TOKEN is not configured.");
+  }
+
+  const response = await fetch("https://api.line.me/v2/bot/message/push", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${env.LINE_CHANNEL_ACCESS_TOKEN}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      to: userId,
+      messages: [{ type: "text", text }],
+    }),
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    console.error(`LINE push failed (${response.status}): ${detail}`);
+  }
+}
+
 async function fetchLineContent(env: Env, messageId: string): Promise<string> {
   const response = await fetch(`https://api-data.line.me/v2/bot/message/${messageId}/content`, {
     headers: { Authorization: `Bearer ${env.LINE_CHANNEL_ACCESS_TOKEN}` },
@@ -94,26 +119,36 @@ async function fetchLineContent(env: Env, messageId: string): Promise<string> {
   return btoa(binary);
 }
 
-async function handleEvent(env: Env, event: LineEvent) {
+/** 處理圖片 OCR（背景執行，用 Push API 回傳結果） */
+async function processImageOCR(env: Env, event: LineEvent) {
+  const userId = event.source.userId;
+  try {
+    const base64Image = await fetchLineContent(env, event.message!.id!);
+    const parsedData = await parseMedicalImages(env, [{ data: base64Image, media_type: "image/jpeg" }]);
+    await saveParsedData(env, parsedData, userId);
+    
+    let reply = "🎉 解析成功！已經幫你把";
+    if (parsedData.appointments?.length) reply += ` ${parsedData.appointments.length} 筆回診`;
+    if (parsedData.medications?.length) reply += ` ${parsedData.medications.length} 筆用藥`;
+    reply += " 加入提醒清單了。\n\n你可以點此查看完整清單：https://care.wedopr.com";
+    
+    await pushText(env, userId, reply);
+  } catch (error) {
+    console.error("OCR Error:", error);
+    const msg = error instanceof Error ? error.message : "未知錯誤";
+    await pushText(env, userId, `抱歉，解析圖片時發生錯誤：${msg}\n請確認圖片清晰，或稍後再試。`);
+  }
+}
+
+async function handleEvent(env: Env, event: LineEvent, waitUntil: (promise: Promise<any>) => void) {
   if (event.type !== "message" || !event.replyToken) return;
 
   if (event.message?.type === "image" && event.message.id) {
-    try {
-      const base64Image = await fetchLineContent(env, event.message.id);
-      const parsedData = await parseMedicalImages(env, [{ data: base64Image, media_type: "image/jpeg" }]);
-      await saveParsedData(env, parsedData, event.source.userId);
-      
-      let reply = "🎉 解析成功！已經幫你把";
-      if (parsedData.appointments?.length) reply += ` ${parsedData.appointments.length} 筆回診`;
-      if (parsedData.medications?.length) reply += ` ${parsedData.medications.length} 筆用藥`;
-      reply += " 加入提醒清單了。\n\n你可以點此查看完整清單：https://care.wedopr.com";
-      
-      await replyText(env, event.replyToken, reply);
-    } catch (error) {
-      console.error("OCR Error:", error);
-      const msg = error instanceof Error ? error.message : "未知錯誤";
-      await replyText(env, event.replyToken, `抱歉，解析圖片時發生錯誤：${msg}\n請確認圖片清晰，或稍後再試。`);
-    }
+    // 1. 立即回覆「解析中」讓使用者安心
+    await replyText(env, event.replyToken, "📋 收到圖片了！正在幫你解析醫療單據，請稍候⋯⋯");
+
+    // 2. 背景處理 OCR，完成後用 Push API 推送結果
+    waitUntil(processImageOCR(env, event));
     return;
   }
 
@@ -144,15 +179,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, waitUnti
   const body = JSON.parse(bodyText) as LineWebhookBody;
   const events = body.events || [];
 
-  // 立即回 200 給 LINE，避免超時。
-  // 用 waitUntil 在背景處理（Cloudflare 允許背景執行最多 30 秒）。
-  waitUntil(
-    Promise.all(
-      events.map((event) =>
-        handleEvent(env, event).catch((err) => {
-          console.error("Event handling error:", err);
-        }),
-      ),
+  // 處理事件（圖片 OCR 會在背景繼續）
+  await Promise.all(
+    events.map((event) =>
+      handleEvent(env, event, waitUntil).catch((err) => {
+        console.error("Event handling error:", err);
+      }),
     ),
   );
 
