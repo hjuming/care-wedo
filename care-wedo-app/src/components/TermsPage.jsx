@@ -33,7 +33,7 @@ export default function TermsPage() {
 
       <section className="landing-section legal-section">
         <h2>1. 服務說明</h2>
-        <p>Care WEDO 由 WEDO 團隊提供，透過 <a href="https://line.me/R/ti/p/@249anlux" target="_blank" rel="noopener noreferrer">LINE 照護小管家</a>、Web Dashboard 及 LINE Bot 三個入口，協助家庭管理長輩的就診與用藥資訊。</p>
+        <p>Care WEDO 由 WEDO 團隊提供，透過 <a href="https://lin.ee/xzbyyvf" target="_blank" rel="noopener noreferrer">LINE 照護小管家</a>、Web Dashboard 及 LINE Bot 三個入口，協助家庭管理長輩的就診與用藥資訊。</p>
       </section>
 
       <section className="landing-section legal-section">
@@ -84,7 +84,7 @@ export default function TermsPage() {
           <span>讓照護資訊更清楚，讓家庭陪伴更安心。</span>
         </div>
         <div className="landing-footer-links">
-          <a href="https://line.me/R/ti/p/@249anlux" target="_blank" rel="noopener noreferrer">LINE 照護小管家</a>
+          <a href="https://lin.ee/xzbyyvf" target="_blank" rel="noopener noreferrer">LINE 照護小管家</a>
           <a href="/privacy">隱私政策</a>
           <a href="mailto:care@wedopr.com">care@wedopr.com</a>
         </div>

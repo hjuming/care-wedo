@@ -217,7 +217,7 @@ function LandingPage() {
             結合 AI 照護提醒、醫療紀錄整理與家庭共享，協助家人更有秩序地陪伴長輩面對看診、用藥與日常健康管理。
           </p>
           <div className="landing-cta-row">
-            <a className="primary-action" href="https://line.me/R/ti/p/@249anlux" target="_blank" rel="noopener noreferrer">
+            <a className="primary-action" href="https://lin.ee/xzbyyvf" target="_blank" rel="noopener noreferrer">
               免費使用 LINE 照護小管家
             </a>
             <a className="secondary-action" href="/login">建立家庭照護空間</a>
@@ -276,7 +276,7 @@ function LandingPage() {
             <span>免費版</span>
             <h3>LINE 照護小管家</h3>
             <p>適合第一次體驗，透過 LINE 傳送看診單或藥袋照片，讓 AI 協助整理重點。</p>
-            <a href="https://line.me/R/ti/p/@249anlux" target="_blank" rel="noopener noreferrer">免費開始</a>
+            <a href="https://lin.ee/xzbyyvf" target="_blank" rel="noopener noreferrer">免費開始</a>
           </article>
           <article className="plan-card featured-plan">
             <span>收費版</span>
@@ -328,7 +328,7 @@ function LandingPage() {
           <span>讓照護資訊更清楚，讓家庭陪伴更安心。</span>
         </div>
         <div className="landing-footer-links">
-          <a href="https://line.me/R/ti/p/@249anlux" target="_blank" rel="noopener noreferrer">LINE 照護小管家</a>
+          <a href="https://lin.ee/xzbyyvf" target="_blank" rel="noopener noreferrer">LINE 照護小管家</a>
           <a href="/login">登入</a>
           <a href="/privacy">隱私政策</a>
           <a href="/terms">服務條款</a>
@@ -356,7 +356,7 @@ function LoginPage() {
             Care WEDO 目前以 LINE 作為登入與通知入口。請先加入 LINE 照護小管家，從 LINE 開啟後即可建立照護對象、保存紀錄與管理家庭群組。
           </p>
           <div className="login-route-actions">
-            <a className="primary-action" href="https://line.me/R/ti/p/@249anlux" target="_blank" rel="noopener noreferrer">
+            <a className="primary-action" href="https://lin.ee/xzbyyvf" target="_blank" rel="noopener noreferrer">
               點此前往 LINE 照護小管家
             </a>
             <a className="secondary-action" href="/app">
@@ -612,7 +612,7 @@ function DashboardApp() {
             <div className="hero-top-actions">
               <span className="beta-pill">V 1.0</span>
               <a
-                href="https://line.me/R/ti/p/@249anlux"
+                href="https://lin.ee/xzbyyvf"
                 target="_blank"
                 rel="noopener noreferrer"
                 className={`login-mini-status ${isPersonalMode ? "authenticated" : ""}`}

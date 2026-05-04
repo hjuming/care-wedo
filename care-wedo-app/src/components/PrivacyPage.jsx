@@ -81,7 +81,7 @@ export default function PrivacyPage() {
           <span>讓照護資訊更清楚，讓家庭陪伴更安心。</span>
         </div>
         <div className="landing-footer-links">
-          <a href="https://line.me/R/ti/p/@249anlux" target="_blank" rel="noopener noreferrer">LINE 照護小管家</a>
+          <a href="https://lin.ee/xzbyyvf" target="_blank" rel="noopener noreferrer">LINE 照護小管家</a>
           <a href="/terms">服務條款</a>
           <a href="mailto:care@wedopr.com">care@wedopr.com</a>
         </div>
