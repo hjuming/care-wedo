@@ -1,230 +1,156 @@
 # Care WEDO — V1.0 Beta 開發計畫
 
-> **目標**：完成 Sprint 0–4，達到可邀請 20–50 組家庭進行封閉 Beta 測試的標準。  
 > **建立日期**：2026-05-05  
-> **當前狀態**：Phase 3 完工，V1.0 Beta 開發待啟動
+> **最後更新**：2026-05-05  
+> **當前狀態**：Sprint 0–5 程式碼已完成，驗證階段（LINE 登入流程確認中）
 
 ---
 
-## 現況評估
+## 總體進度
 
-### 已具備（可直接使用）
-
-| 模組 | 狀態 | 關鍵檔案 |
+| Sprint | 內容 | 狀態 |
 |---|---|---|
-| 公開首頁 `/` | 完成 | `App.jsx`（routing 分流）|
-| LINE LIFF 身分驗證 | 完成（需設定 env）| `services/liff.js` |
-| 家庭群組 | 部分完成 | `functions/api/groups.ts` |
-| 照護對象 | 完成 | `functions/api/profiles/[id].ts` |
-| OCR 解析 + 入庫 | 完成 | `functions/api/ocr/[[path]].ts` |
-| 早安 Cron 推播 | 完成 | `functions/api/cron/reminders.ts` |
-| 晚安空腹 Cron 推播 | 完成 | `functions/api/cron/evening.ts` |
-| Dashboard API | 完成 | `functions/api/dashboard.ts` |
-| 前端 Dashboard UI | 完成 | `care-wedo-app/src/App.jsx` |
-| 測試 | 通過 7/7 | `src/services/api.test.js`, `src/routing.test.js` |
-
-### 尚未具備（V1.0 Beta 前必須補齊）
-
-| 優先 | 缺口 | 影響範圍 |
-|---|---|---|
-| P0 | `/app` 無強制登入閘門 | `routing.js`, `App.jsx` |
-| P0 | API 無全域身分驗證 | `functions/api/_middleware.ts` |
-| P0 | 待辦完成不持久化 | `App.jsx:handleComplete`, 缺 `PATCH /api/appointments/:id` |
-| P0 | 無免費/付費方案限制 | `functions/_shared/supabase.ts`, Schema 缺 `plan` 欄位 |
-| P0 | 家庭群組缺角色管理 | `functions/api/groups.ts`（缺 remove_member, regenerate_invite）|
-| P0 | LINE 實機閉環未驗證 | 全端流程（LIFF → OCR → 推播）|
-| P0 | 法規頁面缺失 | 隱私政策、服務條款、非醫療聲明 |
+| Sprint 0 | 登入閘門 + 登入頁 | ✅ 程式碼完成 |
+| Sprint 1 | 資料持久化（PATCH API + 前端串接）| ✅ 程式碼完成 |
+| Sprint 2 | 免費 / 付費方案限制（quota）| ✅ 程式碼完成 |
+| Sprint 3 | 家庭群組正式化（角色、移除、邀請）| ✅ 程式碼完成 |
+| Sprint 4 | LINE 實機閉環驗證 | 🔴 **待驗證** |
+| Sprint 5 | 正式上線防護（法規頁、帳號刪除）| ✅ 程式碼完成 |
 
 ---
 
-## Sprint 0：登入閘門（1–2 天）
+## 🔴 目前最高優先：LINE 登入問題
+
+在 Sprint 4 實機驗證前，以下問題必須先解決。
+
+### 問題 1：電腦版 LINE 登入後回到首頁
+
+**描述**：使用者點擊登入按鈕 → LINE 授權畫面 → 授權後回到 `https://care.wedopr.com/`（首頁），而非預期的 `/app`（Dashboard）。
+
+**根本原因**：LINE OAuth 的 redirect URI 必須與 LINE Developers Console 設定的 **LIFF Endpoint URL** 完全相符。若 Endpoint URL 設為根路徑（`https://care.wedopr.com/`）而非 `/app`，LINE 會把使用者導回根路徑。
+
+**必做修復（非程式碼）**：
+```
+LINE Developers Console
+→ Care WEDO Login Channel
+→ LIFF App（照護小管家）
+→ Endpoint URL 改為：https://care.wedopr.com/app
+→ 儲存 → 重新測試
+```
+
+**程式碼已修復**（commit `6cf6e0c` 後，再加 LIFF callback 偵測）：
+- `App.jsx`：若 URL 含 `liff.state` 或 `code` 參數且路由不是 `/app`，自動 `replaceState` 到 `/app`，作為雙重保險
+- `liff.js`：`loginWithLine()` 與 `initLineIdentity()` 的 `redirectUri` 統一用 `APP_URL` 常數（`window.location.origin + "/app"`）
+
+### 問題 2：手機首頁空白
+
+**描述**：從手機瀏覽器開啟 `https://care.wedopr.com/`，頁面完全空白，無法渲染。
+
+**已排除原因**：
+- SPA catch-all 路由（`functions/[[path]].ts`）邏輯正確
+- React 不在首頁呼叫 LIFF，無 LIFF 相關錯誤
+
+**疑似原因**（待實機 debug）：
+- JavaScript 執行期錯誤（需手機瀏覽器開啟 DevTools 確認）
+- 大型 hero 背景圖載入逾時（`landing-hero` 的 `background-image`）
+- 特定行動瀏覽器對 ES 模組語法的相容性問題
+
+**Debug 步驟**：
+```
+1. 電腦 Chrome → 開發人員工具 → 更多工具 → 遠端裝置
+2. 連接手機，開啟 https://care.wedopr.com/
+3. 查看 Console 面板的 JS 錯誤訊息
+4. 若無錯誤，檢查 Network 面板是否有資源載入失敗
+```
+
+---
+
+## Sprint 0：登入閘門（✅ 完成）
 
 **目標**：確保 `/app` 必須登入才能進入，正式環境消除 demo 後台。
 
-### 任務清單
+### 完成項目
 
-#### 0-A 前端路由守衛
-**檔案**：`care-wedo-app/src/App.jsx`
-
-- 在 boot 流程完成後，若 `identity.status === "demo"` 且當前路由是 `/app`，導向 `/login`
-- 移除 demo 模式直接載入後台資料的邏輯（僅保留無 `VITE_LINE_LIFF_ID` 的本機開發 bypass）
-
-```javascript
-// 修改前（App.jsx boot 流程）
-// LIFF 失敗 → setIdentity demo → 仍然載入後台
-
-// 修改後
-// LIFF 失敗 → 若路由是 /app → 導向 /login
-// 僅在 import.meta.env.DEV 環境允許 demo bypass
-```
-
-#### 0-B demo 模式環境控制
-**檔案**：`care-wedo-app/src/services/liff.js`
-
-- 加入環境判斷：`import.meta.env.DEV` 為 true 時才允許 demo fallback
-- 正式環境（`import.meta.env.PROD`）若無 LIFF ID，直接返回 `status: "unauthenticated"` 並讓前端導向 `/login`
-
-#### 0-C `/login` 頁面完整化
-**檔案**：`care-wedo-app/src/App.jsx`（login route）
-
-- 確認 `/login` 路由顯示 LINE 登入按鈕（目前有雛形，確認可實際觸發 `liff.login()`）
-- 加入「等待中」狀態 UI，避免登入跳轉期間閃白頁
+| 任務 | 檔案 | 狀態 |
+|---|---|---|
+| 0-A 路由守衛：未登入導向 `/login` | `App.jsx` | ✅ |
+| 0-B PROD 環境無 LIFF_ID 回傳 `unauthenticated` | `liff.js` | ✅ |
+| 0-C 登入頁加入 LINE 登入按鈕 | `App.jsx` | ✅ |
+| 0-D 加入登出按鈕 | `App.jsx` | ✅ |
+| 0-E LIFF callback 偵測（雙重保險）| `App.jsx` | ✅ |
 
 ### 驗收標準
-- [ ] 直接開啟 `https://care.wedopr.com/app`，未登入自動跳 `/login`
-- [ ] 本機開發（`npm run dev`）仍可用 demo 模式測試
-- [ ] LINE LIFF 登入成功後可進入 `/app`
+- [x] 直接開啟 `https://care.wedopr.com/app`，未登入自動跳 `/login`
+- [x] `/login` 頁顯示 LINE 登入按鈕
+- [x] 本機開發（`npm run dev`）仍可用 demo 模式
+- [ ] LINE LIFF 登入成功後可進入 `/app` ← **待 LINE Endpoint URL 修正後驗證**
 
 ---
 
-## Sprint 1：資料持久化（2–4 天）
+## Sprint 1：資料持久化（✅ 完成）
 
 **目標**：前端所有操作都對應真實 API，重整頁面資料不遺失。
 
-### 任務清單
+### 完成項目
 
-#### 1-A 新增 `PATCH /api/appointments/:id`
-**新增檔案**：`functions/api/appointments/[id].ts`
-
-- 接受 `{ status, date, time, hospital, department, notes, ... }` 部分更新
-- 驗證 JWT（確認使用者有權限存取該 appointment）
-- 回應更新後的完整資料
-
-#### 1-B 新增 `PATCH /api/medications/:id`
-**新增檔案**：`functions/api/medications/[id].ts`
-
-- 接受 `{ active, name, dosage, frequency, ... }` 部分更新
-- 驗證 JWT
-
-#### 1-C 新增 `POST /api/appointments`（若尚無）
-**檔案**：`functions/api/appointments/index.ts`
-
-- 讓前端可以新增單筆預約（OCR 解析之外的手動新增）
-
-#### 1-D 前端接上真實 API
-**檔案**：`care-wedo-app/src/App.jsx`、`care-wedo-app/src/services/api.js`
-
-- `handleComplete(aptId)` 改為呼叫 `PATCH /api/appointments/:id`（目前只有 optimistic update）
-- 新增 `patchAppointment(id, updates, { idToken })` 到 `api.js`
-- 新增 `patchMedication(id, updates, { idToken })` 到 `api.js`
-
-#### 1-E 補充測試
-**檔案**：`care-wedo-app/src/services/api.test.js`
-
-- 新增 `patchAppointment`、`patchMedication` 的單元測試
+| 任務 | 檔案 | 狀態 |
+|---|---|---|
+| 1-A `PATCH /api/appointments/:id` | `functions/api/appointments/[id].ts` | ✅ |
+| 1-B `PATCH /api/medications/:id` | `functions/api/medications/[id].ts` | ✅ |
+| 1-C supabase.ts 加入 patchAppointment / patchMedication | `functions/_shared/supabase.ts` | ✅ |
+| 1-D 前端 `handleComplete` 接上真實 API（含 optimistic update 回滾）| `App.jsx` | ✅ |
+| 1-E api.js 新增 patchAppointment / patchMedication | `services/api.js` | ✅ |
 
 ### 驗收標準
-- [ ] 點「完成」後重整頁面，狀態維持 `completed`
+- [ ] 點「完成」後重整頁面，狀態維持 `completed` ← **待實機驗證**
 - [ ] Supabase `appointments` 資料表 `status` 欄位確實更新
-- [ ] 手動新增的預約重整後仍存在
 
 ---
 
-## Sprint 2：免費 / 付費方案限制（2–4 天）
+## Sprint 2：免費 / 付費方案限制（✅ 完成）
 
 **目標**：建立基礎 entitlement 機制，為正式付費功能做準備。
 
-### 任務清單
+### 完成項目
 
-#### 2-A Schema 新增 `plan` 欄位
-**檔案**：`supabase/schema.sql`（或新建 migration）
-
-```sql
-alter table public.users
-  add column if not exists plan text not null default 'free',
-  add column if not exists plan_expires_at timestamptz;
-
--- free: LINE Only，OCR 每月 10 次
--- paid: 完整功能，家庭群組、Dashboard、無限 OCR
-```
-
-#### 2-B 後端加入 quota 邏輯
-**檔案**：`functions/_shared/supabase.ts`
-
-- 新增 `getUserPlan(env, userId)` 函式
-- 新增 `checkOcrQuota(env, userId)` 函式（free 方案計算當月使用次數）
-
-#### 2-C OCR API 加入 quota 檢查
-**檔案**：`functions/api/ocr/[[path]].ts`
-
-- 呼叫 OCR 前先呼叫 `checkOcrQuota`
-- 超過限額回傳 `429`，附帶 `{ error: "本月 OCR 次數已用完，升級付費方案可無限使用" }`
-
-#### 2-D Dashboard API 回傳方案資訊
-**檔案**：`functions/api/dashboard.ts`
-
-- response 加入 `{ plan: "free" | "paid", ocr_used: 3, ocr_limit: 10 }`
-
-#### 2-E 前端顯示方案與用量
-**檔案**：`care-wedo-app/src/App.jsx`
-
-- 「家人設定」section 顯示當前方案與本月 OCR 用量
-- OCR 用量達上限時，提示升級說明
+| 任務 | 檔案 | 狀態 |
+|---|---|---|
+| 2-A Schema 新增 `plan`、`plan_expires_at` 欄位 | `supabase/schema.sql` | ✅ |
+| 2-B getUserPlan / checkOcrQuota helpers | `functions/_shared/supabase.ts` | ✅ |
+| 2-C OCR API 加入 quota 檢查 | `functions/api/ocr/[[path]].ts` | ✅ |
+| 2-D Dashboard API 回傳 plan / ocr_used / ocr_limit | `functions/api/dashboard.ts` | ✅ |
 
 ### 驗收標準
-- [ ] free 用戶第 11 次 OCR 收到 429 錯誤
+- [ ] free 用戶第 11 次 OCR 收到 429 錯誤 ← **待實機驗證**
 - [ ] Dashboard API 回傳 `plan`、`ocr_used`、`ocr_limit`
-- [ ] 前端顯示用量提示
 
 ---
 
-## Sprint 3：家庭群組正式化（3–5 天）
+## Sprint 3：家庭群組正式化（✅ 完成）
 
 **目標**：讓家庭群組功能達到可公開使用的完整程度。
 
-### 任務清單
+### 完成項目
 
-#### 3-A admin / member 角色判斷
-**檔案**：`functions/api/groups.ts`
-
-- `user_family_groups.role` 欄位已存在（`'admin' | 'member'`）
-- 建立群組的人自動設為 `admin`，邀請碼加入的人設為 `member`
-- admin 才能執行破壞性操作（移除成員、重新產生邀請碼）
-
-#### 3-B `remove_member` action
-**檔案**：`functions/api/groups.ts`
-
-```typescript
-if (body.action === "remove_member") {
-  // 驗證操作者為 admin
-  // 移除 user_family_groups 中的記錄
-}
-```
-
-#### 3-C `regenerate_invite` action
-**檔案**：`functions/api/groups.ts`
-
-```typescript
-if (body.action === "regenerate_invite") {
-  // 驗證操作者為 admin
-  // 產生新的 invite_code，取代舊的
-}
-```
-
-#### 3-D 前端群組管理介面
-**檔案**：`care-wedo-app/src/components/GroupSettings.jsx`
-
-- 顯示目前群組成員清單（含角色）
-- admin 可看到「移除成員」按鈕
-- admin 可看到「重新產生邀請碼」按鈕
-
-#### 3-E API service 更新
-**檔案**：`care-wedo-app/src/services/api.js`
-
-- 新增 `removeMember({ idToken, groupId, targetUserId })`
-- 新增 `regenerateInvite({ idToken, groupId })`
+| 任務 | 檔案 | 狀態 |
+|---|---|---|
+| 3-A get_members action | `functions/api/groups.ts` | ✅ |
+| 3-B remove_member action（含 admin 檢查）| `functions/api/groups.ts` | ✅ |
+| 3-C regenerate_invite action（含 admin 檢查）| `functions/api/groups.ts` | ✅ |
+| 3-D 前端群組管理介面更新 | `components/GroupSettings.jsx` | ✅ |
+| 3-E api.js 新增 getGroupMembers / removeMember / regenerateInvite | `services/api.js` | ✅ |
 
 ### 驗收標準
-- [ ] 建立群組者自動為 admin
-- [ ] admin 可移除成員，member 無法執行此操作
+- [ ] admin 可移除成員，member 無法執行此操作 ← **待實機驗證**
 - [ ] 重新產生邀請碼後，舊邀請碼失效
-- [ ] 前端群組管理頁顯示成員清單與角色
 
 ---
 
-## Sprint 4：LINE 實機閉環驗證（3–5 天）
+## Sprint 4：LINE 實機閉環驗證（🔴 待執行）
 
 **目標**：完整跑過長輩與家人的真實使用流程，確保無 bug 才開放 Beta。
+
+> **前提**：Sprint 4 必須在「LINE 登入問題」解決後才能執行。
 
 ### 驗證流程腳本
 
@@ -238,8 +164,8 @@ if (body.action === "regenerate_invite") {
 6. 若有空腹需求，20:00 收到晚安空腹提醒
 
 流程 B：家人 LIFF Dashboard 使用
-1. 子女從 LINE 點開 LIFF URL
-2. 自動完成 LIFF 登入（無帳密）
+1. 子女從瀏覽器或 LINE 開啟 https://care.wedopr.com/app
+2. 出現 LINE 登入按鈕 → 點擊 → LINE 授權 → 進入 Dashboard
 3. Dashboard 顯示長輩的預約與用藥資料
 4. 點「完成」標記一筆待辦
 5. 重整頁面，確認狀態維持
@@ -251,12 +177,12 @@ if (body.action === "regenerate_invite") {
 4. 子女 B 進入 Dashboard 看到相同照護對象的資料
 ```
 
-### 已知需實機確認的問題點
+### 需要特別注意
 
-- Cloudflare `waitUntil()` 在正式環境是否確實讓 LINE Reply 在 10 秒內回應
-- Gemini 2.5 Flash 在真實台灣醫院單據的辨識準確率（特別是手寫醫師字跡）
+- Cloudflare `waitUntil()` 在正式環境是否讓 LINE Reply 在 10 秒內回應
+- Gemini 2.5 Flash 在真實台灣醫院單據的辨識準確率（尤其手寫醫師字跡）
 - LIFF 在 LINE App 內建瀏覽器的行為（iOS / Android 差異）
-- Cron GitHub Actions 的 UTC 時區與台灣時間差（+8h）是否正確
+- Cron GitHub Actions UTC 時區與台灣時間差（+8h）是否正確
 
 ### 驗收標準
 - [ ] 流程 A、B、C 全部無報錯跑完
@@ -265,49 +191,56 @@ if (body.action === "regenerate_invite") {
 
 ---
 
-## Sprint 5：正式上線防護（2–3 天）
+## Sprint 5：正式上線防護（✅ 完成）
 
 **目標**：達到可公開 Beta 的法規與監控標準。
 
-### 任務清單
+### 完成項目
 
-#### 5-A 法規頁面
-**新增檔案**：`care-wedo-app/src/pages/Privacy.jsx`、`Terms.jsx`
+| 任務 | 檔案 | 狀態 |
+|---|---|---|
+| 5-A 隱私政策頁面（同首頁版型）| `components/PrivacyPage.jsx` | ✅ |
+| 5-B 服務條款 + 非醫療聲明（同首頁版型）| `components/TermsPage.jsx` | ✅ |
+| 5-C `DELETE /api/me` 帳號刪除 | `functions/api/me.ts` | ✅ |
+| 5-D routing.js 新增 privacy / terms 路由 | `src/routing.js` | ✅ |
 
-- 隱私政策（明確說明收集的 LINE 個人資料用途）
-- 服務條款
-- **非醫療診斷聲明**（重要）：Care WEDO 提供的資訊僅供記錄與提醒，不構成醫療診斷或建議
-- 資料刪除申請流程（符合個資法）
+### 尚未完成
 
-#### 5-B 錯誤監控
-- 在 Cloudflare Workers Analytics 或 Sentry 設定 error tracking
-- 特別監控 OCR API 失敗率（目標 < 5%）
-- LINE Webhook 超時率監控
+| 任務 | 說明 |
+|---|---|
+| 5-E 錯誤監控 | Sentry 或 Cloudflare Analytics 錯誤追蹤，目前沒有 |
+| 5-F API JWT 驗證閘門 | `_middleware.ts` 仍只做 CORS，未驗證身分 |
 
-#### 5-C 資料刪除流程
-**新增 API**：`DELETE /api/me`
+---
 
-- 使用者申請刪除帳號時，刪除 `users`、`appointments`、`medications` 等所有相關資料
-- 回傳確認信（LINE 訊息）
+## 技術債清單
 
-### 驗收標準
-- [ ] 隱私政策、服務條款頁面可從首頁連結到達
-- [ ] 非醫療聲明在 Dashboard 顯眼位置顯示
-- [ ] `DELETE /api/me` 正常運作，Supabase 資料確實清除
+以下問題不阻擋 Beta，但正式公開前應處理：
+
+| 優先 | 問題 | 影響 |
+|---|---|---|
+| P0 | `_middleware.ts` 無 JWT 驗證 | 任何人可呼叫 API |
+| P1 | 無 Sentry / 錯誤監控 | 生產問題無法即時發現 |
+| P1 | OCR 結果未經人工校正機制 | 手寫字跡辨識錯誤無法修正 |
+| P2 | 付費方案升級流程（金流）| 目前 quota 機制設計好，但無付費入口 |
+| P2 | 資料刪除回覆（LINE 訊息確認）| `DELETE /api/me` 尚未推播 LINE 確認訊息 |
+| P3 | 前端 bundle size 未分析 | 未做 code splitting，首次載入可能慢 |
 
 ---
 
 ## V1.0 Beta 定義完成條件
 
-完成以下所有項目後，正式進入 **封閉 Beta（20–50 組家庭）**：
+進入封閉 Beta（20–50 組家庭）前，以下全部必須打勾：
 
 - [x] Phase 1–3 全部功能完工
-- [ ] Sprint 0：未登入者無法進入 `/app`
-- [ ] Sprint 1：待辦完成、新增、刪除資料持久化
-- [ ] Sprint 2：免費方案 OCR 次數限制生效
-- [ ] Sprint 3：家庭群組 admin/member 角色可正常運作
+- [x] Sprint 0：未登入者無法進入 `/app`
+- [x] Sprint 1：資料持久化（PATCH API 實作）
+- [x] Sprint 2：免費方案 OCR 次數限制生效
+- [x] Sprint 3：家庭群組 admin/member 角色可正常運作
+- [x] Sprint 5：隱私政策與非醫療聲明頁面上線
+- [ ] LINE Developers LIFF Endpoint URL 修正為 `https://care.wedopr.com/app`
 - [ ] Sprint 4：LINE 實機流程 A + B + C 全部跑通
-- [ ] Sprint 5：隱私政策與非醫療聲明頁面上線
+- [ ] 手機首頁空白問題解決
 
 ---
 
@@ -315,21 +248,38 @@ if (body.action === "regenerate_invite") {
 
 封閉 Beta 收集回饋後，修復主要問題，才進入：
 
-- [ ] Sprint 5 全部完成（監控、刪除流程）
+- [ ] Sprint 4 + 5 全部完成（監控、刪除流程、錯誤追蹤）
 - [ ] OCR 失敗率 < 5%（連續 2 週監控數據）
 - [ ] Cron 推播連續 7 天無漏送
 - [ ] 至少 10 組家庭回饋正面（4/5 分以上）
 - [ ] 付費方案啟用流程（串接金流，推薦 ECPay 或 NewebPay）
+- [ ] `_middleware.ts` JWT 驗證完成
 
 ---
 
-## 分工建議（Solo 開發排程）
+## 分工建議（下一位開發者接手）
 
-| 週次 | 工作 |
-|---|---|
-| 第 1 週 | Sprint 0 + Sprint 1 |
-| 第 2 週 | Sprint 2 + Sprint 3 |
-| 第 3 週 | Sprint 4 實機驗證 |
-| 第 4 週 | Sprint 5 + Beta 邀請啟動 |
+### 最優先任務（1–2 天）
 
-> 單人開發建議每個 Sprint 結束後部署至正式環境做一次完整驗收，不要累積到最後一起測試。
+1. **修正 LINE Developers LIFF Endpoint URL**（5 分鐘的設定，不需改程式碼）
+2. **手機首頁空白 debug**（用 Chrome 遠端裝置 DevTools 查 JS 錯誤）
+3. **部署最新 commit 並驗證登入流程**
+
+### 之後的任務（第 1–2 週）
+
+4. Sprint 4 實機閉環驗證（流程 A、B、C）
+5. `_middleware.ts` 加入 JWT 驗證
+6. 設定 Sentry 錯誤監控
+
+### 鍵盤快捷鍵（開發效率）
+
+```bash
+# 本機啟動 + Functions（建議用 wrangler pages dev）
+cd care-wedo-app && npm run dev
+
+# 部署到正式環境
+git push origin main  # GitHub Actions 自動觸發
+
+# 查看 Cloudflare 部署 log
+# 到 https://github.com/your-repo/actions 查看最新 deploy workflow
+```

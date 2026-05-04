@@ -422,7 +422,18 @@ function LoginPage() {
 }
 
 export default function App() {
-  const [route, setRoute] = useState(() => resolveCareWedoRoute(window.location.pathname));
+  const [route, setRoute] = useState(() => {
+    // LINE OAuth 完成後會帶 liff.state 或 code 參數回到 Endpoint URL。
+    // 若 LIFF 把使用者導回首頁（Endpoint URL 設為 /），這裡偵測到 callback
+    // 參數就自動把路由切到 /app，確保使用者進入 Dashboard 而非首頁。
+    const params = new URLSearchParams(window.location.search);
+    const isLiffCallback = params.has("liff.state") || params.has("code");
+    if (isLiffCallback && window.location.pathname !== "/app") {
+      window.history.replaceState(null, "", "/app" + window.location.search);
+      return "app";
+    }
+    return resolveCareWedoRoute(window.location.pathname);
+  });
 
   useEffect(() => {
     // 處理瀏覽器上一頁/下一頁

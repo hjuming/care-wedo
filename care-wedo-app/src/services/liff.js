@@ -1,5 +1,10 @@
 const LIFF_ID = import.meta.env?.VITE_LINE_LIFF_ID || "";
 
+// LINE Developers Console 的 LIFF Endpoint URL 必須設為此值：
+// https://care.wedopr.com/app
+// redirectUri 需與 Endpoint URL 完全相符（或為其子路徑）
+const APP_URL = `${window.location.origin}/app`;
+
 /** 初始化 LIFF 並取得身分。在 DashboardApp boot() 中呼叫。 */
 export async function initLineIdentity() {
   if (!LIFF_ID) {
@@ -25,8 +30,9 @@ export async function initLineIdentity() {
     await liff.init({ liffId: LIFF_ID });
 
     if (!liff.isLoggedIn()) {
-      // 無論在 LINE App 內或一般瀏覽器，都觸發 LINE OAuth
-      liff.login({ redirectUri: window.location.origin + "/app" });
+      // 無論在 LINE App 內或一般瀏覽器，都觸發 LINE OAuth。
+      // redirectUri 必須與 LINE Developers 的 LIFF Endpoint URL 相符。
+      liff.login({ redirectUri: APP_URL });
       return {
         status: "redirecting",
         idToken: null,
@@ -51,7 +57,7 @@ export async function initLineIdentity() {
       status: "unauthenticated",
       idToken: null,
       profile: null,
-      message: err instanceof Error ? err.message : "LOGIN 初始化失敗，請重新嘗試。",
+      message: err instanceof Error ? err.message : "LIFF 初始化失敗，請重新嘗試。",
     };
   }
 }
@@ -73,7 +79,8 @@ export async function loginWithLine() {
       window.dispatchEvent(new PopStateEvent("popstate"));
       return;
     }
-    liff.login({ redirectUri: window.location.origin + "/app" });
+    // redirectUri 必須與 LINE Developers LIFF Endpoint URL（https://care.wedopr.com/app）一致
+    liff.login({ redirectUri: APP_URL });
   } catch {
     // 初始化失敗 → 也嘗試進 /app，讓 boot() 顯示錯誤訊息
     window.history.pushState(null, "", "/app");
