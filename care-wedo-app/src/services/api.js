@@ -183,3 +183,23 @@ export async function initFamily({ idToken, familyName, primaryCareName }) {
   }
   return resp.json();
 }
+
+/**
+ * 更新照護對象的資訊（如：名稱、頭像、附註）
+ */
+export async function updateProfile(profileId, updates, { idToken }) {
+  const response = await fetch(`${API_BASE}/profiles/${profileId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: idToken ? `Bearer ${idToken}` : "",
+    },
+    body: JSON.stringify(updates),
+  });
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(error || "無法更新資料");
+  }
+  return response.json();
+}
+

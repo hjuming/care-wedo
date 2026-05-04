@@ -9,6 +9,8 @@ import { fetchDashboard, ocrAnalyze } from "./services/api";
 import { initLineIdentity } from "./services/liff";
 import heroImage from "./assets/hero-bg.png";
 import aiAvatar from "./assets/ai-avatar.png";
+import { updateProfile } from "./services/api";
+
 
 const SECTIONS = [
   { id: "overview", label: "今天重點", icon: "⌂" },
@@ -106,7 +108,7 @@ export default function App() {
   const [dashboard, setDashboard] = useState(null);
   const [dashboardError, setDashboardError] = useState(null);
   const [identity, setIdentity] = useState({ status: "loading", idToken: null, profile: null, message: null });
-  const [activeProfileId, setActiveProfileId] = useState(null);
+  const [showEditProfile, setShowEditProfile] = useState(false);
 
   const loadDashboard = useCallback(async (lineIdentity, profileId = null) => {
     try {
@@ -122,6 +124,17 @@ export default function App() {
       return null;
     }
   }, []);
+
+  async function handleProfileUpdate(updates) {
+    if (!activeProfileId) return;
+    try {
+      await updateProfile(activeProfileId, updates, { idToken: identity.idToken });
+      await loadDashboard(identity, activeProfileId);
+      setShowEditProfile(false);
+    } catch (err) {
+      alert(err.message);
+    }
+  }
 
   useEffect(() => {
     let active = true;
@@ -283,10 +296,19 @@ export default function App() {
       <section className="dashboard-grid">
         <aside className="side-rail" aria-label="健康小管家選單">
           <div className="profile-block">
-            <img src={identity.profile?.pictureUrl || aiAvatar} alt="個人頭像" className="profile-avatar" />
-            <div>
-              <p className="profile-name">{selectedProfile?.display_name || patient.name || "洪爸爸"}</p>
+            <img src={selectedProfile?.avatar_url || identity.profile?.pictureUrl || aiAvatar} alt="個人頭像" className="profile-avatar" />
+            <div className="profile-info-main">
+              <div className="profile-name-row">
+                <p className="profile-name">{selectedProfile?.display_name || patient.name || "洪爸爸"}</p>
+                <button type="button" className="btn-edit-inline" onClick={() => setShowEditProfile(true)}>✎</button>
+              </div>
               <p className="profile-note">{patient.dept || "常看科別待補"}・{patient.age || "年齡待補"}</p>
+              {selectedProfile?.notes && (
+                <div className="profile-pinned-notes">
+                  <strong>附註：</strong>
+                  {selectedProfile.notes}
+                </div>
+              )}
             </div>
           </div>
 
@@ -358,13 +380,73 @@ export default function App() {
               careProfiles={careProfiles}
               selectedProfile={selectedProfile}
               onGroupChange={() => loadDashboard(identity, activeProfileId)}
+              onEditProfile={() => setShowEditProfile(true)}
             />
           )}
         </section>
       </section>
+
+      {showEditProfile && (
+        <ProfileEditModal
+          profile={selectedProfile}
+          onClose={() => setShowEditProfile(false)}
+          onSave={handleProfileUpdate}
+        />
+      )}
     </main>
   );
 }
+
+function ProfileEditModal({ profile, onClose, onSave }) {
+  const [formData, setFormData] = useState({
+    display_name: profile?.display_name || "",
+    avatar_url: profile?.avatar_url || "",
+    notes: profile?.notes || "",
+  });
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal-content profile-edit-modal">
+        <div className="modal-header">
+          <h2>修改照護對象資訊</h2>
+          <button type="button" onClick={onClose} className="btn-close">✕</button>
+        </div>
+        <div className="modal-body">
+          <div className="form-group">
+            <label>顯示名稱 (如：洪爸爸)</label>
+            <input 
+              value={formData.display_name} 
+              onChange={(e) => setFormData({ ...formData, display_name: e.target.value })} 
+              placeholder="請輸入稱呼"
+            />
+          </div>
+          <div className="form-group">
+            <label>頭像圖片連結 (URL)</label>
+            <input 
+              value={formData.avatar_url} 
+              onChange={(e) => setFormData({ ...formData, avatar_url: e.target.value })} 
+              placeholder="https://..."
+            />
+          </div>
+          <div className="form-group">
+            <label>重要附註 (會顯示在側邊欄)</label>
+            <textarea 
+              value={formData.notes} 
+              onChange={(e) => setFormData({ ...formData, notes: e.target.value })} 
+              placeholder="例如：過敏史、緊急聯絡電話、常拿的藥物..."
+              rows={4}
+            />
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button type="button" className="secondary-action" onClick={onClose}>取消</button>
+          <button type="button" className="primary-action" onClick={() => onSave(formData)}>儲存修改</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 function ProfileSwitcher({ profiles, activeProfileId, onChange }) {
   if (!profiles.length) {
