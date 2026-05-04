@@ -28,7 +28,9 @@ jobs:
         run: npm run build
         working-directory: care-wedo-app
         env:
-          VITE_LINE_LIFF_ID: ${{ secrets.VITE_LINE_LIFF_ID }}
+          # LIFF ID is a public value (not a secret), hardcoded here to ensure it's
+          # always available during Vite build. Also matches wrangler.toml [vars].
+          VITE_LINE_LIFF_ID: "2009972224-fQcfBXw5"
 
       - name: Deploy to Cloudflare Pages
         run: |
