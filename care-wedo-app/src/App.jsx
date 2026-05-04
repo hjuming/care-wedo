@@ -179,13 +179,16 @@ export default function App() {
   const selectedProfile = careProfiles.find((profile) => profile.id === activeProfileId) || careProfiles[0] || null;
   const nextAppointment = useMemo(() => {
     const now = new Date();
-    // Filter for non-completed future appointments, sorted by proximity to now
     return appointments
-      .filter(apt => apt.status !== "completed")
+      .filter(apt => apt.status !== "completed" && apt.date)
       .sort((a, b) => {
-        const dateA = new Date(`${a.date}T${a.time || "00:00"}:00+08:00`);
-        const dateB = new Date(`${b.date}T${b.time || "00:00"}:00+08:00`);
-        return dateA.getTime() - dateB.getTime();
+        try {
+          const dateA = new Date(a.date.includes("-") ? `${a.date}T${a.time || "00:00"}` : a.date);
+          const dateB = new Date(b.date.includes("-") ? `${b.date}T${b.time || "00:00"}` : b.date);
+          return dateA.getTime() - dateB.getTime();
+        } catch (e) {
+          return 0;
+        }
       })[0];
   }, [appointments]);
 
@@ -705,8 +708,9 @@ function RecordsView({ records }) {
   const grouped = useMemo(() => {
     const groups = {};
     records.forEach(record => {
-      if (!record.date) return;
-      const monthStr = record.date.slice(0, 7); // "YYYY-MM"
+      if (!record.date || typeof record.date !== "string") return;
+      // Defensive slice: only if it looks like YYYY-MM-DD
+      const monthStr = record.date.includes("-") ? record.date.slice(0, 7) : "其他日期"; 
       if (!groups[monthStr]) groups[monthStr] = [];
       groups[monthStr].push(record);
     });
