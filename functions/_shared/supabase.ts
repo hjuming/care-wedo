@@ -329,6 +329,25 @@ export async function joinGroupByCode(env: Env, userId: number, code: string): P
   return group;
 }
 
+export async function updateUserFamilyGroupMembership(
+  env: Env,
+  userId: number,
+  groupId: number,
+  updates: Partial<Pick<UserFamilyGroupRow, "receive_daily_brief" | "receive_upload_summary" | "receive_evening_alert">>,
+): Promise<UserFamilyGroupRow> {
+  const rows = await supabaseFetch<UserFamilyGroupRow[]>(env, `user_family_groups?user_id=eq.${userId}&group_id=eq.${groupId}&select=*&limit=1`, {
+    method: "PATCH",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify(updates),
+  });
+
+  if (!rows || rows.length === 0) {
+    throw new Error("無法更新會員設定");
+  }
+
+  return rows[0];
+}
+
 export function serializeAppointment(row: AppointmentRow) {
   return {
     id: row.id,

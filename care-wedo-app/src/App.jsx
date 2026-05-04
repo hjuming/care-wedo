@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./index.css";
 import GroupManager from "./components/GroupManager";
+import GroupSettings from "./components/GroupSettings";
 import OcrResult from "./components/OcrResult";
 import { patientData, medicines, timeline as initialTimeline, checklist as initialChecklist } from "./data/patient";
 import { fetchDashboard, ocrAnalyze } from "./services/api";
@@ -220,29 +221,26 @@ export default function App() {
             <span className="beta-pill">目前免費試用</span>
           </div>
           <h1>
-            打開 LINE，
+            LINE 一鍵上傳看診單，
             <br className="phone-break" />
-            就知道今天
-            <br className="phone-break" />
-            要看診、吃藥、領藥。
+            Care WEDO 幫您整理提醒。
           </h1>
           <p>
-            Care WEDO 會把醫院單子整理成白話提醒。
+            直接從 LINE 拍照上傳，系統會自動記住看診、吃藥、空腹、帶卡等重要事項。
             <br className="phone-break" />
-            爸爸、媽媽打開 LINE，就能看今天要做什麼。
-            <br className="phone-break" />
-            子女也可以一起看，少一點擔心。
-            <br className="phone-break" />
-            目前免費試用。
-            <br className="phone-break" />
-            之後完整頁面每月 NT$30。
+            讓爸爸媽媽和家人都能看清今天該做的事。
           </p>
+          <div className="hero-highlights">
+            <span>大字提醒</span>
+            <span>拍照上傳即可</span>
+            <span>家人一起看</span>
+          </div>
           <div className="hero-actions">
             <button className="primary-action" type="button" onClick={() => setActiveSection("calendar")}>
               看今天重點
             </button>
             <button className="secondary-action" type="button" onClick={() => fileInputRef.current?.click()} disabled={scanning}>
-              {scanning ? "正在看單子" : scanned ? `已整理 ${scanCount} 張` : "拍照上傳單子"}
+              {scanning ? "正在整理單子..." : scanned ? `已整理 ${scanCount} 張` : "拍照上傳單子"}
             </button>
           </div>
         </div>
@@ -587,6 +585,10 @@ function SettingsView({ patient, identity, isPersonalMode, careProfiles, selecte
 
       <section className="summary-panel">
         <GroupManager identity={identity} onGroupChange={onGroupChange} />
+      </section>
+
+      <section className="summary-panel">
+        <GroupSettings identity={identity} onProfileCreated={onGroupChange} onGroupChange={onGroupChange} />
       </section>
 
       <section className="summary-panel">

@@ -17,6 +17,20 @@ type AppointmentWithUser = {
   fasting_required: boolean;
   fasting_hours: number | null;
   user_id: number;
+  group_id: number | null;
+  profile_id: number | null;
+  users: { line_user_id: string } | null;
+};
+
+type CareProfile = {
+  id: number;
+  group_id: number | null;
+  display_name: string | null;
+};
+
+type RecipientRow = {
+  group_id: number;
+  user_id: number;
   users: { line_user_id: string } | null;
 };
 
@@ -40,12 +54,11 @@ async function pushText(env: Env, userId: string, text: string) {
   }
 }
 
-/** 計算空腹起始時間字串 */
 function calculateFastingStart(apptTime: string | null, hours: number | null): string {
   if (!apptTime || !hours) {
     return `看診或檢查前 ${hours || 8} 小時`;
   }
-  // apptTime 格式預期為 HH:MM
+
   const [hh, mm] = apptTime.split(":");
   let apptHour = parseInt(hh, 10);
   const apptMin = parseInt(mm, 10);
@@ -54,15 +67,12 @@ function calculateFastingStart(apptTime: string | null, hours: number | null): s
     return `看診或檢查前 ${hours} 小時`;
   }
 
-  // 減去空腹小時
   apptHour -= hours;
-  
   let dayPrefix = "今天";
+
   if (apptHour < 0) {
     apptHour += 24;
-    dayPrefix = "昨晚/凌晨"; 
-    // 若晚上 8 點推播，此處的「昨天」其實是指推播當天的深夜
-    dayPrefix = "今晚/凌晨"; 
+    dayPrefix = "今晚/凌晨";
   } else {
     dayPrefix = "明天早上";
   }
@@ -74,23 +84,74 @@ function calculateFastingStart(apptTime: string | null, hours: number | null): s
 }
 
 async function fetchFastingAppointments(env: Env, targetDate: string) {
-  const baseSelect = "id,date,time,hospital,department,fasting_required,fasting_hours,user_id,users(line_user_id)";
+  const baseSelect =
+    "id,type,date,time,hospital,department,fasting_required,fasting_hours,user_id,group_id,profile_id,users(line_user_id)";
+
   try {
     return await supabaseFetch<AppointmentWithUser[]>(
       env,
-      `appointments?date=eq.${targetDate}&fasting_required=eq.true&status=in.(upcoming,notified)&select=id,type,date,time,hospital,department,fasting_required,fasting_hours,user_id,users(line_user_id)`,
+      `appointments?date=eq.${targetDate}&fasting_required=eq.true&status=in.(upcoming,notified)&select=${baseSelect}`,
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (!message.includes("appointments.type") && !message.includes("column appointments.type does not exist")) {
       throw error;
     }
+
+    const fallbackSelect = baseSelect.replace("type,", "");
     const rows = await supabaseFetch<AppointmentWithUser[]>(
       env,
-      `appointments?date=eq.${targetDate}&fasting_required=eq.true&status=in.(upcoming,notified)&select=${baseSelect}`,
+      `appointments?date=eq.${targetDate}&fasting_required=eq.true&status=in.(upcoming,notified)&select=${fallbackSelect}`,
     );
     return rows.map((row) => ({ ...row, type: "clinic_visit" }));
   }
+}
+
+async function fetchCareProfiles(env: Env, profileIds: number[]) {
+  if (profileIds.length === 0) return [] as CareProfile[];
+
+  return supabaseFetch<CareProfile[]>(
+    env,
+    `care_profiles?id=in.(${profileIds.join(",")})&select=id,group_id,display_name`,
+  );
+}
+
+async function loadGroupRecipients(env: Env, groupIds: number[], alertField: string) {
+  if (groupIds.length === 0) return [] as RecipientRow[];
+
+  return supabaseFetch<RecipientRow[]>(
+    env,
+    `user_family_groups?group_id=in.(${groupIds.join(",")})&${alertField}=eq.true&select=group_id,user_id,users(line_user_id)`,
+  );
+}
+
+function profileLabel(profile: CareProfile | undefined | null) {
+  return profile?.display_name?.trim() || DEFAULT_RECIPIENT;
+}
+
+function itemPrefix(profile: CareProfile | undefined | null) {
+  const label = profileLabel(profile);
+  return label === DEFAULT_RECIPIENT ? "" : `【${label}】 `;
+}
+
+function resolveLineRecipients(
+  item: { group_id: number | null; profile_id: number | null; users: { line_user_id: string } | null },
+  groupRecipients: Map<number, string[]>,
+  profileMap: Map<number, CareProfile>,
+) {
+  const profile = item.profile_id ? profileMap.get(item.profile_id) : undefined;
+  const groupId = item.group_id ?? profile?.group_id;
+
+  if (groupId && groupRecipients.has(groupId)) {
+    return groupRecipients.get(groupId)!;
+  }
+
+  const lineId = item.users?.line_user_id;
+  if (lineId && lineId !== "web-mvp") {
+    return [lineId];
+  }
+
+  return [];
 }
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
@@ -102,25 +163,69 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   try {
     const now = new Date();
     const twTime = new Date(now.getTime() + 8 * 60 * 60 * 1000);
-    twTime.setDate(twTime.getDate() + 1); // 抓明天的日期
+    twTime.setDate(twTime.getDate() + 1);
     const targetDate = twTime.toISOString().split("T")[0];
 
-    // 抓取明天需要空腹的行程 (狀態可能是 upcoming 或早上發過的 notified)
     const fastingApts = await fetchFastingAppointments(env, targetDate);
+    const profileIds = new Set<number>();
+    const groupIds = new Set<number>();
+
+    for (const apt of fastingApts) {
+      if (apt.profile_id) profileIds.add(apt.profile_id);
+      if (apt.group_id) groupIds.add(apt.group_id);
+    }
+
+    const careProfiles = await fetchCareProfiles(env, Array.from(profileIds));
+    const profileMap = new Map(careProfiles.map((profile) => [profile.id, profile]));
+
+    for (const profile of careProfiles) {
+      if (profile.group_id) groupIds.add(profile.group_id);
+    }
+
+    const recipientRows = await loadGroupRecipients(env, Array.from(groupIds), "receive_evening_alert");
+    const groupRecipients = new Map<number, Set<string>>();
+
+    for (const row of recipientRows) {
+      const lineId = row.users?.line_user_id;
+      if (!lineId || lineId === "web-mvp") continue;
+      if (!groupRecipients.has(row.group_id)) {
+        groupRecipients.set(row.group_id, new Set());
+      }
+      groupRecipients.get(row.group_id)!.add(lineId);
+    }
+
+    const groupRecipientsById = new Map<number, string[]>();
+    for (const [groupId, lineIds] of groupRecipients.entries()) {
+      groupRecipientsById.set(groupId, Array.from(lineIds));
+    }
+
+    const userAlerts = new Map<string, AppointmentWithUser[]>();
+    for (const apt of fastingApts) {
+      const lineIds = resolveLineRecipients(apt, groupRecipientsById, profileMap);
+      for (const lineId of lineIds) {
+        if (!userAlerts.has(lineId)) userAlerts.set(lineId, []);
+        userAlerts.get(lineId)!.push(apt);
+      }
+    }
 
     let sentCount = 0;
 
-    for (const apt of fastingApts) {
-      const lineUserId = apt.users?.line_user_id;
-      if (!lineUserId || lineUserId === "web-mvp") continue;
+    for (const [lineUserId, appointments] of userAlerts.entries()) {
+      if (appointments.length === 0) continue;
 
-      const typeLabel = apt.type === "inspection" ? "檢查" : "看診";
-      const hours = apt.fasting_hours || 8;
-      const startTimeText = calculateFastingStart(apt.time, hours);
+      let msgText = `${DEFAULT_RECIPIENT}，晚安。\n\n提醒您一下：\n`;
 
-      const msgText = `${DEFAULT_RECIPIENT}，晚安。\n\n提醒您一下：明天 ${apt.time || ""} 要去 ${apt.hospital || "醫院"} ${typeLabel}。\n\n${startTimeText} 開始，先不要吃東西。水能不能喝，要看單子上的說明。\n\n健保卡和單子也先放好，明天比較不會急。`;
+      for (const apt of appointments) {
+        const prefix = itemPrefix(apt.profile_id ? profileMap.get(apt.profile_id) : undefined);
+        const typeLabel = apt.type === "inspection" ? "檢查" : "看診";
+        msgText += `• ${prefix}${apt.time || ""} 要去 ${apt.hospital || "醫院"} ${typeLabel}。\n`;
+        const hours = apt.fasting_hours || 8;
+        const startTimeText = calculateFastingStart(apt.time, hours);
+        msgText += `  ${startTimeText} 開始，先不要吃東西。水能不能喝，要看單子上的說明。\n`;
+        msgText += `  健保卡和單子也先放好，明天比較不會急。\n\n`;
+      }
 
-      await pushText(env, lineUserId, msgText);
+      await pushText(env, lineUserId, msgText.trim());
       sentCount++;
     }
 

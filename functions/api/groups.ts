@@ -5,8 +5,10 @@ import {
   getAccessibleProfiles,
   getOrCreateDefaultUser,
   getUserGroups,
+  getUserMemberships,
   joinGroupByCode,
   serializeCareProfile,
+  updateUserFamilyGroupMembership,
   verifyLineIdToken,
 } from "../_shared/supabase";
 
@@ -28,9 +30,10 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   try {
     const userId = await getIdentity(request, env);
     const groups = await getUserGroups(env, userId);
+    const memberships = await getUserMemberships(env, userId);
     const profiles = await getAccessibleProfiles(env, userId);
 
-    return Response.json({ groups, care_profiles: profiles.map(serializeCareProfile) });
+    return Response.json({ groups, care_profiles: profiles.map(serializeCareProfile), user_memberships: memberships });
   } catch (error) {
     return Response.json(
       { error: error instanceof Error ? error.message : "Groups API failed" },
@@ -79,6 +82,21 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
         isDefault: false,
       });
       return Response.json({ success: true, care_profile: serializeCareProfile(profile) });
+    }
+
+    if (body.action === "update_membership") {
+      if (!body.group_id) return Response.json({ error: "請提供群組 ID" }, { status: 400 });
+      const updates: Record<string, boolean> = {};
+      if (typeof body.receive_daily_brief === "boolean") updates.receive_daily_brief = body.receive_daily_brief;
+      if (typeof body.receive_evening_alert === "boolean") updates.receive_evening_alert = body.receive_evening_alert;
+      if (typeof body.receive_upload_summary === "boolean") updates.receive_upload_summary = body.receive_upload_summary;
+
+      if (Object.keys(updates).length === 0) {
+        return Response.json({ error: "沒有可更新的欄位" }, { status: 400 });
+      }
+
+      const membership = await updateUserFamilyGroupMembership(env, userId, body.group_id, updates);
+      return Response.json({ success: true, membership });
     }
 
     return Response.json({ error: "不支援的操作" }, { status: 400 });

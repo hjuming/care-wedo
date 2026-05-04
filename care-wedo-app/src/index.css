@@ -76,11 +76,11 @@ input:focus-visible {
 
 .care-hero {
   display: grid;
-  grid-template-columns: minmax(0, 1.5fr) minmax(320px, 0.8fr);
-  gap: 20px;
+  grid-template-columns: minmax(0, 1.4fr) minmax(320px, 0.9fr);
+  gap: 24px;
   align-items: stretch;
-  min-height: 430px;
-  margin-bottom: 20px;
+  min-height: 520px;
+  margin-bottom: 24px;
 }
 
 .hero-copy,
@@ -99,10 +99,11 @@ input:focus-visible {
 }
 
 .hero-copy {
-  padding: clamp(28px, 5vw, 56px);
+  padding: clamp(32px, 5vw, 64px);
+  border-radius: 24px;
   background:
-    linear-gradient(90deg, rgba(255, 250, 242, 0.98) 0%, rgba(255, 250, 242, 0.9) 48%, rgba(255, 250, 242, 0.34) 100%),
-    url('./assets/hero.png') center right / cover no-repeat;
+    linear-gradient(90deg, rgba(255, 250, 242, 0.96) 0%, rgba(255, 250, 242, 0.92) 45%, rgba(255, 250, 242, 0.44) 100%),
+    url('./assets/hero-bg.png') center right / cover no-repeat;
 }
 
 .brand-row {
@@ -134,9 +135,9 @@ input:focus-visible {
 }
 
 .hero-copy h1 {
-  max-width: 760px;
-  font-size: clamp(36px, 5vw, 68px);
-  line-height: 1.08;
+  max-width: 680px;
+  font-size: clamp(42px, 5vw, 72px);
+  line-height: 1.05;
   letter-spacing: 0;
   margin-bottom: 22px;
 }
@@ -146,9 +147,30 @@ input:focus-visible {
 }
 
 .hero-copy p {
-  max-width: 680px;
+  max-width: 620px;
   color: var(--text-secondary);
-  font-size: clamp(18px, 2vw, 23px);
+  font-size: clamp(19px, 2vw, 24px);
+  line-height: 1.7;
+}
+
+.hero-highlights {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.hero-highlights span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 10px 16px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--primary-dark);
 }
 
 .hero-actions {
@@ -163,10 +185,12 @@ input:focus-visible {
 .inline-action,
 .quick-actions button {
   border: 0;
-  border-radius: 8px;
-  padding: 14px 22px;
+  border-radius: 14px;
+  padding: 16px 26px;
   cursor: pointer;
   font-weight: 800;
+  min-height: 56px;
+  font-size: 18px;
 }
 
 .primary-action {
@@ -183,11 +207,12 @@ input:focus-visible {
 }
 
 .login-panel {
-  padding: 26px;
+  padding: 30px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   gap: 22px;
+  border-radius: 24px;
 }
 
 .assistant-avatar,
@@ -286,12 +311,12 @@ input:focus-visible {
 }
 
 .profile-avatar {
-  width: 64px;
-  height: 64px;
+  width: 72px;
+  height: 72px;
 }
 
 .profile-name {
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 800;
 }
 
@@ -342,8 +367,8 @@ input:focus-visible {
 
 .plan-panel {
   background: #f2eadf;
-  border-radius: 8px;
-  padding: 16px;
+  border-radius: 16px;
+  padding: 18px;
 }
 
 .plan-panel strong {
@@ -915,4 +940,119 @@ input:focus-visible {
     font-size: 14px;
     padding: 7px 10px;
   }
+}
+
+.group-settings {
+  display: grid;
+  gap: 16px;
+}
+
+.group-settings-card {
+  background: var(--surface-strong);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px;
+  display: grid;
+  gap: 14px;
+}
+
+.settings-group-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.settings-group-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.settings-group-header strong {
+  font-size: 17px;
+}
+
+.settings-toggle-list {
+  display: grid;
+  gap: 10px;
+}
+
+.settings-toggle {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-strong);
+}
+
+.settings-toggle span {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.profile-create-form {
+  display: grid;
+  gap: 12px;
+}
+
+.profile-create-form label {
+  display: grid;
+  gap: 8px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.profile-create-form input,
+.profile-create-form select {
+  width: 100%;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  color: var(--text-primary);
+}
+
+.profile-create-form button {
+  width: 100%;
+  background: var(--primary);
+  border: none;
+  color: white;
+  border-radius: 12px;
+  padding: 14px;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.error-msg,
+.success-msg {
+  padding: 12px 14px;
+  border-radius: 12px;
+  font-size: 15px;
+}
+
+.error-msg {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.success-msg {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.group-code {
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.small-copy {
+  color: var(--text-secondary);
+  font-size: 13px;
 }

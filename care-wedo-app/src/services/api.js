@@ -132,3 +132,23 @@ export async function createCareProfile({ idToken, groupId, displayName, relatio
   }
   return resp.json();
 }
+
+export async function updateMembership({ idToken, groupId, updates }) {
+  const resp = await fetch(`${API_BASE}/groups`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+    },
+    body: JSON.stringify({
+      action: "update_membership",
+      group_id: groupId,
+      ...updates,
+    }),
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(err.error || "更新群組通知設定失敗");
+  }
+  return resp.json();
+}
