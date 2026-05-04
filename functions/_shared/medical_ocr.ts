@@ -13,45 +13,45 @@ export type ParsedMedicalData = {
   medications?: Array<Record<string, any>>;
 };
 
-export const medicalDocParsePrompt = `你是 Care WEDO 的醫療單據解析助手，專門協助台灣銀髮族理解醫院文件（如台大醫院、長庚醫院等）。
+export const medicalDocParsePrompt = `你是 Care WEDO 的醫療單據解析助手，專門協助台灣銀髮族理解醫院文件（如台大醫院等）。
 
-請從以下圖片中提取所有醫療相關資訊，並以純 JSON 格式回傳，不要包含 Markdown 區塊。
+請仔細辨識單據是「檢驗及預約單」還是「慢性病連續處方箋」。
+提取所有醫療相關資訊，並以純 JSON 格式回傳（不可包含 Markdown 區塊）。
 
 回傳格式：
 {
-  "type": "appointment|medication|exam|report",
   "appointments": [
     {
-      "date": "YYYY-MM-DD",
-      "time": "HH:MM",
+      "type": "clinic_visit", // 可為: clinic_visit (回診), inspection (檢驗), refill_reminder (領藥提醒)
+      "date": "YYYY-MM-DD", // 領藥提醒請填入「建議領藥期間」的第一天
+      "time": "HH:MM", // 若有「預計來診時間」請轉為 HH:MM 格式，領藥提醒免填
       "hospital": "醫院名稱",
       "department": "科別",
       "doctor": "醫師姓名",
       "number": "看診號碼",
-      "location": "報到地點",
+      "location": "報到地點 (如: 西址-2樓)",
       "fasting_required": true,
       "fasting_hours": 8,
-      "notes": "重要補充",
-      "reminder_text": "像家人一樣溫暖提醒"
+      "notes": "重要補充或前置作業（例如：看診前請先量血壓、限頭頸部腫瘤外科等）",
+      "reminder_text": "像家人一樣溫暖、口語化的叮嚀"
     }
   ],
   "medications": [
     {
-      "name": "藥名",
-      "dosage": "劑量",
-      "frequency": "頻率",
+      "name": "藥品名稱（含商品名與學名）",
+      "dosage": "每次劑量",
+      "frequency": "使用頻率",
       "purpose": "用途",
-      "warnings": "警告",
-      "reminder_text": "口語化提醒"
+      "warnings": "警告或副作用",
+      "reminder_text": "口語化用藥提醒"
     }
   ]
 }
 
 重要規則：
-1. 只輸出 JSON。
-2. 將民國年或口語日期轉成 YYYY-MM-DD。
-3. 特別留意台大醫院東址、西址與報到地點。
-4. reminder_text 必須溫暖、清楚、像子女叮嚀。`;
+1. 只輸出 JSON。將民國年或口語日期轉成 YYYY-MM-DD。
+2. 若單據為「慢性病連續處方箋」，且上方有「第2次建議領藥期間」或「第3次」，請為【每一次】的領藥期間建立一筆 type="refill_reminder" 的 appointment，date 設為該期間的第一天，並在 reminder_text 寫上溫馨提醒（例如：媽媽，明天開始可以去領第二次的慢箋藥物了）。
+3. 若為「檢驗及預約單」，請特別留意「附註」或「醫師提醒事項」中有無看診前置作業（如：先量血壓再插卡），並務必放進 notes 或 reminder_text 中提醒。`;
 
 export async function parseMedicalImages(env: Env, images: Array<{ data: string; media_type: string }>) {
   if (!env.GOOGLE_API_KEY) {
@@ -115,6 +115,7 @@ export async function saveParsedData(env: Env, parsed: ParsedMedicalData, lineUs
       method: "POST",
       body: JSON.stringify(parsed.appointments.map(apt => ({
         user_id: userId,
+        type: apt.type || "clinic_visit",
         date: apt.date || null,
         time: apt.time || null,
         hospital: apt.hospital || null,

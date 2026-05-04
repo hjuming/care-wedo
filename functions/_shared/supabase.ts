@@ -11,6 +11,7 @@ const DEFAULT_USER = {
 export type AppointmentRow = {
   id: number;
   user_id: number;
+  type?: string | null; // e.g. clinic_visit, inspection, refill_reminder
   date: string | null;
   time: string | null;
   hospital: string | null;
@@ -93,6 +94,7 @@ export async function getOrCreateDefaultUser(env: Env, lineUserId?: string): Pro
 export function serializeAppointment(row: AppointmentRow) {
   return {
     id: row.id,
+    type: row.type || "clinic_visit",
     date: row.date,
     time: row.time,
     hospital: row.hospital,
