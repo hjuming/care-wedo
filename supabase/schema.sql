@@ -22,6 +22,7 @@ create table if not exists public.user_family_groups (
 create table if not exists public.appointments (
   id bigserial primary key,
   user_id bigint references public.users(id) on delete cascade,
+  type text,
   date text,
   time text,
   hospital text,
