@@ -1,0 +1,17 @@
+name: Evening Fasting Reminders
+
+on:
+  schedule:
+    # 每天 UTC 12:00 執行 (等於台灣時間晚上 20:00)
+    - cron: '0 12 * * *'
+  workflow_dispatch: # 允許手動觸發測試
+
+jobs:
+  trigger-evening-reminders:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Care WEDO Evening API
+        run: |
+          curl -X POST https://care.wedopr.com/api/cron/evening \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -w "\nHTTP Status: %{http_code}\n"
