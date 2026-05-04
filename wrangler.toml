@@ -1,3 +1,6 @@
 name = "care-wedo"
 compatibility_date = "2026-05-04"
 pages_build_output_dir = "care-wedo-app/dist"
+
+[vars]
+VITE_LINE_LIFF_ID = "2009972224-fQcfBXw5"
