@@ -111,7 +111,8 @@ async function handleEvent(env: Env, event: LineEvent) {
       await replyText(env, event.replyToken, reply);
     } catch (error) {
       console.error("OCR Error:", error);
-      await replyText(env, event.replyToken, "抱歉，解析圖片時發生錯誤。請確認圖片清晰，或稍後再試。");
+      const msg = error instanceof Error ? error.message : "未知錯誤";
+      await replyText(env, event.replyToken, `抱歉，解析圖片時發生錯誤：${msg}\n請確認圖片清晰，或稍後再試。`);
     }
     return;
   }

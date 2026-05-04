@@ -66,10 +66,13 @@ export async function supabaseFetch<T>(
   return text ? (JSON.parse(text) as T) : ([] as T);
 }
 
-export async function getOrCreateDefaultUser(env: Env): Promise<number> {
+export async function getOrCreateDefaultUser(env: Env, lineUserId?: string): Promise<number> {
+  const targetLineId = lineUserId || DEFAULT_USER.line_user_id;
+  const targetName = lineUserId ? `LINE User (${lineUserId.slice(-4)})` : DEFAULT_USER.name;
+
   const existing = await supabaseFetch<Array<{ id: number }>>(
     env,
-    `users?line_user_id=eq.${encodeURIComponent(DEFAULT_USER.line_user_id)}&select=id&limit=1`,
+    `users?line_user_id=eq.${encodeURIComponent(targetLineId)}&select=id&limit=1`,
   );
 
   if (existing[0]?.id) return existing[0].id;
@@ -77,9 +80,13 @@ export async function getOrCreateDefaultUser(env: Env): Promise<number> {
   const created = await supabaseFetch<Array<{ id: number }>>(env, "users?select=id", {
     method: "POST",
     headers: { Prefer: "return=representation" },
-    body: JSON.stringify(DEFAULT_USER),
+    body: JSON.stringify({
+      line_user_id: targetLineId,
+      name: targetName,
+    }),
   });
 
+  if (!created || created.length === 0) throw new Error("無法建立使用者");
   return created[0].id;
 }
 
