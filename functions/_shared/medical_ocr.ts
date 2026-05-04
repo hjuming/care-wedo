@@ -111,15 +111,27 @@ export async function saveParsedData(env: Env, parsed: ParsedMedicalData, lineUs
   const userId = await getOrCreateDefaultUser(env, lineUserId);
 
   if (parsed.appointments?.length) {
-    await supabaseFetch(env, "appointments", {
-      method: "POST",
-      body: JSON.stringify(parsed.appointments.map(apt => ({
+    // 1. 取得該使用者現有的行程，用以比對防呆
+    const existingApts = await supabaseFetch<Array<{ id: number; date: string; department: string; type: string }>>(
+      env,
+      `appointments?user_id=eq.${userId}&select=id,date,department,type`
+    );
+
+    for (const apt of parsed.appointments) {
+      const type = apt.type || "clinic_visit";
+      const date = apt.date || null;
+      const dept = apt.department || null;
+
+      // 防呆：尋找是否有同一天、同一科別、同一種類的行程
+      const duplicate = existingApts.find(e => e.date === date && e.department === dept && e.type === type);
+
+      const payload = {
         user_id: userId,
-        type: apt.type || "clinic_visit",
-        date: apt.date || null,
+        type: type,
+        date: date,
         time: apt.time || null,
         hospital: apt.hospital || null,
-        department: apt.department || null,
+        department: dept,
         doctor: apt.doctor || null,
         number: apt.number || null,
         location: apt.location || null,
@@ -128,23 +140,58 @@ export async function saveParsedData(env: Env, parsed: ParsedMedicalData, lineUs
         notes: apt.notes || null,
         reminder_text: apt.reminder_text || null,
         status: "upcoming"
-      })))
-    });
+      };
+
+      if (duplicate) {
+        // 更新現有資料 (覆蓋)
+        await supabaseFetch(env, `appointments?id=eq.${duplicate.id}`, {
+          method: "PATCH",
+          body: JSON.stringify(payload)
+        });
+      } else {
+        // 新增資料
+        await supabaseFetch(env, "appointments", {
+          method: "POST",
+          body: JSON.stringify([payload])
+        });
+      }
+    }
   }
 
   if (parsed.medications?.length) {
-    await supabaseFetch(env, "medications", {
-      method: "POST",
-      body: JSON.stringify(parsed.medications.map(med => ({
+    // 1. 取得該使用者現有的藥物清單
+    const existingMeds = await supabaseFetch<Array<{ id: number; name: string }>>(
+      env,
+      `medications?user_id=eq.${userId}&select=id,name`
+    );
+
+    for (const med of parsed.medications) {
+      const name = med.name || null;
+      // 防呆：尋找是否已經有同名的藥物
+      const duplicate = existingMeds.find(e => e.name === name);
+
+      const payload = {
         user_id: userId,
-        name: med.name || null,
+        name: name,
         dosage: med.dosage || null,
         frequency: med.frequency || med.freq || null,
         purpose: med.purpose || med.use || null,
         warnings: med.warnings || null,
         reminder_text: med.reminder_text || null,
         active: true
-      })))
-    });
+      };
+
+      if (duplicate) {
+        await supabaseFetch(env, `medications?id=eq.${duplicate.id}`, {
+          method: "PATCH",
+          body: JSON.stringify(payload)
+        });
+      } else {
+        await supabaseFetch(env, "medications", {
+          method: "POST",
+          body: JSON.stringify([payload])
+        });
+      }
+    }
   }
 }
