@@ -133,7 +133,7 @@ export const onRequestGet: PagesFunction = async () => {
   });
 };
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+export const onRequestPost: PagesFunction<Env> = async ({ request, env, waitUntil }) => {
   const bodyText = await request.text();
   const isValid = await verifyLineSignature(request, bodyText, env);
 
@@ -144,13 +144,17 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const body = JSON.parse(bodyText) as LineWebhookBody;
   const events = body.events || [];
 
-  try {
-    await Promise.all(events.map((event) => handleEvent(env, event)));
-    return Response.json({ success: true });
-  } catch (error) {
-    return Response.json(
-      { error: error instanceof Error ? error.message : "LINE webhook failed" },
-      { status: 500 },
-    );
-  }
+  // 立即回 200 給 LINE，避免超時。
+  // 用 waitUntil 在背景處理（Cloudflare 允許背景執行最多 30 秒）。
+  waitUntil(
+    Promise.all(
+      events.map((event) =>
+        handleEvent(env, event).catch((err) => {
+          console.error("Event handling error:", err);
+        }),
+      ),
+    ),
+  );
+
+  return Response.json({ success: true });
 };
