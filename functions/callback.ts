@@ -1,4 +1,6 @@
-type Env = {
+import { parseMedicalImages, saveParsedData, Env as OcrEnv } from "./_shared/medical_ocr";
+
+type Env = OcrEnv & {
   LINE_CHANNEL_ACCESS_TOKEN?: string;
   LINE_CHANNEL_SECRET?: string;
 };
@@ -6,6 +8,7 @@ type Env = {
 type LineEvent = {
   type: string;
   replyToken?: string;
+  source: { userId: string };
   message?: {
     type: string;
     text?: string;
@@ -76,15 +79,40 @@ async function replyText(env: Env, replyToken: string, text: string) {
   }
 }
 
+async function fetchLineContent(env: Env, messageId: string): Promise<string> {
+  const response = await fetch(`https://api-data.line.me/v2/bot/message/${messageId}/content`, {
+    headers: { Authorization: `Bearer ${env.LINE_CHANNEL_ACCESS_TOKEN}` },
+  });
+  if (!response.ok) throw new Error("無法從 LINE 下載圖片");
+  
+  const buffer = await response.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
 async function handleEvent(env: Env, event: LineEvent) {
   if (event.type !== "message" || !event.replyToken) return;
 
-  if (event.message?.type === "image") {
-    await replyText(
-      env,
-      event.replyToken,
-      "收到醫療單據照片了。Cloudflare 版 LINE 圖片解析正在接上中；目前請先到 care.wedopr.com 使用「掃描醫療單據」。",
-    );
+  if (event.message?.type === "image" && event.message.id) {
+    try {
+      const base64Image = await fetchLineContent(env, event.message.id);
+      const parsedData = await parseMedicalImages(env, [{ data: base64Image, media_type: "image/jpeg" }]);
+      await saveParsedData(env, parsedData, event.source.userId);
+      
+      let reply = "🎉 解析成功！已經幫你把";
+      if (parsedData.appointments?.length) reply += ` ${parsedData.appointments.length} 筆回診`;
+      if (parsedData.medications?.length) reply += ` ${parsedData.medications.length} 筆用藥`;
+      reply += " 加入提醒清單了。\n\n你可以點此查看完整清單：https://care.wedopr.com";
+      
+      await replyText(env, event.replyToken, reply);
+    } catch (error) {
+      console.error("OCR Error:", error);
+      await replyText(env, event.replyToken, "抱歉，解析圖片時發生錯誤。請確認圖片清晰，或稍後再試。");
+    }
     return;
   }
 
@@ -92,7 +120,7 @@ async function handleEvent(env: Env, event: LineEvent) {
   const reply =
     incomingText.includes("網址") || incomingText.toLowerCase().includes("url")
       ? "Care WEDO 已上線：https://care.wedopr.com"
-      : "Care WEDO 已收到訊息。你可以先到 https://care.wedopr.com 掃描醫療單據，我會協助整理回診與用藥提醒。";
+      : "Care WEDO 已收到訊息。你可以直接傳送醫療單據照片給我，我會幫你自動解析！";
 
   await replyText(env, event.replyToken, reply);
 }
