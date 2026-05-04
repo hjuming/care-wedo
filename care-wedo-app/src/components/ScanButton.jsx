@@ -55,15 +55,15 @@ export default function ScanButton({ scanning, scanned, scanCount, onFilesSelect
         {scanning ? (
           <>
             <img src={aiAvatar} alt="AI" className="pulse-animation" style={{ width: 20, height: 20, borderRadius: "50%", objectFit: "cover" }} />
-            AI 解析中…
+            正在看單子…
           </>
         ) : scanned && scanCount > 0 ? (
           <>
-            <span>✅</span> 已解析 {scanCount} 張單據・點此重新掃描
+            <span>✓</span> 已整理 {scanCount} 張單子・點這裡重新拍
           </>
         ) : (
           <>
-            <span>📷</span> 掃描醫療單據
+            <span>＋</span> 拍照上傳單子
           </>
         )}
       </button>

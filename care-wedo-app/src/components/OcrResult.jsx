@@ -2,7 +2,7 @@ import aiAvatar from '../assets/ai-avatar.png';
 
 /**
  * OCR 解析結果顯示元件
- * 顯示 Claude 解析出的醫療單據結構化資訊
+ * 顯示 AI 整理後的單據重點
  */
 export default function OcrResult({ data, onClose }) {
   if (!data) return null;
@@ -17,16 +17,16 @@ export default function OcrResult({ data, onClose }) {
         margin: "16px 0 12px",
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <img src={aiAvatar} alt="AI Avatar" style={{ width: 24, height: 24, borderRadius: "50%", objectFit: "cover" }} />
+          <img src={aiAvatar} alt="健康小管家" style={{ width: 24, height: 24, borderRadius: "50%", objectFit: "cover" }} />
           <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>
-            AI 照護管家解析結果
+            小管家幫您整理好了
           </p>
         </div>
         <button onClick={onClose} style={{
           background: "none", border: "none", fontSize: 12, color: "var(--text-secondary)",
           cursor: "pointer", padding: "4px 8px",
         }}>
-          收起
+          先收起
         </button>
       </div>
 
@@ -70,7 +70,7 @@ export default function OcrResult({ data, onClose }) {
       {/* 藥物清單 */}
       {medications?.length > 0 && (
         <Card>
-          <SectionTitle>藥物清單 ({medications.length} 種)</SectionTitle>
+          <SectionTitle>要注意的藥 ({medications.length} 種)</SectionTitle>
           {medications.map((m, i) => (
             <div key={i} style={{
               display: "flex", justifyContent: "space-between", alignItems: "flex-start",
@@ -97,7 +97,7 @@ export default function OcrResult({ data, onClose }) {
       {/* 預約 / 檢查 */}
       {appointments?.length > 0 && (
         <Card>
-          <SectionTitle>預約門診 ({appointments.length} 筆)</SectionTitle>
+          <SectionTitle>看診或領藥提醒 ({appointments.length} 筆)</SectionTitle>
           {appointments.map((apt, i) => (
             <div key={i} style={{ padding: "8px 0", borderBottom: i < appointments.length - 1 ? "0.5px solid var(--border-color, rgba(255,255,255,0.08))" : "none" }}>
               <p style={{ margin: 0, fontSize: 13, fontWeight: 500, color: "var(--text-primary)" }}>
@@ -105,7 +105,7 @@ export default function OcrResult({ data, onClose }) {
               </p>
               {apt.doctor && <p style={{ margin: "2px 0 0", fontSize: 11, color: "var(--text-secondary)" }}>{apt.doctor} 醫師</p>}
               {apt.location && <p style={{ margin: "2px 0 0", fontSize: 11, color: "var(--text-secondary)" }}>📍 {apt.location}</p>}
-              {apt.fasting_required && <p style={{ margin: "4px 0 0", fontSize: 11, color: "#e74c3c", fontWeight: 500 }}>⚠️ 需空腹 {apt.fasting_hours || 8} 小時</p>}
+              {apt.fasting_required && <p style={{ margin: "4px 0 0", fontSize: 11, color: "#e74c3c", fontWeight: 500 }}>⚠️ 前 {apt.fasting_hours || 8} 小時先不要吃東西</p>}
             </div>
           ))}
         </Card>
@@ -114,7 +114,7 @@ export default function OcrResult({ data, onClose }) {
       {/* 檢查項目 */}
       {exams?.length > 0 && (
         <Card>
-          <SectionTitle>檢查項目 ({exams.length} 項)</SectionTitle>
+          <SectionTitle>檢查安排 ({exams.length} 項)</SectionTitle>
           {exams.map((ex, i) => (
             <div key={i} style={{ padding: "8px 0", borderBottom: i < exams.length - 1 ? "0.5px solid var(--border-color, rgba(255,255,255,0.08))" : "none" }}>
               <p style={{ margin: 0, fontSize: 13, fontWeight: 500, color: "var(--text-primary)" }}>
@@ -130,7 +130,7 @@ export default function OcrResult({ data, onClose }) {
       {/* 提醒事項 */}
       {reminders?.length > 0 && (
         <Card>
-          <SectionTitle>提醒事項 ({reminders.length} 個)</SectionTitle>
+          <SectionTitle>家人小提醒 ({reminders.length} 個)</SectionTitle>
           {reminders.map((r, i) => (
             <div key={i} style={{
               display: "flex", gap: 10, alignItems: "flex-start",
@@ -156,7 +156,7 @@ export default function OcrResult({ data, onClose }) {
       {/* 下次回診 */}
       {next_visit?.date && (
         <Card>
-          <SectionTitle>下次回診</SectionTitle>
+          <SectionTitle>下次要去醫院的時間</SectionTitle>
           <p style={{ margin: 0, fontSize: 13, color: "var(--text-primary)" }}>
             {next_visit.date} {next_visit.dept && `— ${next_visit.dept}`}
           </p>

@@ -73,7 +73,7 @@ export default function TodayChecklist({ items, checkDone, onToggle }) {
         <span style={{ fontSize: 24 }}>👨‍👩‍👧</span>
         <div>
           <div style={{ fontSize: 13, fontWeight: 700, color: "#ce93d8" }}>家人同步通知</div>
-          <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>提醒已同步至家庭群組 LINE</div>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>家人也會一起收到提醒</div>
         </div>
         <div style={{
           marginLeft: "auto",

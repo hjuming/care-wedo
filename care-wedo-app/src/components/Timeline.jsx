@@ -2,7 +2,7 @@ export default function Timeline({ items, doneItems, onToggle }) {
   return (
     <div style={{ padding: "16px 20px" }}>
       <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 14, letterSpacing: 1 }}>
-        共 {items.length} 個提醒事項
+        共有 {items.length} 件要記得的事
       </div>
       {items.map((item, i) => (
         <div
@@ -58,7 +58,7 @@ export default function Timeline({ items, doneItems, onToggle }) {
                   borderRadius: 20,
                   border: "1px solid rgba(255,107,107,0.3)",
                   letterSpacing: 1,
-                }}>緊急</div>
+                }}>先處理</div>
               )}
               {doneItems[i] && (
                 <div style={{ fontSize: 10, color: "#555" }}>已完成</div>

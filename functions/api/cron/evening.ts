@@ -1,5 +1,7 @@
 import { supabaseFetch, Env as SupabaseEnv } from "../../_shared/supabase";
 
+const DEFAULT_RECIPIENT = "親愛的爸爸 / 媽媽";
+
 type Env = SupabaseEnv & {
   CRON_SECRET?: string;
   LINE_CHANNEL_ACCESS_TOKEN?: string;
@@ -7,7 +9,7 @@ type Env = SupabaseEnv & {
 
 type AppointmentWithUser = {
   id: number;
-  type: string;
+  type?: string | null;
   date: string;
   time: string | null;
   hospital: string | null;
@@ -41,7 +43,7 @@ async function pushText(env: Env, userId: string, text: string) {
 /** 計算空腹起始時間字串 */
 function calculateFastingStart(apptTime: string | null, hours: number | null): string {
   if (!apptTime || !hours) {
-    return `請於看診/檢查前 ${hours || 8} 小時開始空腹`;
+    return `看診或檢查前 ${hours || 8} 小時`;
   }
   // apptTime 格式預期為 HH:MM
   const [hh, mm] = apptTime.split(":");
@@ -49,7 +51,7 @@ function calculateFastingStart(apptTime: string | null, hours: number | null): s
   const apptMin = parseInt(mm, 10);
 
   if (isNaN(apptHour) || isNaN(apptMin)) {
-    return `請於看診/檢查前 ${hours} 小時開始空腹`;
+    return `看診或檢查前 ${hours} 小時`;
   }
 
   // 減去空腹小時
@@ -71,6 +73,26 @@ function calculateFastingStart(apptTime: string | null, hours: number | null): s
   return `${dayPrefix} ${formattedHour}:${formattedMin}`;
 }
 
+async function fetchFastingAppointments(env: Env, targetDate: string) {
+  const baseSelect = "id,date,time,hospital,department,fasting_required,fasting_hours,user_id,users(line_user_id)";
+  try {
+    return await supabaseFetch<AppointmentWithUser[]>(
+      env,
+      `appointments?date=eq.${targetDate}&fasting_required=eq.true&status=in.(upcoming,notified)&select=id,type,date,time,hospital,department,fasting_required,fasting_hours,user_id,users(line_user_id)`,
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!message.includes("appointments.type") && !message.includes("column appointments.type does not exist")) {
+      throw error;
+    }
+    const rows = await supabaseFetch<AppointmentWithUser[]>(
+      env,
+      `appointments?date=eq.${targetDate}&fasting_required=eq.true&status=in.(upcoming,notified)&select=${baseSelect}`,
+    );
+    return rows.map((row) => ({ ...row, type: "clinic_visit" }));
+  }
+}
+
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const authHeader = request.headers.get("Authorization");
   if (env.CRON_SECRET && authHeader !== `Bearer ${env.CRON_SECRET}`) {
@@ -84,8 +106,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const targetDate = twTime.toISOString().split("T")[0];
 
     // 抓取明天需要空腹的行程 (狀態可能是 upcoming 或早上發過的 notified)
-    const aptPath = `appointments?date=eq.${targetDate}&fasting_required=eq.true&status=in.(upcoming,notified)&select=id,type,date,time,hospital,department,fasting_required,fasting_hours,user_id,users(line_user_id)`;
-    const fastingApts = await supabaseFetch<AppointmentWithUser[]>(env, aptPath);
+    const fastingApts = await fetchFastingAppointments(env, targetDate);
 
     let sentCount = 0;
 
@@ -93,11 +114,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       const lineUserId = apt.users?.line_user_id;
       if (!lineUserId || lineUserId === "web-mvp") continue;
 
-      const typeLabel = apt.type === "inspection" ? "抽血/檢查" : "看診";
+      const typeLabel = apt.type === "inspection" ? "檢查" : "看診";
       const hours = apt.fasting_hours || 8;
       const startTimeText = calculateFastingStart(apt.time, hours);
 
-      const msgText = `🌙 晚安！小管家溫馨提醒：\n\n明天 ${apt.time || ""} 您在 ${apt.hospital || ""} 有${typeLabel}。\n\n⚠️ 為了確保檢驗準確，\n👉 **${startTimeText} 起，請勿再進食或喝水喔！**\n\n祝您有個好夢，明天一切順利！`;
+      const msgText = `${DEFAULT_RECIPIENT}，晚安。\n\n提醒您一下：明天 ${apt.time || ""} 要去 ${apt.hospital || "醫院"} ${typeLabel}。\n\n${startTimeText} 開始，先不要吃東西。水能不能喝，要看單子上的說明。\n\n健保卡和單子也先放好，明天比較不會急。`;
 
       await pushText(env, lineUserId, msgText);
       sentCount++;

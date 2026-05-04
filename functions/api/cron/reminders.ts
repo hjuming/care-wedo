@@ -1,5 +1,7 @@
 import { supabaseFetch, Env as SupabaseEnv } from "../../_shared/supabase";
 
+const DEFAULT_RECIPIENT = "親愛的爸爸 / 媽媽";
+
 type Env = SupabaseEnv & {
   CRON_SECRET?: string;
   LINE_CHANNEL_ACCESS_TOKEN?: string;
@@ -7,7 +9,7 @@ type Env = SupabaseEnv & {
 
 type AppointmentWithUser = {
   id: number;
-  type: string;
+  type?: string | null;
   date: string;
   time: string | null;
   hospital: string | null;
@@ -64,6 +66,26 @@ async function markAsNotified(env: Env, id: number) {
   });
 }
 
+async function fetchReminderAppointments(env: Env, targetDate: string) {
+  const baseSelect = "id,date,time,hospital,department,doctor,number,location,fasting_required,fasting_hours,notes,reminder_text,user_id,users(line_user_id)";
+  try {
+    return await supabaseFetch<AppointmentWithUser[]>(
+      env,
+      `appointments?date=eq.${targetDate}&status=eq.upcoming&select=id,type,date,time,hospital,department,doctor,number,location,fasting_required,fasting_hours,notes,reminder_text,user_id,users(line_user_id)`,
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!message.includes("appointments.type") && !message.includes("column appointments.type does not exist")) {
+      throw error;
+    }
+    const rows = await supabaseFetch<AppointmentWithUser[]>(
+      env,
+      `appointments?date=eq.${targetDate}&status=eq.upcoming&select=${baseSelect}`,
+    );
+    return rows.map((row) => ({ ...row, type: "clinic_visit" }));
+  }
+}
+
 export const onRequestPost: PagesFunction<Env> = async ({ request, env, waitUntil }) => {
   const authHeader = request.headers.get("Authorization");
   if (env.CRON_SECRET && authHeader !== `Bearer ${env.CRON_SECRET}`) {
@@ -77,8 +99,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, waitUnti
     const targetDate = twTime.toISOString().split("T")[0];
 
     // 1. 撈取明天需要推播的行程
-    const aptPath = `appointments?date=eq.${targetDate}&status=eq.upcoming&select=id,type,date,time,hospital,department,doctor,number,location,fasting_required,fasting_hours,notes,reminder_text,user_id,users(line_user_id)`;
-    const reminders = await supabaseFetch<AppointmentWithUser[]>(env, aptPath);
+    const reminders = await fetchReminderAppointments(env, targetDate);
 
     // 2. 撈取目前正在服用的藥物
     const medPath = `medications?active=eq.true&select=id,name,dosage,frequency,purpose,warnings,reminder_text,user_id,users(line_user_id)`;
@@ -103,35 +124,35 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, waitUnti
 
     let sentCount = 0;
 
-    // 4. 針對每位使用者發送專屬的「早安健康簡報」
+    // 4. 針對每位使用者發送早安提醒
     for (const [lineUserId, data] of userBriefings.entries()) {
-      let msgText = "☀️ 早安！這裡是 Care WEDO 健康小管家：\n\n";
+      let msgText = `${DEFAULT_RECIPIENT}，早安。\n今天先看這幾件事就好。\n\n`;
 
       // 附加用藥提醒
       if (data.meds.length > 0) {
-        msgText += "💊 【今日用藥提醒】\n請記得按時服用以下藥物：\n";
+        msgText += "今天要吃的藥：\n";
         for (const med of data.meds) {
-          msgText += `• ${med.name} (${med.dosage || "適量"})\n`;
-          if (med.frequency) msgText += `  時機：${med.frequency}\n`;
-          if (med.reminder_text) msgText += `  💡 ${med.reminder_text}\n`;
+          msgText += `• ${med.name} (${med.dosage || "照單子份量"})\n`;
+          if (med.frequency) msgText += `  時間：${med.frequency}\n`;
+          if (med.reminder_text) msgText += `  ${med.reminder_text}\n`;
         }
         msgText += "\n";
       }
 
       // 附加明日行程提醒
       if (data.apts.length > 0) {
-        msgText += "🏥 【明日行程預告】\n";
+        msgText += "明天要記得：\n";
         for (const apt of data.apts) {
           if (apt.type === "refill_reminder") {
-            msgText += `[慢箋領藥] 明天開始可領藥！\n地點：${apt.hospital || "醫院/社區藥局"}\n`;
+            msgText += `• 可以去領下一次藥了。\n  地點：${apt.hospital || "醫院或藥局"}\n`;
           } else if (apt.type === "inspection") {
-            msgText += `[檢驗排程] ${apt.time || ""} ${apt.hospital || ""} ${apt.department || ""}\n`;
-            if (apt.fasting_required) msgText += `⚠️ 需空腹 ${apt.fasting_hours || 8} 小時\n`;
-            if (apt.notes) msgText += `💡 ${apt.notes}\n`;
+            msgText += `• ${apt.time || ""} ${apt.hospital || ""} ${apt.department || "要去檢查"}\n`;
+            if (apt.fasting_required) msgText += `  記得：前 ${apt.fasting_hours || 8} 小時先不要吃東西。\n`;
+            if (apt.notes) msgText += `  ${apt.notes}\n`;
           } else {
-            msgText += `[回診看診] ${apt.time || ""} ${apt.hospital || ""} ${apt.department || ""}\n`;
-            if (apt.fasting_required) msgText += `⚠️ 需空腹 ${apt.fasting_hours || 8} 小時\n`;
-            if (apt.notes) msgText += `💡 ${apt.notes}\n`;
+            msgText += `• ${apt.time || ""} ${apt.hospital || ""} ${apt.department || "要去看診"}\n`;
+            if (apt.fasting_required) msgText += `  記得：前 ${apt.fasting_hours || 8} 小時先不要吃東西。\n`;
+            if (apt.notes) msgText += `  ${apt.notes}\n`;
           }
         }
       }
@@ -140,7 +161,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, waitUnti
         continue; // 沒事不吵長輩
       }
 
-      msgText += "\n👉 點此查看完整清單：https://care.wedopr.com";
+      msgText += "\n完整清單在這裡：https://care.wedopr.com";
 
       await pushText(env, lineUserId, msgText);
       sentCount++;

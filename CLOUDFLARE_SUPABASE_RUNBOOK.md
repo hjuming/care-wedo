@@ -12,6 +12,7 @@
 
 1. 建立 Supabase project。
 2. 到 SQL Editor 執行 `supabase/schema.sql`。
+   - 若是既有資料庫，請先執行 `supabase/migration_add_care_profiles.sql`，補上家庭照護對象與 `profile_id` 欄位。
 3. 到 Project Settings → API，取得：
    - `SUPABASE_URL`
    - `SUPABASE_SERVICE_ROLE_KEY`
@@ -41,12 +42,19 @@ SUPABASE_URL=https://你的-project.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=[REDACTED]
 LINE_CHANNEL_ACCESS_TOKEN=[REDACTED]
 LINE_CHANNEL_SECRET=[REDACTED]
+LINE_LOGIN_CHANNEL_ID=[REDACTED]
 CRON_SECRET=[自己設定的一組密碼，用來保護排程API]
 ```
 
 前端維持同網域 `/api`，通常不需要設定 `VITE_API_BASE`。
+若要啟用 LINE LIFF 個人化 Dashboard，Cloudflare Pages 前端建置環境需另設：
+
+```bash
+VITE_LINE_LIFF_ID=[REDACTED]
+```
 
 若暫時不用 LINE Bot，只需要前四個變數即可。若要回填 LINE Webhook URL，必須加上 `LINE_CHANNEL_ACCESS_TOKEN` 與 `LINE_CHANNEL_SECRET`。
+若要啟用 LIFF Dashboard 身分驗證，必須加上 `LINE_LOGIN_CHANNEL_ID`。
 
 ## LINE Webhook URL
 
@@ -71,6 +79,7 @@ https://care.wedopr.com/callback
 3. 掃描圖片後，`/api/ocr` 回 `success: true`。
 4. Supabase `appointments` 或 `medications` 有新增資料。
 5. 重新整理首頁，dashboard 讀到 Supabase 資料。
+6. 用 LINE 登入後，側邊欄可看到「正在看的資料」，並能切換爸爸、媽媽或其他照護對象。
 
 ## 已知取捨
 

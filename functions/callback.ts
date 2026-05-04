@@ -21,6 +21,7 @@ type LineWebhookBody = {
 };
 
 const encoder = new TextEncoder();
+const DEFAULT_RECIPIENT = "親愛的爸爸 / 媽媽";
 
 function timingSafeEqual(a: string, b: string) {
   if (a.length !== b.length) return false;
@@ -121,10 +122,10 @@ async function fetchLineContent(env: Env, messageId: string): Promise<string> {
 
 /** 將解析結果格式化成易讀的摘要 */
 function formatResultSummary(parsed: import("./_shared/medical_ocr").ParsedMedicalData): string {
-  const lines: string[] = ["🎉 解析成功！以下是重點摘要：\n"];
+  const lines: string[] = [`${DEFAULT_RECIPIENT}，我幫您把單子整理好了。\n`];
 
   if (parsed.appointments?.length) {
-    lines.push(`📅 回診提醒（${parsed.appointments.length} 筆）：`);
+    lines.push(`要記得的時間（${parsed.appointments.length} 筆）：`);
     for (const apt of parsed.appointments) {
       const parts: string[] = [];
       if (apt.date) parts.push(apt.time ? `${apt.date} ${apt.time}` : apt.date);
@@ -133,28 +134,29 @@ function formatResultSummary(parsed: import("./_shared/medical_ocr").ParsedMedic
       if (apt.doctor) parts.push(`${apt.doctor}醫師`);
       if (apt.number) parts.push(`${apt.number}號`);
       lines.push(`• ${parts.join(" ｜ ")}`);
-      if (apt.location) lines.push(`  📍 ${apt.location}`);
-      if (apt.fasting_required) lines.push(`  ⚠️ 需空腹 ${apt.fasting_hours || 8} 小時`);
-      if (apt.reminder_text) lines.push(`  💬 ${apt.reminder_text}`);
+      if (apt.location) lines.push(`  地點：${apt.location}`);
+      if (apt.fasting_required) lines.push(`  記得：前 ${apt.fasting_hours || 8} 小時先不要吃東西。`);
+      if (apt.reminder_text) lines.push(`  ${apt.reminder_text}`);
     }
     lines.push("");
   }
 
   if (parsed.medications?.length) {
-    lines.push(`💊 用藥提醒（${parsed.medications.length} 筆）：`);
+    lines.push(`藥的提醒（${parsed.medications.length} 筆）：`);
     for (const med of parsed.medications) {
       const parts: string[] = [];
       if (med.name) parts.push(med.name);
       if (med.dosage) parts.push(med.dosage);
       if (med.frequency) parts.push(med.frequency);
       lines.push(`• ${parts.join(" ｜ ")}`);
-      if (med.purpose) lines.push(`  用途：${med.purpose}`);
-      if (med.warnings) lines.push(`  ⚠️ ${med.warnings}`);
+      if (med.purpose) lines.push(`  用來：${med.purpose}`);
+      if (med.warnings) lines.push(`  注意：${med.warnings}`);
+      if (med.reminder_text) lines.push(`  ${med.reminder_text}`);
     }
     lines.push("");
   }
 
-  lines.push("👉 查看完整清單：https://care.wedopr.com");
+  lines.push("想看完整清單，點這裡：https://care.wedopr.com");
   return lines.join("\n");
 }
 
@@ -171,7 +173,7 @@ async function processImageOCR(env: Env, event: LineEvent) {
   } catch (error) {
     console.error("OCR Error:", error);
     const msg = error instanceof Error ? error.message : "未知錯誤";
-    await pushText(env, userId, `抱歉，解析圖片時發生錯誤：${msg}\n請確認圖片清晰，或稍後再試。`);
+    await pushText(env, userId, `${DEFAULT_RECIPIENT}，這張照片我暫時看不清楚。\n\n可以再拍一次嗎？盡量讓整張單子平放、字清楚一點。\n\n系統訊息：${msg}`);
   }
 }
 
@@ -180,7 +182,7 @@ async function handleEvent(env: Env, event: LineEvent, waitUntil: (promise: Prom
 
   if (event.message?.type === "image" && event.message.id) {
     // 1. 立即回覆「解析中」讓使用者安心
-    await replyText(env, event.replyToken, "📋 收到圖片了！正在幫你解析醫療單據，請稍候⋯⋯");
+    await replyText(env, event.replyToken, `${DEFAULT_RECIPIENT}，收到照片了。\n我正在幫您看單子，等一下整理好給您。`);
 
     // 2. 背景處理 OCR，完成後用 Push API 推送結果
     waitUntil(processImageOCR(env, event));
@@ -190,8 +192,8 @@ async function handleEvent(env: Env, event: LineEvent, waitUntil: (promise: Prom
   const incomingText = event.message?.text || "";
   const reply =
     incomingText.includes("網址") || incomingText.toLowerCase().includes("url")
-      ? "Care WEDO 已上線：https://care.wedopr.com"
-      : "Care WEDO 已收到訊息。你可以直接傳送醫療單據照片給我，我會幫你自動解析！";
+      ? "這裡可以看完整清單：https://care.wedopr.com"
+      : `${DEFAULT_RECIPIENT}，您可以直接把醫院單子拍照傳給我。\n我會幫您整理成看診、領藥和吃藥提醒。`;
 
   await replyText(env, event.replyToken, reply);
 }
@@ -224,7 +226,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, waitUnti
       await replyText(
         env,
         firstImage.replyToken,
-        "📋 收到多張圖片！為了確保精準判讀，建議一次傳送一張喔 😊\n\n我先幫你解析第一張，請稍候⋯⋯",
+        `${DEFAULT_RECIPIENT}，我收到好幾張照片。\n為了看得更準，建議一次傳一張。\n\n我先幫您看第一張。`,
       );
     }
     waitUntil(processImageOCR(env, firstImage));
