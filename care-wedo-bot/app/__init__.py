@@ -100,7 +100,10 @@ def create_app(config_name="dev"):
     # 初始化 LINE Handler 並註冊事件
     with app.app_context():
         if app.config.get("AUTO_CREATE_DB"):
-            db.create_all()
+            try:
+                db.create_all()
+            except Exception as exc:
+                logger.error("Database initialization failed: %s", exc)
         if line_is_configured:
             handler = get_handler()
             register_handlers(handler)
