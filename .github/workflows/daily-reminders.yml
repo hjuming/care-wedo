@@ -1,0 +1,17 @@
+name: Daily Medical Reminders
+
+on:
+  schedule:
+    # 每天 UTC 00:00 執行 (等於台灣時間早上 08:00)
+    - cron: '0 0 * * *'
+  workflow_dispatch: # 允許手動觸發測試
+
+jobs:
+  trigger-reminders:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Care WEDO Reminders API
+        run: |
+          curl -X POST https://care.wedopr.com/api/cron/reminders \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -w "\nHTTP Status: %{http_code}\n"
