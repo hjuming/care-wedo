@@ -15,7 +15,7 @@ import { updateProfile } from "./services/api";
 const SECTIONS = [
   { id: "overview", label: "今天重點", icon: "⌂", color: "#256f5b" }, // 綠
   { id: "calendar", label: "看診日曆", icon: "□", color: "#2b6cb0" }, // 藍
-  { id: "meds", label: "吃藥提醒", icon: "c57b37" }, // 橘
+  { id: "meds", label: "吃藥提醒", icon: "○", color: "#c57b37" }, // 橘
   { id: "records", label: "看過什麼", icon: "≡", color: "#6b46c1" }, // 紫
   { id: "settings", label: "家人設定", icon: "⚙", color: "#744210" }, // 褐
 ];
