@@ -36,11 +36,12 @@
 
 ```bash
 GOOGLE_API_KEY=[REDACTED]
-GEMINI_MODEL_NAME=gemini-2.0-flash
+GEMINI_MODEL_NAME=gemini-2.5-flash
 SUPABASE_URL=https://你的-project.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=[REDACTED]
 LINE_CHANNEL_ACCESS_TOKEN=[REDACTED]
 LINE_CHANNEL_SECRET=[REDACTED]
+CRON_SECRET=[自己設定的一組密碼，用來保護排程API]
 ```
 
 前端維持同網域 `/api`，通常不需要設定 `VITE_API_BASE`。
@@ -76,3 +77,16 @@ https://care.wedopr.com/callback
 - Cloudflare 版不跑 Python Flask，也不使用本機 Tesseract。
 - OCR 以 Gemini Vision 直接解析圖片，部署更輕，較適合 MVP。
 - LINE Webhook 尚未搬到 Cloudflare Functions；第一版先確保 Web MVP 上線。
+
+## 主動推播提醒 (Cron)
+
+要讓系統每天主動提醒長輩回診或領藥：
+1. 必須在 Cloudflare Pages 的設定中加入 `CRON_SECRET` 變數。
+2. 由於 Cloudflare Pages Functions 不原生支援 Dashboard Cron Triggers，您可以使用外部服務（例如 GitHub Actions、IFTTT，或另建一個簡易的 Cloudflare Worker）每天定時發送以下請求：
+
+```bash
+curl -X POST https://care.wedopr.com/api/cron/reminders \\
+  -H "Authorization: Bearer <你的CRON_SECRET>"
+```
+
+執行後，系統會自動抓出「明天」的所有待辦行程，發送 LINE Push 給綁定的使用者，並將已過期的行程標記為 `expired`（保留供查詢）。
