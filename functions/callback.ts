@@ -119,6 +119,45 @@ async function fetchLineContent(env: Env, messageId: string): Promise<string> {
   return btoa(binary);
 }
 
+/** 將解析結果格式化成易讀的摘要 */
+function formatResultSummary(parsed: import("./_shared/medical_ocr").ParsedMedicalData): string {
+  const lines: string[] = ["🎉 解析成功！以下是重點摘要：\n"];
+
+  if (parsed.appointments?.length) {
+    lines.push(`📅 回診提醒（${parsed.appointments.length} 筆）：`);
+    for (const apt of parsed.appointments) {
+      const parts: string[] = [];
+      if (apt.date) parts.push(apt.time ? `${apt.date} ${apt.time}` : apt.date);
+      if (apt.hospital) parts.push(apt.hospital);
+      if (apt.department) parts.push(apt.department);
+      if (apt.doctor) parts.push(`${apt.doctor}醫師`);
+      if (apt.number) parts.push(`${apt.number}號`);
+      lines.push(`• ${parts.join(" ｜ ")}`);
+      if (apt.location) lines.push(`  📍 ${apt.location}`);
+      if (apt.fasting_required) lines.push(`  ⚠️ 需空腹 ${apt.fasting_hours || 8} 小時`);
+      if (apt.reminder_text) lines.push(`  💬 ${apt.reminder_text}`);
+    }
+    lines.push("");
+  }
+
+  if (parsed.medications?.length) {
+    lines.push(`💊 用藥提醒（${parsed.medications.length} 筆）：`);
+    for (const med of parsed.medications) {
+      const parts: string[] = [];
+      if (med.name) parts.push(med.name);
+      if (med.dosage) parts.push(med.dosage);
+      if (med.frequency) parts.push(med.frequency);
+      lines.push(`• ${parts.join(" ｜ ")}`);
+      if (med.purpose) lines.push(`  用途：${med.purpose}`);
+      if (med.warnings) lines.push(`  ⚠️ ${med.warnings}`);
+    }
+    lines.push("");
+  }
+
+  lines.push("👉 查看完整清單：https://care.wedopr.com");
+  return lines.join("\n");
+}
+
 /** 處理圖片 OCR（背景執行，用 Push API 回傳結果） */
 async function processImageOCR(env: Env, event: LineEvent) {
   const userId = event.source.userId;
@@ -126,12 +165,8 @@ async function processImageOCR(env: Env, event: LineEvent) {
     const base64Image = await fetchLineContent(env, event.message!.id!);
     const parsedData = await parseMedicalImages(env, [{ data: base64Image, media_type: "image/jpeg" }]);
     await saveParsedData(env, parsedData, userId);
-    
-    let reply = "🎉 解析成功！已經幫你把";
-    if (parsedData.appointments?.length) reply += ` ${parsedData.appointments.length} 筆回診`;
-    if (parsedData.medications?.length) reply += ` ${parsedData.medications.length} 筆用藥`;
-    reply += " 加入提醒清單了。\n\n你可以點此查看完整清單：https://care.wedopr.com";
-    
+
+    const reply = formatResultSummary(parsedData);
     await pushText(env, userId, reply);
   } catch (error) {
     console.error("OCR Error:", error);
@@ -179,14 +214,40 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, waitUnti
   const body = JSON.parse(bodyText) as LineWebhookBody;
   const events = body.events || [];
 
-  // 處理事件（圖片 OCR 會在背景繼續）
-  await Promise.all(
-    events.map((event) =>
-      handleEvent(env, event, waitUntil).catch((err) => {
-        console.error("Event handling error:", err);
-      }),
-    ),
-  );
+  // 偵測同一批 webhook 中是否有多張圖片
+  const imageEvents = events.filter((e) => e.type === "message" && e.message?.type === "image");
+
+  if (imageEvents.length > 1) {
+    // 多張圖片：只處理第一張，提醒使用者一次傳一張
+    const firstImage = imageEvents[0];
+    if (firstImage.replyToken) {
+      await replyText(
+        env,
+        firstImage.replyToken,
+        "📋 收到多張圖片！為了確保精準判讀，建議一次傳送一張喔 😊\n\n我先幫你解析第一張，請稍候⋯⋯",
+      );
+    }
+    waitUntil(processImageOCR(env, firstImage));
+
+    // 處理非圖片事件（如文字訊息）
+    const otherEvents = events.filter((e) => !(e.type === "message" && e.message?.type === "image"));
+    await Promise.all(
+      otherEvents.map((event) =>
+        handleEvent(env, event, waitUntil).catch((err) => {
+          console.error("Event handling error:", err);
+        }),
+      ),
+    );
+  } else {
+    // 單張或無圖片：正常處理所有事件
+    await Promise.all(
+      events.map((event) =>
+        handleEvent(env, event, waitUntil).catch((err) => {
+          console.error("Event handling error:", err);
+        }),
+      ),
+    );
+  }
 
   return Response.json({ success: true });
 };
