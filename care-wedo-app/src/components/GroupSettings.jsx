@@ -10,6 +10,7 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
   const [success, setSuccess] = useState(null);
   const [loading, setLoading] = useState(false);
   const [updatingGroupId, setUpdatingGroupId] = useState(null);
+  const [copiedCode, setCopiedCode] = useState(null);
 
   const loadGroups = useCallback(async () => {
     if (!identity || (identity.status !== "demo" && !identity.idToken)) return;
@@ -30,8 +31,14 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
     loadGroups();
   }, [identity, loadGroups]);
 
-  function getGroupById(groupId) {
-    return data.groups.find((group) => group.id === groupId);
+  function getMembersByGroup(groupId) {
+    return data.user_memberships?.filter((m) => m.group_id === groupId) || [];
+  }
+
+  function copyInviteCode(code) {
+    navigator.clipboard.writeText(code);
+    setCopiedCode(code);
+    setTimeout(() => setCopiedCode(null), 2000);
   }
 
   async function handleCreateProfile(event) {
@@ -100,23 +107,58 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
   return (
     <div className="group-settings">
       <div className="group-settings-card">
-        <p className="panel-eyebrow">群組通知設定</p>
+        <p className="panel-eyebrow">我的家庭群組</p>
         {error && <p className="error-msg">{error}</p>}
         {success && <p className="success-msg">{success}</p>}
-        {data.user_memberships?.length ? (
-          data.user_memberships.map((membership) => {
-            const group = getGroupById(membership.group_id);
-            if (!group) return null;
+        
+        {data.groups?.length ? (
+          data.groups.map((group) => {
+            const members = getMembersByGroup(group.id);
+            const membership = data.user_memberships?.find((m) => m.group_id === group.id);
             return (
-              <div key={membership.group_id} className="settings-group-card">
+              <div key={group.id} className="settings-group-card">
                 <div className="settings-group-header">
                   <div>
                     <strong>{group.name}</strong>
-                    <p className="small-copy">{membership.role === "admin" ? "群組管理者" : "一般成員"}</p>
+                    <p className="small-copy">
+                      {membership?.role === "admin" ? "👑 群組管理者" : "👨‍👩‍👧‍👦 成員"}・{members.length} 人
+                    </p>
                   </div>
-                  <span className="group-code">代號：{group.invite_code}</span>
                 </div>
+
+                <div className="group-invite-block">
+                  <label>邀請碼</label>
+                  <div className="invite-code-row">
+                    <code className="invite-code">{group.invite_code}</code>
+                    <button
+                      type="button"
+                      className="btn-copy"
+                      onClick={() => copyInviteCode(group.invite_code)}
+                    >
+                      {copiedCode === group.invite_code ? "✓ 已複製" : "複製"}
+                    </button>
+                  </div>
+                  <p className="helper-copy">分享邀請碼給家人，他們就能加入這個群組。</p>
+                </div>
+
+                <div className="members-list">
+                  <label>群組成員</label>
+                  <div className="members-grid">
+                    {members.map((m, idx) => (
+                      <div key={idx} className="member-item">
+                        <span className="member-role">
+                          {m.role === "admin" ? "👑" : "👤"}
+                        </span>
+                        <span className="member-label">
+                          {m.role === "admin" ? "管理者" : "成員"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="settings-toggle-list">
+                  <label>我的通知設定</label>
                   {[
                     { field: "receive_daily_brief", label: "每日簡報" },
                     { field: "receive_evening_alert", label: "晚間提醒" },
@@ -126,9 +168,9 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
                       <span>{item.label}</span>
                       <input
                         type="checkbox"
-                        checked={Boolean(membership[item.field])}
-                        disabled={updatingGroupId === membership.group_id}
-                        onChange={(event) => handleToggle(membership.group_id, item.field, event.target.checked)}
+                        checked={Boolean(membership?.[item.field])}
+                        disabled={updatingGroupId === group.id}
+                        onChange={(event) => handleToggle(group.id, item.field, event.target.checked)}
                       />
                     </label>
                   ))}

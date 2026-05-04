@@ -1056,3 +1056,140 @@ input:focus-visible {
   color: var(--text-secondary);
   font-size: 13px;
 }
+
+.setup-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 9999;
+}
+
+.setup-card {
+  background: var(--surface-strong);
+  border-radius: 24px;
+  padding: 32px;
+  max-width: 480px;
+  width: 90%;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.setup-card h2 {
+  font-size: 28px;
+  margin: 12px 0 20px;
+}
+
+.setup-form {
+  display: grid;
+  gap: 14px;
+}
+
+.setup-form label {
+  display: grid;
+  gap: 8px;
+  font-weight: 700;
+}
+
+.setup-form input,
+.setup-form select {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  font-size: 16px;
+}
+
+.setup-info {
+  background: var(--accent-soft);
+  border: 1px solid #f0d2ad;
+  border-radius: 12px;
+  padding: 14px;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.group-invite-block {
+  background: var(--accent-soft);
+  border: 1px solid #f0d2ad;
+  border-radius: 12px;
+  padding: 14px;
+  margin: 12px 0;
+}
+
+.group-invite-block label {
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  display: block;
+}
+
+.invite-code-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.invite-code {
+  flex: 1;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-family: monospace;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.btn-copy {
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 14px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.members-list {
+  margin: 12px 0;
+}
+
+.members-list label {
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  display: block;
+}
+
+.members-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 8px;
+}
+
+.member-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  text-align: center;
+  justify-content: center;
+  font-size: 13px;
+}
+
+.member-role {
+  font-size: 18px;
+}
+
+.member-label {
+  font-weight: 700;
+  color: var(--text-primary);
+}

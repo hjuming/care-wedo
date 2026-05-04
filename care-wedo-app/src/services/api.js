@@ -152,3 +152,34 @@ export async function updateMembership({ idToken, groupId, updates }) {
   }
   return resp.json();
 }
+
+export async function fetchCurrentUser({ idToken }) {
+  const resp = await fetch(`${API_BASE}/me`, {
+    headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(err.error || "無法取得用戶資訊");
+  }
+  return resp.json();
+}
+
+export async function initFamily({ idToken, familyName, primaryCareName }) {
+  const resp = await fetch(`${API_BASE}/me`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+    },
+    body: JSON.stringify({
+      action: "init_family",
+      family_name: familyName,
+      primary_care_name: primaryCareName,
+    }),
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(err.error || "初始化家庭失敗");
+  }
+  return resp.json();
+}

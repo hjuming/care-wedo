@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./index.css";
 import GroupManager from "./components/GroupManager";
 import GroupSettings from "./components/GroupSettings";
+import LoginSetup from "./components/LoginSetup";
 import OcrResult from "./components/OcrResult";
 import { patientData, medicines, timeline as initialTimeline, checklist as initialChecklist } from "./data/patient";
 import { fetchDashboard, ocrAnalyze } from "./services/api";
@@ -203,8 +204,15 @@ export default function App() {
     loadDashboard(identity, profileId);
   }
 
+  function handleSetupComplete() {
+    // Reload dashboard after setup
+    loadDashboard(identity, activeProfileId);
+  }
+
   return (
     <main className="care-shell">
+      <LoginSetup identity={identity} onSetupComplete={handleSetupComplete} />
+      
       <input
         ref={fileInputRef}
         type="file"
