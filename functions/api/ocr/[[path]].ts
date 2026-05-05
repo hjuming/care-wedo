@@ -1,8 +1,9 @@
 import {
-  checkOcrQuota,
+  checkGroupOcrQuota,
   getAccessibleProfiles,
   getBearerToken,
   getOrCreateDefaultUser,
+  incrementGroupOcrQuota,
   resolveDefaultCareContext,
   supabaseFetch,
   verifyLineIdToken,
@@ -21,6 +22,12 @@ type ParsedMedicalData = {
   type?: string;
   appointments?: Array<Record<string, unknown>>;
   medications?: Array<Record<string, unknown>>;
+};
+
+type SavedParsedData = {
+  document_id: number | null;
+  appointment_ids: number[];
+  medication_ids: number[];
 };
 
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
@@ -134,24 +141,65 @@ async function parseMedicalImages(env: Env, images: Array<{ data: string; media_
   return JSON.parse(jsonText) as ParsedMedicalData;
 }
 
-async function resolveRequestedProfile(env: Env, userId: number, requestedProfileId: number | null) {
-  if (!requestedProfileId) return null;
+async function resolveCareContext(
+  env: Env,
+  userId: number,
+  requestedProfileId: number | null,
+): Promise<{ groupId: number | null; profileId: number | null }> {
+  const defaultContext = await resolveDefaultCareContext(env, userId);
+  if (!requestedProfileId) return defaultContext;
+
   const profiles = await getAccessibleProfiles(env, userId);
-  return profiles.find((profile) => profile.id === requestedProfileId) || null;
+  const requestedProfile = profiles.find((p) => p.id === requestedProfileId) || null;
+  return {
+    groupId: requestedProfile?.group_id ?? defaultContext.groupId,
+    profileId: requestedProfile?.id ?? defaultContext.profileId,
+  };
 }
 
-async function saveParsedData(env: Env, parsed: ParsedMedicalData, userId: number, requestedProfileId: number | null) {
-  const defaultContext = await resolveDefaultCareContext(env, userId);
-  const requestedProfile = await resolveRequestedProfile(env, userId, requestedProfileId);
-  const profileId = requestedProfile?.id || defaultContext.profileId;
-  const groupId = requestedProfile?.group_id || defaultContext.groupId;
+function inferDocumentType(parsed: ParsedMedicalData): string {
+  if (parsed.type === "appointment") return "appointment_slip";
+  if (parsed.type === "medication") return "prescription";
+  if (parsed.type === "exam") return "lab_order";
+  return "other";
+}
 
-  const saved = { appointment_ids: [] as number[], medication_ids: [] as number[] };
+async function saveParsedData(
+  env: Env,
+  parsed: ParsedMedicalData,
+  userId: number,
+  groupId: number | null,
+  profileId: number | null,
+): Promise<SavedParsedData> {
+  if (!groupId || !profileId) {
+    throw new Error("請先建立照護空間與照護對象，再上傳醫療文件。");
+  }
+
+  const documents = await supabaseFetch<Array<{ id: number }>>(env, "care_documents?select=id", {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify({
+      group_id: groupId,
+      profile_id: profileId,
+      uploaded_by_user_id: userId,
+      document_type: inferDocumentType(parsed),
+      ocr_text: JSON.stringify(parsed),
+      ai_summary: parsed,
+      status: "draft",
+      captured_at: new Date().toISOString(),
+    }),
+  });
+  const documentId = documents[0]?.id;
+  if (!documentId) throw new Error("無法建立文件紀錄");
+
+  const saved: SavedParsedData = { document_id: documentId, appointment_ids: [], medication_ids: [] };
 
   const appointments = (parsed.appointments || []).map((apt) => ({
     user_id: userId,
     group_id: groupId,
     profile_id: profileId,
+    source_document_id: documentId,
+    created_by_user_id: userId,
     type: apt.type || "clinic_visit",
     date: apt.date || null,
     time: apt.time || null,
@@ -180,6 +228,8 @@ async function saveParsedData(env: Env, parsed: ParsedMedicalData, userId: numbe
     user_id: userId,
     group_id: groupId,
     profile_id: profileId,
+    source_document_id: documentId,
+    created_by_user_id: userId,
     name: med.name || null,
     dosage: med.dosage || null,
     frequency: med.frequency || med.freq || null,
@@ -250,18 +300,31 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
     const identity = await verifyLineIdToken(env, token);
     const userId = await getOrCreateDefaultUser(env, identity.lineUserId);
+
+    // Resolve group + profile context before quota check
+    const careContext = await resolveCareContext(env, userId, requestedProfileId);
+    const { groupId: activeGroupId, profileId: activeProfileId } = careContext;
+
+    if (!activeGroupId || !activeProfileId) {
+      logEvent("ocr.validation_failed", { reason: "missing_care_context", user_id: userId });
+      return Response.json({ error: "請先建立照護空間與照護對象，再上傳醫療文件。" }, { status: 400 });
+    }
+
     logEvent("ocr.request_started", {
       user_id: userId,
-      profile_id: requestedProfileId,
+      group_id: activeGroupId,
+      profile_id: activeProfileId,
       file_count: images.length,
       line_user_suffix: identity.lineUserId.slice(-4),
     });
 
-    // Check OCR quota for free plan users
+    // Check OCR quota per family group (one OCR job = 1 deduction)
+    // checkGroupOcrQuota returns the PlanRow so we can pass it to increment (avoids extra fetch)
+    let groupPlan;
     try {
-      await checkOcrQuota(env, userId);
+      groupPlan = await checkGroupOcrQuota(env, activeGroupId);
     } catch (quotaError) {
-      logError("ocr.quota_exceeded", quotaError, { user_id: userId });
+      logError("ocr.quota_exceeded", quotaError, { user_id: userId, group_id: activeGroupId });
       return Response.json(
         { error: quotaError instanceof Error ? quotaError.message : "超過使用次數限制" },
         { status: 429 },
@@ -269,10 +332,15 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     }
 
     const data = await parseMedicalImages(env, images);
-    const saved = await saveParsedData(env, data, userId, requestedProfileId);
+    const saved = await saveParsedData(env, data, userId, activeGroupId, activeProfileId);
+
+    // Increment quota AFTER successful save — one successful OCR job = 1 count
+    await incrementGroupOcrQuota(env, activeGroupId, groupPlan);
+
     logEvent("ocr.request_completed", {
       user_id: userId,
-      profile_id: requestedProfileId,
+      group_id: activeGroupId,
+      profile_id: activeProfileId,
       appointment_count: data.appointments?.length || 0,
       medication_count: data.medications?.length || 0,
       saved_appointment_count: saved.appointment_ids.length,

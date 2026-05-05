@@ -1426,7 +1426,7 @@ input:focus-visible {
   width: min(320px, calc(100vw - 24px));
   max-width: calc(100vw - 24px);
   transform: none;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 4px;
   padding: 8px;
   border: 1px solid var(--border);
@@ -3235,4 +3235,454 @@ button:disabled,
   background: var(--primary-soft);
   padding: 6px 12px;
   border-radius: 8px;
+}
+
+/* ─── Auth Loading Screen ──────────────────────────────────────────────────── */
+
+.auth-loading-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100dvh;
+  gap: 16px;
+  color: var(--text-secondary);
+  font-size: 15px;
+}
+
+.auth-loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--primary-soft);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: auth-spin 0.7s linear infinite;
+}
+
+@keyframes auth-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ─── V1.1 Today Care ─────────────────────────────────────────────────────── */
+
+.today-care-view {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.today-date-block span,
+.today-count-block span,
+.elder-task-label {
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.care-subject-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 118px;
+  padding-right: 74px;
+}
+
+.care-subject-header h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: clamp(32px, 4.5vw, 52px);
+  line-height: 1.12;
+}
+
+.care-subject-header p {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.care-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 4px solid #fff;
+  border-radius: 999px;
+  background: var(--card-bg);
+  box-shadow: var(--shadow-soft);
+  cursor: pointer;
+  overflow: hidden;
+  padding: 0;
+}
+
+.care-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.care-avatar-primary {
+  width: 104px;
+  height: 104px;
+  flex: 0 0 auto;
+}
+
+.global-care-contact-dock {
+  position: fixed;
+  right: 16px;
+  bottom: 96px;
+  bottom: calc(96px + env(safe-area-inset-bottom));
+  z-index: 1200;
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: flex-end;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.global-care-contact-dock > * {
+  pointer-events: auto;
+}
+
+.care-contact-dismiss-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 1190;
+  border: 0;
+  background: transparent;
+  cursor: default;
+}
+
+.care-contact-main-button,
+.care-contact-item,
+.care-contact-more {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 3px solid #fff;
+  border-radius: 999px;
+  background: var(--surface-strong);
+  color: var(--primary-dark);
+  box-shadow: var(--shadow-soft);
+  font-weight: 900;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.care-contact-main-button {
+  min-width: 64px;
+  min-height: 64px;
+  gap: 7px;
+  box-shadow: var(--shadow-float);
+  font-size: 14px;
+  flex-direction: row-reverse;
+}
+
+.care-contact-main-button img,
+.care-contact-item.with-label img {
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+}
+
+.care-contact-item,
+.care-contact-more {
+  width: 56px;
+  height: 56px;
+  font-size: 20px;
+}
+
+.care-contact-main-button.with-label,
+.care-contact-item.with-label {
+  width: auto;
+  padding: 8px 12px 8px 8px;
+}
+
+.care-contact-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.care-contact-item:not(.with-label) span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.care-contact-more {
+  background: var(--primary-dark);
+  color: #fff;
+}
+
+.care-contact-main-button span,
+.care-contact-item.with-label span {
+  white-space: nowrap;
+}
+
+.care-contact-main-button img {
+  border-radius: 999px;
+}
+
+.contact-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(20, 36, 32, 0.24);
+}
+
+.contact-sheet {
+  width: min(420px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  border: 1px solid rgba(37, 111, 91, 0.14);
+  border-radius: 22px;
+  background: var(--card-bg);
+  box-shadow: var(--shadow-strong);
+}
+
+.contact-sheet h3 {
+  margin: 0 0 4px;
+  color: var(--text-primary);
+  font-size: 26px;
+  line-height: 1.25;
+}
+
+.collaborator-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.collaborator-list button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 58px;
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  background: rgba(255, 250, 242, 0.72);
+  color: var(--primary-dark);
+  font-size: 18px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.collaborator-list span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  background: rgba(37, 111, 91, 0.12);
+}
+
+.today-hero-panel {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.8fr) 1fr;
+  gap: 18px;
+  align-items: stretch;
+  padding: 24px;
+  border: 1px solid rgba(37, 111, 91, 0.22);
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(37, 111, 91, 0.12), rgba(255, 255, 255, 0.52));
+}
+
+.today-date-block,
+.today-count-block {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+}
+
+.today-date-block strong {
+  color: var(--text-primary);
+  font-size: clamp(36px, 5vw, 58px);
+  line-height: 1.08;
+}
+
+.today-count-block span {
+  font-size: 28px;
+  color: var(--primary-dark);
+}
+
+.today-count-block p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 20px;
+  line-height: 1.45;
+}
+
+.today-timeline-panel {
+  padding: 0;
+}
+
+.elder-task-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.elder-task-card {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr) minmax(180px, 220px);
+  gap: 18px;
+  align-items: center;
+  padding: 20px;
+  border: 1px solid var(--card-border);
+  border-radius: 16px;
+  background: var(--card-bg);
+}
+
+.elder-task-card.needs-review {
+  border-color: rgba(197, 123, 55, 0.45);
+  background: rgba(255, 246, 233, 0.72);
+}
+
+.elder-task-card.is-done {
+  background: var(--success-transparent);
+  border-color: rgba(39, 174, 96, 0.35);
+}
+
+.elder-task-time {
+  color: var(--primary-dark);
+  font-size: 28px;
+  font-weight: 900;
+  line-height: 1.15;
+}
+
+.elder-task-body {
+  min-width: 0;
+}
+
+.elder-task-body h3 {
+  margin: 4px 0 6px;
+  color: var(--text-primary);
+  font-size: 30px;
+  line-height: 1.18;
+}
+
+.elder-task-body p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 18px;
+  line-height: 1.45;
+}
+
+.elder-task-body .elder-task-detail {
+  margin-top: 6px;
+  color: var(--text-muted);
+}
+
+.elder-task-warning {
+  margin-top: 8px !important;
+  color: var(--accent) !important;
+  font-weight: 800;
+}
+
+.elder-task-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.elder-primary-action,
+.elder-secondary-action {
+  width: 100%;
+  min-height: 58px;
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.today-empty-card {
+  padding: 24px;
+  border: 1px solid var(--card-border);
+  border-radius: 16px;
+  background: var(--card-bg);
+}
+
+.today-empty-card h3 {
+  margin: 0 0 8px;
+  font-size: 30px;
+}
+
+.today-empty-card p {
+  color: var(--text-secondary);
+  font-size: 20px;
+}
+
+.today-support-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+@media (max-width: 900px) {
+  .today-hero-panel,
+  .today-support-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .care-subject-header {
+    flex-direction: column;
+    align-items: flex-start;
+    min-height: 96px;
+    padding-right: 72px;
+  }
+
+  .care-avatar-primary {
+    width: 92px;
+    height: 92px;
+  }
+
+  .care-subject-header h3 {
+    font-size: 32px;
+  }
+
+  .care-subject-header p {
+    font-size: 20px;
+  }
+
+  .global-care-contact-dock {
+    right: max(16px, calc((100vw - min(100vw, 430px)) / 2 + 72px));
+    left: auto;
+    bottom: 96px;
+    bottom: calc(96px + env(safe-area-inset-bottom));
+  }
+
+  .elder-task-card {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 18px;
+  }
+
+  .elder-task-time {
+    font-size: 32px;
+  }
+
+  .elder-task-body h3 {
+    font-size: 32px;
+  }
+
+  .elder-task-actions {
+    gap: 12px;
+  }
+
+  .elder-primary-action,
+  .elder-secondary-action {
+    min-height: 64px;
+    font-size: 20px;
+  }
 }

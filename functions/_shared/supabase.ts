@@ -19,6 +19,8 @@ export type AppointmentRow = {
   user_id: number;
   group_id: number | null;
   profile_id?: number | null;
+  source_document_id?: number | null;
+  created_by_user_id?: number | null;
   type?: string | null; // e.g. clinic_visit, inspection, refill_reminder
   date: string | null;
   time: string | null;
@@ -39,6 +41,8 @@ export type MedicationRow = {
   user_id: number;
   group_id: number | null;
   profile_id?: number | null;
+  source_document_id?: number | null;
+  created_by_user_id?: number | null;
   name: string | null;
   dosage: string | null;
   frequency: string | null;
@@ -48,10 +52,26 @@ export type MedicationRow = {
   active: boolean | null;
 };
 
+export type PlanRow = {
+  id: string;
+  name: string;
+  monthly_ocr_limit: number;
+  max_members: number;
+  max_recipients: number;
+  family_group_enabled: boolean;
+  price_monthly_usd: number;
+  is_active: boolean;
+  sort_order: number;
+};
+
 export type GroupRow = {
   id: number;
   name: string;
   invite_code: string;
+  owner_user_id?: number | null;
+  plan_id?: string;
+  plan_started_at?: string | null;
+  plan_expires_at?: string | null;
   created_at: string;
 };
 
@@ -66,6 +86,15 @@ export type UserFamilyGroupRow = {
   receive_evening_alert?: boolean;
 };
 
+export type UserFeatureFlagRow = {
+  id: number;
+  user_id: number;
+  feature_key: string;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
 export type CareProfileRow = {
   id: number;
   group_id: number | null;
@@ -74,10 +103,42 @@ export type CareProfileRow = {
   relationship: string | null;
   avatar_url: string | null;
   birth_year: number | null;
+  birth_date?: string | null;
+  gender?: string | null;
   main_hospital: string | null;
   main_department: string | null;
   notes: string | null;
   is_default: boolean;
+  created_at: string;
+};
+
+// Phase 1 新增：care_documents（上傳文件主表）
+export type CareDocumentRow = {
+  id: number;
+  group_id: number;
+  profile_id: number | null;
+  uploaded_by_user_id: number | null;
+  document_type: string;
+  // appointment_slip / prescription / lab_order / imaging_order / medication_bag / other
+  source_file_url: string | null;
+  ocr_text: string | null;
+  ai_summary: Record<string, unknown> | null;
+  status: string;
+  // uploaded / processing / draft / confirmed / failed
+  captured_at: string | null;
+  created_at: string;
+};
+
+// Phase 1 新增：usage_quotas（以 group_id 為單位的額度）
+export type UsageQuotaRow = {
+  id: number;
+  group_id: number;
+  period: string;   // 'YYYY-MM'
+  feature: string;  // 'ocr_upload'
+  used_count: number;
+  limit_count: number;
+  plan_snapshot: string;
+  updated_at: string;
   created_at: string;
 };
 
@@ -275,7 +336,7 @@ export async function createGroup(env: Env, userId: number, name: string): Promi
   const created = await supabaseFetch<GroupRow[]>(env, "family_groups?select=*", {
     method: "POST",
     headers: { Prefer: "return=representation" },
-    body: JSON.stringify({ name, invite_code: inviteCode }),
+    body: JSON.stringify({ name, invite_code: inviteCode, owner_user_id: userId }),
   });
 
   if (!created || created.length === 0) throw new Error("無法建立群組");
@@ -467,6 +528,41 @@ export function serializeCareProfile(row: CareProfileRow) {
 // ─── Plan / Quota ────────────────────────────────────────────────────────────
 
 export const FREE_OCR_MONTHLY_LIMIT = 10;
+export const MULTIPLE_FAMILY_GROUPS_FEATURE = "multiple_family_groups";
+
+// Fallback plan definition — used when DB lookup fails or group has no plan_id.
+const FREE_PLAN_FALLBACK: PlanRow = {
+  id: "free",
+  name: "Free",
+  monthly_ocr_limit: 10,
+  max_members: 1,
+  max_recipients: 1,
+  family_group_enabled: false,
+  price_monthly_usd: 0,
+  is_active: true,
+  sort_order: 10,
+};
+
+/**
+ * Fetch the plan for a group.
+ * Reads family_groups.plan_id → joins plans table.
+ * Falls back to the free plan if the group or plan row is not found.
+ */
+export async function getGroupPlan(env: Env, groupId: number | null): Promise<PlanRow> {
+  if (!groupId) return FREE_PLAN_FALLBACK;
+
+  const groups = await supabaseFetch<Array<{ plan_id: string | null }>>(
+    env,
+    `family_groups?id=eq.${groupId}&select=plan_id&limit=1`,
+  );
+  const planId = groups[0]?.plan_id || "free";
+
+  const plans = await supabaseFetch<PlanRow[]>(
+    env,
+    `plans?id=eq.${encodeURIComponent(planId)}&select=*&limit=1`,
+  );
+  return plans[0] ?? FREE_PLAN_FALLBACK;
+}
 
 type UserPlanRow = { plan: string; plan_expires_at: string | null };
 
@@ -513,4 +609,200 @@ export async function checkOcrQuota(env: Env, userId: number): Promise<void> {
   if (used >= FREE_OCR_MONTHLY_LIMIT) {
     throw new Error(`本月免費次數已用完（${FREE_OCR_MONTHLY_LIMIT} 次），升級付費方案可無限使用。`);
   }
+}
+
+// ─── Group-based quota (Phase 2) ─────────────────────────────────────────────
+// Replaces per-user appointment/medication count with a dedicated usage_quotas row.
+// One OCR job = 1 deduction, regardless of how many records it creates.
+
+function currentPeriod(): string {
+  return new Date().toISOString().slice(0, 7); // 'YYYY-MM'
+}
+
+export async function getGroupOcrUsage(env: Env, groupId: number | null): Promise<number> {
+  if (!groupId) return 0;
+  const rows = await supabaseFetch<Array<{ used_count: number }>>(
+    env,
+    `usage_quotas?group_id=eq.${groupId}&period=eq.${currentPeriod()}&feature=eq.ocr_upload&select=used_count&limit=1`,
+  );
+  return rows[0]?.used_count ?? 0;
+}
+
+/**
+ * Check whether the group has remaining OCR quota this month.
+ * Reads the group's plan to determine the limit.
+ * Throws with a user-facing message if the quota is exhausted.
+ * Returns the PlanRow so callers can pass it to incrementGroupOcrQuota.
+ */
+export async function checkGroupOcrQuota(env: Env, groupId: number | null): Promise<PlanRow> {
+  if (!groupId) return FREE_PLAN_FALLBACK;
+
+  const plan = await getGroupPlan(env, groupId);
+  const used = await getGroupOcrUsage(env, groupId);
+
+  if (used >= plan.monthly_ocr_limit) {
+    throw new Error(
+      `本月 AI 文件整理次數已用完（${plan.monthly_ocr_limit} 次）。` +
+      (plan.id === "free" ? "升級家庭方案可獲得更多次數。" : ""),
+    );
+  }
+  return plan;
+}
+
+/**
+ * Increment the group's OCR usage counter by 1.
+ * Pass the PlanRow returned from checkGroupOcrQuota to avoid an extra DB fetch.
+ */
+export async function incrementGroupOcrQuota(
+  env: Env,
+  groupId: number | null,
+  plan: PlanRow = FREE_PLAN_FALLBACK,
+): Promise<void> {
+  if (!groupId) return;
+  const period = currentPeriod();
+  const now = new Date().toISOString();
+
+  // Read current row first, then write — PostgREST doesn't support column += 1
+  const rows = await supabaseFetch<Array<{ id: number; used_count: number }>>(
+    env,
+    `usage_quotas?group_id=eq.${groupId}&period=eq.${period}&feature=eq.ocr_upload&select=id,used_count&limit=1`,
+  );
+
+  if (rows.length === 0) {
+    await supabaseFetch(env, "usage_quotas", {
+      method: "POST",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({
+        group_id: groupId,
+        period,
+        feature: "ocr_upload",
+        used_count: 1,
+        limit_count: plan.monthly_ocr_limit,
+        plan_snapshot: plan.id,
+        updated_at: now,
+      }),
+    });
+  } else {
+    await supabaseFetch(env, `usage_quotas?id=eq.${rows[0].id}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ used_count: rows[0].used_count + 1, updated_at: now }),
+    });
+  }
+}
+
+// ─── Plan feature-limit checks ────────────────────────────────────────────────
+
+type LimitCheckResult = {
+  ok: boolean;
+  error?: string;
+  message?: string;
+  plan?: PlanRow;
+};
+
+export async function hasUserFeatureFlag(
+  env: Env,
+  userId: number,
+  featureKey: string,
+): Promise<boolean> {
+  const rows = await supabaseFetch<Array<{ enabled: boolean }>>(
+    env,
+    `user_feature_flags?user_id=eq.${userId}&feature_key=eq.${encodeURIComponent(featureKey)}&select=enabled&limit=1`,
+  );
+  return rows[0]?.enabled === true;
+}
+
+export async function canCreateFamilyGroup(
+  env: Env,
+  userId: number,
+): Promise<LimitCheckResult> {
+  const [memberships, ownedGroups] = await Promise.all([
+    supabaseFetch<Array<{ group_id: number }>>(
+      env,
+      `user_family_groups?user_id=eq.${userId}&select=group_id`,
+    ),
+    supabaseFetch<Array<{ id: number }>>(
+      env,
+      `family_groups?owner_user_id=eq.${userId}&select=id`,
+    ),
+  ]);
+
+  const groupIds = new Set<number>([
+    ...memberships.map((membership) => membership.group_id),
+    ...ownedGroups.map((group) => group.id),
+  ]);
+
+  if (groupIds.size === 0) return { ok: true };
+
+  const canCreateMultiple = await hasUserFeatureFlag(env, userId, MULTIPLE_FAMILY_GROUPS_FEATURE);
+  if (canCreateMultiple) return { ok: true };
+
+  return {
+    ok: false,
+    error: "GROUP_LIMIT_REACHED",
+    message: "目前每個帳號可建立 1 個照護空間。你可以在同一個照護空間中管理多位照護對象。",
+  };
+}
+
+/**
+ * Check whether a new member can join the group.
+ * Only used for invite/join flows — NOT called when the owner auto-joins on creation.
+ */
+export async function checkGroupMemberLimit(
+  env: Env,
+  groupId: number,
+): Promise<LimitCheckResult> {
+  const plan = await getGroupPlan(env, groupId);
+
+  if (!plan.family_group_enabled) {
+    return {
+      ok: false,
+      error: "FAMILY_GROUP_REQUIRES_PAID_PLAN",
+      message:
+        "家庭共享是付費版功能。升級 Family Basic 後，即可邀請家人共同管理照護資訊。",
+      plan,
+    };
+  }
+
+  const members = await supabaseFetch<Array<{ user_id: number }>>(
+    env,
+    `user_family_groups?group_id=eq.${groupId}&select=user_id`,
+  );
+
+  if (members.length >= plan.max_members) {
+    return {
+      ok: false,
+      error: "MEMBER_LIMIT_REACHED",
+      message: `目前方案最多可加入 ${plan.max_members} 位成員。`,
+      plan,
+    };
+  }
+
+  return { ok: true, plan };
+}
+
+/**
+ * Check whether a new care recipient (profile) can be added to the group.
+ */
+export async function checkGroupRecipientLimit(
+  env: Env,
+  groupId: number,
+): Promise<LimitCheckResult> {
+  const plan = await getGroupPlan(env, groupId);
+
+  const profiles = await supabaseFetch<Array<{ id: number }>>(
+    env,
+    `care_profiles?group_id=eq.${groupId}&select=id`,
+  );
+
+  if (profiles.length >= plan.max_recipients) {
+    return {
+      ok: false,
+      error: "RECIPIENT_LIMIT_REACHED",
+      message: `目前方案最多可建立 ${plan.max_recipients} 位照護對象。`,
+      plan,
+    };
+  }
+
+  return { ok: true, plan };
 }

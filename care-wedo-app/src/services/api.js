@@ -52,6 +52,11 @@ export async function fetchDashboard(identity) {
   const res = await fetch(url, init);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
+    if (res.status === 401) {
+      const authError = new Error(err.error || "請先登入");
+      authError.code = "AUTH_REQUIRED";
+      throw authError;
+    }
     throw new Error(err.error || `API 錯誤 (${res.status})`);
   }
   return res.json();

@@ -9,18 +9,32 @@ import { patientData, medicines, timeline as initialTimeline, checklist as initi
 import { fetchDashboard, ocrAnalyze, patchAppointment, patchMedication, updateProfile } from "./services/api";
 import { initLineIdentity, loginWithLine, logoutLineIdentity } from "./services/liff";
 import { trackError, trackEvent } from "./services/telemetry";
+import { buildTodayTasks, formatTaipeiTodayLabel } from "./services/todayTasks";
 import PrivacyPage from "./components/PrivacyPage";
 import TermsPage from "./components/TermsPage";
 import aiAvatar from "./assets/ai-avatar.png";
 import { isLineCallbackSearch, resolveCareWedoRoute, resolveInitialCareWedoRoute } from "./routing";
 
 
+const IS_PROD = import.meta.env.PROD;
+
+function todayInTaipei() {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Taipei" });
+}
+
 const SECTIONS = [
-  { id: "overview", label: "今天重點", mobileLabel: "今天", icon: "⌂", color: "#256f5b" },
-  { id: "calendar", label: "看診日曆", mobileLabel: "日曆", icon: "□", color: "#2b6cb0" },
-  { id: "meds", label: "吃藥提醒", mobileLabel: "用藥", icon: "○", color: "#c57b37" },
-  { id: "records", label: "看過什麼", mobileLabel: "紀錄", icon: "≡", color: "#6b46c1" },
-  { id: "settings", label: "家人設定", mobileLabel: "家人", icon: "⚙", color: "#744210" },
+  { id: "overview", label: "今日照護", mobileLabel: "今天", icon: "⌂", color: "#256f5b" },
+  { id: "calendar", label: "看診排程", mobileLabel: "看診", icon: "□", color: "#2b6cb0" },
+  { id: "meds", label: "吃藥說明", mobileLabel: "吃藥", icon: "○", color: "#c57b37" },
+  { id: "records", label: "就醫紀錄", mobileLabel: "紀錄", icon: "≡", color: "#6b46c1" },
+  { id: "settings", label: "家人", mobileLabel: "家人", icon: "⚙", color: "#744210" },
+];
+
+const MOBILE_SECTIONS = [
+  { id: "overview", label: "今日照護", mobileLabel: "今天", icon: "⌂" },
+  { id: "upload", label: "拍照上傳", mobileLabel: "拍照", icon: "+" },
+  { id: "meds", label: "吃藥說明", mobileLabel: "吃藥", icon: "○" },
+  { id: "settings", label: "照護圈", mobileLabel: "家人", icon: "⚙" },
 ];
 
 function typeLabel(type) {
@@ -102,6 +116,7 @@ function mergeDashboardShell(profileData, shellData) {
 
 const AVATAR_MAX_SOURCE_SIZE = 5 * 1024 * 1024;
 const AVATAR_CANVAS_SIZE = 480;
+const CARE_WEDO_LINE_URL = "https://lin.ee/xzbyyvf";
 
 function getAvatarName(avatarUrl) {
   const match = avatarUrl?.match(/^data:[^;,]+;name=([^;]+);base64,/);
@@ -113,6 +128,19 @@ function setAvatarName(avatarUrl, name) {
   const cleanName = encodeURIComponent((name || "照護對象頭像").trim().slice(0, 80));
   const withoutName = avatarUrl.replace(/^data:([^;,]+);name=[^;]+(;base64,)/, "data:$1$2");
   return withoutName.replace(/^data:([^;,]+)(;base64,)/, `data:$1;name=${cleanName}$2`);
+}
+
+function getCareTodayTitle(profile, fallbackName = "照護對象") {
+  const relationship = profile?.relationship;
+  const name = profile?.display_name || fallbackName;
+  if (relationship === "self") return "我的今日照護";
+  if (relationship === "father") return "爸爸的今日照護";
+  if (relationship === "mother") return "媽媽的今日照護";
+  return `${name}的今日照護`;
+}
+
+function getInitial(name = "家") {
+  return name.trim().charAt(0) || "家";
 }
 
 function fileToDataUrl(file) {
@@ -489,8 +517,6 @@ function DashboardApp() {
   const [activeSection, setActiveSection] = useState("overview");
   const [searchQuery, setSearchQuery] = useState("");
   const [scanning, setScanning] = useState(false);
-  const [scanned, setScanned] = useState(false);
-  const [scanCount, setScanCount] = useState(0);
   const [ocrData, setOcrData] = useState(null);
   const [ocrError, setOcrError] = useState(null);
   const [showUploadGuide, setShowUploadGuide] = useState(false);
@@ -513,6 +539,12 @@ function DashboardApp() {
       const data = await fetchDashboard({ idToken: lineIdentity?.idToken, profileId });
       if (requestSeq !== dashboardRequestSeqRef.current) {
         return data;
+      }
+
+      // Production: demo payload is only valid in dev. Redirect if received unexpectedly.
+      if (IS_PROD && data?.mode === "demo") {
+        window.location.replace("/login");
+        return null;
       }
 
       const resolvedProfileId = data.active_profile_id || profileId || null;
@@ -543,6 +575,11 @@ function DashboardApp() {
       return data;
     } catch (err) {
       if (requestSeq !== dashboardRequestSeqRef.current) {
+        return null;
+      }
+      // AUTH_REQUIRED or expired token in production → redirect to login
+      if (IS_PROD && (err.code === "AUTH_REQUIRED" || err.message?.includes("idToken"))) {
+        window.location.replace("/login");
         return null;
       }
       trackError("frontend.dashboard", err, { profileId });
@@ -584,6 +621,13 @@ function DashboardApp() {
         if (lineIdentity.status === "unauthenticated") {
           if (!active) return;
           setIdentity(lineIdentity);
+          window.location.replace("/login");
+          return;
+        }
+
+        // Production: demo identity must never be treated as valid
+        if (IS_PROD && lineIdentity.status === "demo") {
+          if (!active) return;
           window.location.replace("/login");
           return;
         }
@@ -676,6 +720,45 @@ function DashboardApp() {
   const urgentItems = appointments.filter((item) => (item.fasting_required || item.type === "refill_reminder") && item.status !== "completed").slice(0, 3);
   const records = appointments.filter((item) => item.status === "completed");
   const hasCareData = dashboardHasCareData(dashboard);
+  const todayDate = todayInTaipei();
+  const todayLabel = useMemo(() => formatTaipeiTodayLabel(todayDate), [todayDate]);
+  const todayTasks = useMemo(() => buildTodayTasks({
+    today: todayDate,
+    appointments,
+    medications,
+  }), [appointments, medications, todayDate]);
+  const showContactDock = !IS_PROD || isPersonalMode;
+
+  async function handleAskFamily(task = null) {
+    const careName = selectedProfile?.display_name || patient.name || "家人";
+    let message = `${careName} 正在看 Care WEDO 今日照護，但看不太懂，需要家人協助確認。`;
+    if (task?.kind === "medication") {
+      message = `${careName} 忘記剛剛有沒有吃藥，請幫忙確認。先不要讓 ${careName} 重複吃藥。\n\n藥品：${task.title}\n時間：${task.time}\n內容：${[task.subtitle, task.detail].filter(Boolean).join("；") || "請協助查看這筆吃藥說明。"}`;
+    } else if (task?.kind === "appointment") {
+      message = `${careName} 正在準備看診，請幫忙確認時間、醫院和要帶的東西。\n\n時間：${task.time}\n內容：${[task.title, task.subtitle, task.detail].filter(Boolean).join("；") || "請協助查看這筆看診提醒。"}`;
+    } else if (task) {
+      message = `${careName} 正在看 Care WEDO 的「${task.title}」提醒，但看不太懂，需要家人協助確認。\n\n時間：${task.time}\n內容：${[task.subtitle, task.detail].filter(Boolean).join("；") || "請協助查看這筆照護提醒。"}`;
+    }
+
+    try {
+      if (navigator.share) {
+        await navigator.share({ text: message });
+        return;
+      }
+      await navigator.clipboard?.writeText(message);
+      window.alert("已幫你把求助文字複製好，可以貼到 LINE 給家人。");
+    } catch {
+      window.prompt("請把這段文字傳給家人：", message);
+    }
+  }
+
+  function handleMobileNavChange(sectionId) {
+    if (sectionId === "upload") {
+      handleUploadClick();
+      return;
+    }
+    setActiveSection(sectionId);
+  }
 
   async function handleComplete(aptId) {
     // Optimistic UI update
@@ -721,12 +804,9 @@ function DashboardApp() {
       });
       if (result.success && result.data) {
         setOcrData({ data: result.data, saved: result.saved });
-        setScanCount(files.length);
-        setScanned(true);
         await loadDashboard(identity, activeProfileId);
       } else {
         setOcrError(result.error || "解析失敗");
-        setScanned(false);
       }
     } catch (err) {
       trackError("frontend.ocr", err, {
@@ -734,7 +814,6 @@ function DashboardApp() {
         profileId: activeProfileId,
       });
       setOcrError(err.message);
-      setScanned(false);
     } finally {
       setScanning(false);
     }
@@ -799,7 +878,20 @@ function DashboardApp() {
     loadDashboard(identity, activeProfileId);
   }
 
+  // Production: show loading screen until auth is resolved, preventing demo data flash
+  if (IS_PROD && identity.status === "loading") {
+    return (
+      <main className="care-shell">
+        <div className="auth-loading-screen">
+          <div className="auth-loading-spinner" />
+          <p>正在確認登入狀態…</p>
+        </div>
+      </main>
+    );
+  }
+
   return (
+    <>
     <main className="care-shell">
       <LoginSetup identity={identity} onSetupComplete={handleSetupComplete} />
       
@@ -812,72 +904,14 @@ function DashboardApp() {
         onChange={handleUploadChange}
       />
 
-      <section className="care-hero" aria-label="Care WEDO 健康小管家">
-        <div className="hero-copy">
-          <div className="brand-row">
-            <a href="/" className="brand-home" aria-label="回到 Care WEDO 首頁">
-              Care WEDO
-            </a>
-            <div className="hero-top-actions">
-              <span className="beta-pill">V 1.0</span>
-              <a
-                href="https://lin.ee/xzbyyvf"
-                target="_blank"
-                rel="noopener noreferrer"
-                className={`login-mini-status ${isPersonalMode ? "authenticated" : ""}`}
-              >
-                <img src={identity.profile?.pictureUrl || aiAvatar} alt="" />
-                <div className="status-info">
-                  <span className="status-label">{identity.profile?.displayName || "LINE 小管家"}</span>
-                  <span className="status-subtext">{isPersonalMode ? "已登入" : "照護小管家"}</span>
-                </div>
-              </a>
-              {isPersonalMode && (
-                <button
-                  type="button"
-                  className="btn-logout"
-                  onClick={logoutLineIdentity}
-                  aria-label="登出"
-                >
-                  登出
-                </button>
-              )}
-            </div>
-          </div>
-          <h1>
-            把看診單拍一下，
-            <br className="phone-break" />
-            全家照護不漏接。
-          </h1>
-          <p>
-            Care WEDO 會把回診、用藥、空腹與帶卡提醒整理成清楚的每日照護清單。
-            <br className="phone-break" />
-            長輩看得懂，家人也能同步掌握。
-          </p>
-          <div className="hero-highlights">
-            <span>看診行程</span>
-            <span>用藥提醒</span>
-            <span>家人同步</span>
-          </div>
-          <div className="hero-actions">
-            <button className="primary-action" type="button" onClick={() => setActiveSection("calendar")}>
-              查看今日照護
-            </button>
-            <button className="secondary-action" type="button" onClick={handleUploadClick} disabled={scanning}>
-              {scanned ? `已整理 ${scanCount} 張` : "上傳看診單"}
-            </button>
-          </div>
-        </div>
-      </section>
-
       {scanning ? (
         <ScanProgress step={scanStep} />
       ) : (
         <>
-          {(dashboardError || identity.message || ocrError) && (
+          {(dashboardError || (!IS_PROD && identity.message) || ocrError) && (
             <section className="notice-stack" aria-live="polite">
-              {dashboardError && <p>現在是範例畫面。</p>}
-              {identity.message && !dashboardError && <p>{identity.message}</p>}
+              {dashboardError && <p>{IS_PROD ? "資料載入失敗，請重新整理頁面。" : "現在是範例畫面。"}</p>}
+              {identity.message && !dashboardError && !IS_PROD && <p>{identity.message}</p>}
               {ocrError && <p className="notice-danger">{ocrError}</p>}
             </section>
           )}
@@ -937,28 +971,36 @@ function DashboardApp() {
         </aside>
 
         <section className="content-area" data-active-section={activeSection}>
-          <div className="toolbar">
-            <SectionHeading section={SECTIONS.find(s => s.id === activeSection)} />
-            <label className="search-box">
-              <span>搜尋</span>
-              <input
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="找醫院、科別、藥名..."
-              />
-            </label>
-          </div>
+          {activeSection !== "overview" && (
+            <div className="toolbar">
+              <SectionHeading section={SECTIONS.find(s => s.id === activeSection)} />
+              <label className="search-box">
+                <span>搜尋</span>
+                <input
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="找醫院、科別、藥名..."
+                />
+              </label>
+            </div>
+          )}
 
           {activeSection === "overview" && (
             <OverviewView
+              todayLabel={todayLabel}
+              todayTasks={todayTasks}
               nextAppointment={nextAppointment}
               urgentItems={urgentItems}
               medications={medications}
               checklistItems={checklistItems}
               hasCareData={hasCareData}
+              patient={patient}
+              selectedProfile={selectedProfile}
               onOpenCalendar={() => setActiveSection("calendar")}
+              onOpenProfile={() => setShowEditProfile(true)}
               onUpload={handleUploadClick}
               onComplete={handleComplete}
+              onAskFamily={handleAskFamily}
             />
           )}
 
@@ -1015,11 +1057,25 @@ function DashboardApp() {
       )}
 
       <MobileBottomNav
-        sections={SECTIONS}
+        sections={MOBILE_SECTIONS}
         activeSection={activeSection}
-        onChange={setActiveSection}
+        onChange={handleMobileNavChange}
       />
     </main>
+    {showContactDock && (
+      <GlobalCareContactDock
+        botContact={{
+          label: "小管家",
+          avatarUrl: aiAvatar,
+          lineUrl: CARE_WEDO_LINE_URL,
+          available: true,
+        }}
+        collaborators={dashboard?.collaborators || dashboard?.members || []}
+        context={activeSection}
+        onAskFamily={handleAskFamily}
+      />
+    )}
+    </>
   );
 }
 
@@ -1029,7 +1085,7 @@ function ProfileEditModal({ profile, onClose, onSave, canPersist }) {
     avatar_url: profile?.avatar_url || "",
     notes: profile?.notes || "",
   });
-  const [avatarName, setAvatarNameValue] = useState(getAvatarName(profile?.avatar_url) || "主要照護者頭像");
+  const [avatarName, setAvatarNameValue] = useState(getAvatarName(profile?.avatar_url) || "照護對象頭像");
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
@@ -1084,7 +1140,7 @@ function ProfileEditModal({ profile, onClose, onSave, canPersist }) {
         </div>
         <div className="modal-body">
           {!canPersist && (
-            <p className="error-msg">目前是範例畫面。請先從 LINE 登入並建立照護對象，才能把修改存進資料庫。</p>
+            <p className="error-msg">{IS_PROD ? "請先重新登入 LINE，才能儲存修改。" : "目前是範例畫面。請先從 LINE 登入並建立照護對象，才能把修改存進資料庫。"}</p>
           )}
           {error && <p className="error-msg">{error}</p>}
 
@@ -1099,7 +1155,7 @@ function ProfileEditModal({ profile, onClose, onSave, canPersist }) {
 
           <div className="avatar-manager">
             <div className="avatar-preview-frame">
-              <img src={formData.avatar_url || aiAvatar} alt="主要照護者頭像預覽" />
+              <img src={formData.avatar_url || aiAvatar} alt="照護對象頭像預覽" />
             </div>
             <div className="avatar-controls">
               <div className="form-group">
@@ -1120,7 +1176,7 @@ function ProfileEditModal({ profile, onClose, onSave, canPersist }) {
                   type="button"
                   className="inline-action"
                   onClick={() => {
-                    setAvatarNameValue("主要照護者頭像");
+                    setAvatarNameValue("照護對象頭像");
                     setFormData((current) => ({ ...current, avatar_url: null }));
                   }}
                   disabled={!formData.avatar_url}
@@ -1187,9 +1243,140 @@ function ProfileSwitcher({ profiles, activeProfileId, onChange }) {
 function SectionHeading({ section }) {
   return (
     <div className="section-heading-row" style={{ "--section-color": section.color }}>
-      <p className="panel-eyebrow">Care WEDO 健康小管家</p>
       <h2>{section.label}</h2>
     </div>
+  );
+}
+
+function normalizeCollaborator(item, index) {
+  const user = item?.user || item?.users || {};
+  const displayName = item?.displayName || item?.display_name || item?.name || user.name || `家人 ${index + 1}`;
+  return {
+    id: String(item?.id || item?.user_id || user.id || displayName),
+    displayName,
+    avatarUrl: item?.avatarUrl || item?.avatar_url || user.avatar_url || "",
+    role: item?.role || "member",
+    canContact: item?.canContact ?? item?.can_contact ?? true,
+  };
+}
+
+function GlobalCareContactDock({ collaborators = [], botContact, onAskFamily }) {
+  const [expanded, setExpanded] = useState(false);
+  const [contactSheet, setContactSheet] = useState(null);
+  const [showAllCollaborators, setShowAllCollaborators] = useState(false);
+  const normalizedCollaborators = useMemo(() => collaborators
+    .map(normalizeCollaborator)
+    .filter((item) => item.canContact)
+    .sort((a, b) => {
+      if (a.role === "admin" && b.role !== "admin") return -1;
+      if (b.role === "admin" && a.role !== "admin") return 1;
+      return a.displayName.localeCompare(b.displayName, "zh-Hant");
+    }), [collaborators]);
+  const visibleCollaborators = normalizedCollaborators.length > 3
+    ? normalizedCollaborators.slice(0, 1)
+    : normalizedCollaborators.slice(0, 2);
+  const hiddenCollaboratorCount = Math.max(normalizedCollaborators.length - visibleCollaborators.length, 0);
+  const contactName = contactSheet?.name || "家人";
+
+  function openBotSheet() {
+    setContactSheet({ type: "bot", name: botContact.label });
+  }
+
+  function openCollaboratorSheet(collaborator) {
+    setContactSheet({
+      type: "family",
+      name: collaborator.displayName,
+    });
+  }
+
+  function handleContactConfirm() {
+    if (contactSheet?.type === "bot") {
+      window.open(botContact.lineUrl || CARE_WEDO_LINE_URL, "_blank", "noopener,noreferrer");
+    } else {
+      onAskFamily(null);
+    }
+    setContactSheet(null);
+    setExpanded(false);
+  }
+
+  return (
+    <>
+      {expanded && (
+        <button type="button" className="care-contact-dismiss-layer" onClick={() => setExpanded(false)} aria-label="收合照護協助入口" />
+      )}
+      <aside className={`global-care-contact-dock ${expanded ? "is-expanded" : ""}`} aria-label="照護協助入口">
+        <button
+          type="button"
+          className="care-contact-main-button with-label"
+          onClick={() => setExpanded((current) => !current)}
+          aria-expanded={expanded}
+          aria-label={expanded ? "收合照護協助入口" : "展開照護協助入口"}
+        >
+          <img src={botContact.avatarUrl || aiAvatar} alt="" />
+          <span>{botContact.label}</span>
+        </button>
+        {expanded && botContact.available && (
+          <button type="button" className="care-contact-item with-label" onClick={openBotSheet} aria-label="問 Care WEDO 照護小管家">
+            <img src={botContact.avatarUrl || aiAvatar} alt="" />
+            <span>{botContact.label}</span>
+          </button>
+        )}
+        {expanded && visibleCollaborators.map((collaborator) => (
+          <button
+            key={collaborator.id}
+            type="button"
+            className="care-contact-item"
+            onClick={() => openCollaboratorSheet(collaborator)}
+            aria-label={`聯絡 ${collaborator.displayName}`}
+            title={collaborator.displayName}
+          >
+            {collaborator.avatarUrl ? <img src={collaborator.avatarUrl} alt="" /> : <span>{getInitial(collaborator.displayName)}</span>}
+          </button>
+        ))}
+        {expanded && hiddenCollaboratorCount > 0 && (
+          <button type="button" className="care-contact-more" onClick={() => setShowAllCollaborators(true)} aria-label={`顯示其他 ${hiddenCollaboratorCount} 位家人`}>
+            +{hiddenCollaboratorCount}
+          </button>
+        )}
+      </aside>
+
+      {showAllCollaborators && (
+        <div className="contact-sheet-backdrop" role="presentation" onClick={() => setShowAllCollaborators(false)}>
+          <section className="contact-sheet" role="dialog" aria-modal="true" aria-labelledby="collaborator-list-title" onClick={(event) => event.stopPropagation()}>
+            <h3 id="collaborator-list-title">可以聯絡的家人</h3>
+            <div className="collaborator-list">
+              {normalizedCollaborators.map((collaborator) => (
+                <button key={collaborator.id} type="button" onClick={() => {
+                  setShowAllCollaborators(false);
+                  openCollaboratorSheet(collaborator);
+                }}>
+                  <span>{getInitial(collaborator.displayName)}</span>
+                  {collaborator.displayName}
+                </button>
+              ))}
+            </div>
+            <button type="button" className="secondary-action" onClick={() => setShowAllCollaborators(false)}>取消</button>
+          </section>
+        </div>
+      )}
+
+      {contactSheet && (
+        <div className="contact-sheet-backdrop" role="presentation" onClick={() => setContactSheet(null)}>
+          <section className="contact-sheet" role="dialog" aria-modal="true" aria-labelledby="contact-sheet-title" onClick={(event) => event.stopPropagation()}>
+            <h3 id="contact-sheet-title">{contactSheet.type === "bot" ? "要問 Care WEDO 照護小管家嗎？" : `要聯絡 ${contactName} 嗎？`}</h3>
+            <button type="button" className="primary-action" onClick={handleContactConfirm}>
+              {contactSheet.type === "bot" ? "打開 LINE 對話" : "傳 LINE 訊息"}
+            </button>
+            {contactSheet.type !== "bot" && (
+              <button type="button" className="secondary-action" onClick={() => window.alert("請到 LINE 聯絡人頁面選擇語音通話。")}>
+                打 LINE 語音
+              </button>
+            )}
+            <button type="button" className="secondary-action subtle" onClick={() => setContactSheet(null)}>取消</button>
+          </section>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -1272,89 +1459,147 @@ function EmptyGuide({ title, description, primaryLabel, onPrimary, secondaryLabe
   );
 }
 
-function OverviewView({ nextAppointment, urgentItems, medications, checklistItems, hasCareData, onOpenCalendar, onUpload, onComplete }) {
+function OverviewView({
+  todayLabel,
+  todayTasks,
+  nextAppointment,
+  urgentItems,
+  medications,
+  checklistItems,
+  hasCareData,
+  patient,
+  selectedProfile,
+  onOpenCalendar,
+  onOpenProfile,
+  onUpload,
+  onComplete,
+  onAskFamily,
+}) {
+  const [locallyDoneTaskIds, setLocallyDoneTaskIds] = useState(() => new Set());
+  const careName = selectedProfile?.display_name || patient?.name || "照護對象";
+  const careTitle = getCareTodayTitle(selectedProfile, careName);
+
+  function handlePrimaryAction(task) {
+    setLocallyDoneTaskIds((prev) => new Set(prev).add(task.id));
+    if (task.kind === "appointment") {
+      onComplete(task.sourceId);
+    }
+  }
+
+  function handleForgotMedication(task) {
+    window.alert("請先不要重複吃藥。建議查看藥盒，或請家人協助確認。");
+    onAskFamily(task);
+  }
+
   return (
-    <div className="overview-grid">
-      <section className="summary-panel next-panel">
-        <div className="panel-header-with-action">
-          <p className="panel-eyebrow">下一件要記得的事</p>
-          {nextAppointment && (
-            <label className="checkbox-container">
-              已完成
-              <input type="checkbox" onChange={() => onComplete(nextAppointment.id)} />
-              <span className="checkmark" />
-            </label>
-          )}
+    <div className="today-care-view">
+      <section className="care-subject-header" aria-label={`${careName} 的照護頁`}>
+        <button type="button" className="care-avatar care-avatar-primary" onClick={onOpenProfile} aria-label={`開啟 ${careName} 的照護資料`}>
+          <img src={selectedProfile?.avatar_url || aiAvatar} alt={`${careName} 頭像`} />
+        </button>
+        <div>
+          <h3>{careTitle}</h3>
+          <p>{todayLabel.date}</p>
         </div>
-        {nextAppointment ? (
-          <>
-            <div className="date-badge">{formatDateLabel(nextAppointment.date)}</div>
-            <h3>{nextAppointment.department}</h3>
-            <p>{[nextAppointment.time, nextAppointment.hospital, nextAppointment.doctor && `${nextAppointment.doctor}醫師`].filter(Boolean).join(" ｜ ")}</p>
-            {nextAppointment.location && <p className="location-line">地點：{nextAppointment.location}</p>}
-            {nextAppointment.reminder_text && <p className="soft-note">{nextAppointment.reminder_text}</p>}
-          </>
+      </section>
+
+      <section className="today-hero-panel">
+        <div className="today-date-block">
+          <span>{todayLabel.headline}</span>
+          <strong>{todayLabel.date}</strong>
+        </div>
+        <div className="today-count-block">
+          <span>{todayTasks.length ? `今天有 ${todayTasks.length} 件事` : "今天沒有看診"}</span>
+          <p>{todayTasks.length ? "照時間慢慢做就好。" : medications.length ? "記得按時吃藥。" : "目前沒有需要處理的照護事項。"}</p>
+        </div>
+      </section>
+
+      <section className="today-timeline-panel">
+        {todayTasks.length ? (
+          <div className="elder-task-list">
+            {todayTasks.map((task) => {
+              const isDone = locallyDoneTaskIds.has(task.id) || task.status === "completed";
+              return (
+                <article key={task.id} className={`elder-task-card ${isDone ? "is-done" : ""} ${task.needsReview ? "needs-review" : ""}`}>
+                  <div className="elder-task-time">{task.time}</div>
+                  <div className="elder-task-body">
+                    <span className="elder-task-label">{task.label}</span>
+                    <h3>{task.title}</h3>
+                    {task.subtitle && <p>{task.subtitle}</p>}
+                    {task.detail && <p className="elder-task-detail">{task.detail}</p>}
+                    {task.needsReview && <p className="elder-task-warning">這筆資料還需要家人確認日期或內容。</p>}
+                  </div>
+                  <div className="elder-task-actions">
+                    <button type="button" className="primary-action elder-primary-action" onClick={() => handlePrimaryAction(task)} disabled={isDone}>
+                      {isDone ? "已記好了" : task.primaryActionLabel}
+                    </button>
+                    {task.kind === "medication" && !isDone && (
+                      <button type="button" className="secondary-action elder-secondary-action" onClick={() => handleForgotMedication(task)}>
+                        我忘記有沒有吃
+                      </button>
+                    )}
+                    <button type="button" className="secondary-action elder-secondary-action subtle" onClick={() => onAskFamily(task)}>
+                      問家人
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
         ) : hasCareData ? (
-          <p className="empty-state">🎉 太棒了！目前沒有待辦事項。</p>
+          <div className="today-empty-card">
+            <h3>今天沒有看診</h3>
+            <p>{medications.length ? "記得照吃藥說明按時吃藥。" : "目前沒有需要處理的照護事項。"}</p>
+            <button type="button" className="secondary-action elder-secondary-action" onClick={() => onAskFamily(null)}>
+              我看不懂，問家人
+            </button>
+          </div>
         ) : (
           <EmptyGuide
             title="今天還沒有照護事項。"
-            description="你可以先上傳一張看診單，或新增一件小提醒。Care WEDO 會幫你把重要的回診、用藥與注意事項整理成每日清單。"
-            primaryLabel="上傳看診單"
+            description="可以先拍一張看診單或藥袋，Care WEDO 會幫你整理成今天要做的事。"
+            primaryLabel="拍照上傳"
             onPrimary={onUpload}
-            secondaryLabel="記一件小提醒"
+            secondaryLabel="我看不懂，問家人"
           />
         )}
-        <button type="button" className="inline-action" onClick={onOpenCalendar}>看全部日曆</button>
       </section>
 
-      <section className="summary-panel">
-        <p className="panel-eyebrow">今天先看這幾件</p>
-        <ul className="check-list">
-          {checklistItems.slice(0, 4).map((item) => (
-            <li key={item}>{item}</li>
-          ))}
-        </ul>
-      </section>
+      <section className="today-support-grid">
+        <article className="summary-panel next-panel">
+          <p className="panel-eyebrow">下一次看診</p>
+          {nextAppointment ? (
+            <>
+              <div className="date-badge">{formatDateLabel(nextAppointment.date, nextAppointment.time)}</div>
+              <h3>{nextAppointment.department}</h3>
+              <p>{[nextAppointment.hospital, nextAppointment.doctor && `${nextAppointment.doctor}醫師`].filter(Boolean).join(" ｜ ")}</p>
+              <button type="button" className="inline-action" onClick={onOpenCalendar}>看看診清單</button>
+            </>
+          ) : (
+            <p className="empty-state">目前沒有下一次看診安排。</p>
+          )}
+        </article>
 
-      <section className="summary-panel">
-        <p className="panel-eyebrow">需要多留意</p>
-        <div className="attention-list">
-          {urgentItems.length ? urgentItems.map((item) => (
-            <article key={item.id} className="attention-item">
-              <strong>{typeLabel(item.type)}：{item.department}</strong>
-              <span>{item.fasting_required ? `前 ${item.fasting_hours || 8} 小時先不要吃東西` : item.reminder_text || "照提醒做就好"}</span>
-            </article>
-          )) : <p className="empty-state">目前沒有特別要擔心的提醒。</p>}
-        </div>
-      </section>
+        <article className="summary-panel">
+          <p className="panel-eyebrow">需要多留意</p>
+          <div className="attention-list">
+            {urgentItems.length ? urgentItems.map((item) => (
+              <article key={item.id} className="attention-item">
+                <strong>{typeLabel(item.type)}：{item.department}</strong>
+                <span>{item.fasting_required ? `前 ${item.fasting_hours || 8} 小時先不要吃東西` : item.reminder_text || "照提醒做就好"}</span>
+              </article>
+            )) : <p className="empty-state">目前沒有特別要擔心的提醒。</p>}
+          </div>
+        </article>
 
-      <section className="summary-panel">
-        <p className="panel-eyebrow">常用功能</p>
-        <div className="quick-actions">
-          <button type="button" onClick={onUpload}>拍照放進來</button>
-          <button type="button">找以前紀錄</button>
-          <button type="button">記一件小提醒</button>
-          <button type="button">看診行程</button>
-          <button type="button">用藥提醒</button>
-          <button type="button">家人同步</button>
-        </div>
-        <p className="helper-copy">現在建議先用 LINE 傳照片。這裡的上傳功能會慢慢補齊。</p>
-      </section>
-
-      <section className="summary-panel wide-panel">
-        <p className="panel-eyebrow">現在要吃的藥</p>
-        <div className="medicine-strip">
-          {medications.slice(0, 4).map((med) => (
-            <article key={med.id} className="medicine-chip">
-              <span style={{ backgroundColor: med.color }} />
-              <div>
-                <strong>{med.name}</strong>
-                <p>{med.frequency}・{med.dosage}</p>
-              </div>
-            </article>
-          ))}
-        </div>
+        <article className="summary-panel wide-panel">
+          <p className="panel-eyebrow">今天先看這幾件</p>
+          <ul className="check-list">
+            {checklistItems.slice(0, 3).map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </article>
       </section>
     </div>
   );
@@ -1538,7 +1783,7 @@ function SettingsView({ patient, identity, isPersonalMode, careProfiles, selecte
             <label>稱呼</label>
             <strong>{selectedProfile?.display_name || patient.name || "洪爸爸"}</strong>
             <label>LINE 狀態</label>
-            <strong>{isPersonalMode ? "已用 LINE 登入" : "目前是範例畫面"}</strong>
+            <strong>{isPersonalMode ? "已用 LINE 登入" : IS_PROD ? "請重新登入 LINE" : "目前是範例畫面"}</strong>
           </div>
         </div>
       </section>

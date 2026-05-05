@@ -33,6 +33,33 @@ test("Groups API requires a bearer token before resolving a user", () => {
   assert.match(source, /請先登入/);
 });
 
+test("Groups API keeps invite join idempotent for existing members before plan limits", () => {
+  const source = readProjectFile("functions/api/groups.ts");
+  const joinAction = source.slice(source.indexOf('if (body.action === "join")'));
+  const existingMembershipIndex = joinAction.indexOf("const existingMembership");
+  const limitCheckIndex = joinAction.indexOf("checkGroupMemberLimit");
+  assert.notEqual(existingMembershipIndex, -1);
+  assert.notEqual(limitCheckIndex, -1);
+  assert.ok(existingMembershipIndex < limitCheckIndex);
+  assert.match(source, /if \(existingMembership\.length === 0\) \{/);
+});
+
+test("Family group creation uses a user feature flag, not group plans", () => {
+  const groupsApi = readProjectFile("functions/api/groups.ts");
+  const supabase = readProjectFile("functions/_shared/supabase.ts");
+  const migration = readProjectFile("supabase/migration_phase46_user_feature_flags.sql");
+  const createAction = groupsApi.slice(groupsApi.indexOf('if (body.action === "create")'));
+  const canCreateStart = supabase.indexOf("export async function canCreateFamilyGroup");
+  const canCreateEnd = supabase.indexOf("/**\n * Check whether a new member", canCreateStart);
+  const canCreate = supabase.slice(canCreateStart, canCreateEnd);
+
+  assert.match(migration, /create table if not exists public\.user_feature_flags/i);
+  assert.match(migration, /multiple_family_groups/);
+  assert.match(createAction, /canCreateFamilyGroup\(env,\s*userId\)/);
+  assert.match(canCreate, /hasUserFeatureFlag\(env,\s*userId,\s*MULTIPLE_FAMILY_GROUPS_FEATURE\)/);
+  assert.doesNotMatch(canCreate, /getGroupPlan|plan_id|internal/);
+});
+
 test("Cron endpoints fail closed when CRON_SECRET is not configured", () => {
   for (const file of ["functions/api/cron/reminders.ts", "functions/api/cron/evening.ts"]) {
     const source = readProjectFile(file);

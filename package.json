@@ -1,0 +1,14 @@
+{
+  "name": "care-wedo-scripts",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "backfill:scope:dry": "tsx scripts/backfill-scope.ts --dry-run",
+    "backfill:scope:apply": "tsx scripts/backfill-scope.ts --apply",
+    "cleanup:legacy:dry": "tsx scripts/cleanup-legacy-demo.ts",
+    "cleanup:legacy:apply": "tsx scripts/cleanup-legacy-demo.ts --apply"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.4"
+  }
+}

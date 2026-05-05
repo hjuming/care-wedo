@@ -1,5 +1,8 @@
 import {
   UserFamilyGroupRow,
+  canCreateFamilyGroup,
+  checkGroupMemberLimit,
+  checkGroupRecipientLimit,
   createCareProfile,
   createGroup,
   getBearerToken,
@@ -102,12 +105,38 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
     if (body.action === "create") {
       if (!body.name) return Response.json({ error: "請提供群組名稱" }, { status: 400 });
+
+      const createCheck = await canCreateFamilyGroup(env, userId);
+      if (!createCheck.ok) {
+        return Response.json({ error: createCheck.message, code: createCheck.error }, { status: 403 });
+      }
+
       const group = await createGroup(env, userId, body.name);
       return Response.json({ success: true, group });
     }
 
     if (body.action === "join") {
       if (!body.code) return Response.json({ error: "請提供邀請碼" }, { status: 400 });
+
+      // Resolve group first so we can check member limit before joining
+      const groups = await supabaseFetch<Array<{ id: number }>>(
+        env,
+        `family_groups?invite_code=eq.${encodeURIComponent(body.code.toUpperCase())}&select=id&limit=1`,
+      );
+      if (groups.length === 0) return Response.json({ error: "找不到該邀請碼對應的群組" }, { status: 404 });
+
+      const existingMembership = await supabaseFetch<UserFamilyGroupRow[]>(
+        env,
+        `user_family_groups?user_id=eq.${userId}&group_id=eq.${groups[0].id}&select=group_id&limit=1`,
+      );
+
+      if (existingMembership.length === 0) {
+        const memberCheck = await checkGroupMemberLimit(env, groups[0].id);
+        if (!memberCheck.ok) {
+          return Response.json({ error: memberCheck.message, code: memberCheck.error }, { status: 403 });
+        }
+      }
+
       const group = await joinGroupByCode(env, userId, body.code);
       return Response.json({ success: true, group });
     }
@@ -116,9 +145,14 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       if (!body.group_id) return Response.json({ error: "請先選擇家人群組" }, { status: 400 });
       if (!body.display_name) return Response.json({ error: "請輸入稱呼" }, { status: 400 });
 
-      const groups = await getUserGroups(env, userId);
-      const canUseGroup = groups.some((group) => group.id === body.group_id);
+      const userGroups = await getUserGroups(env, userId);
+      const canUseGroup = userGroups.some((group) => group.id === body.group_id);
       if (!canUseGroup) return Response.json({ error: "您還沒有這個群組的權限" }, { status: 403 });
+
+      const recipientCheck = await checkGroupRecipientLimit(env, body.group_id);
+      if (!recipientCheck.ok) {
+        return Response.json({ error: recipientCheck.message, code: recipientCheck.error }, { status: 403 });
+      }
 
       const profile = await createCareProfile(env, {
         groupId: body.group_id,
