@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { resolveCareWedoRoute } from "./routing.js";
+import { isLineCallbackSearch, resolveCareWedoRoute, resolveInitialCareWedoRoute } from "./routing.js";
 
 test("resolveCareWedoRoute sends the public homepage to the landing page", () => {
   assert.equal(resolveCareWedoRoute("/"), "landing");
@@ -25,4 +25,16 @@ test("resolveCareWedoRoute sends the terms path to the terms page", () => {
 
 test("resolveCareWedoRoute falls back to the public landing page", () => {
   assert.equal(resolveCareWedoRoute("/pricing"), "landing");
+});
+
+test("resolveInitialCareWedoRoute sends LINE callback URLs to the app without changing the URL first", () => {
+  assert.equal(resolveInitialCareWedoRoute("/", "?liff.state=%2Fapp&code=abc"), "app");
+  assert.equal(resolveInitialCareWedoRoute("/", "?code=abc"), "app");
+  assert.equal(resolveInitialCareWedoRoute("/login", "?liff.state=%2Fapp"), "app");
+});
+
+test("isLineCallbackSearch detects LIFF and OAuth callback parameters", () => {
+  assert.equal(isLineCallbackSearch("?liff.state=%2Fapp"), true);
+  assert.equal(isLineCallbackSearch("?code=abc"), true);
+  assert.equal(isLineCallbackSearch("?state=abc"), false);
 });

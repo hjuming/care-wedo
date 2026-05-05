@@ -1,4 +1,5 @@
 import { Component } from "react";
+import { trackError } from "../services/telemetry";
 
 /**
  * 全域錯誤邊界 — 防止 React render 錯誤導致整個頁面白屏。
@@ -15,7 +16,9 @@ export default class ErrorBoundary extends Component {
   }
 
   componentDidCatch(error, errorInfo) {
-    console.error("[Care WEDO] Render Error:", error, errorInfo);
+    trackError("frontend.render", error, {
+      componentStack: errorInfo?.componentStack,
+    });
   }
 
   render() {

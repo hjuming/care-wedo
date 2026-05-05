@@ -23,8 +23,11 @@ type Env = {
 // Helper to get identity from request
 async function getIdentity(request: Request, env: Env) {
   const token = getBearerToken(request);
-  const identity = token ? await verifyLineIdToken(env, token) : null;
-  const userId = await getOrCreateDefaultUser(env, identity?.lineUserId);
+  if (!token) {
+    throw new Error("請先登入");
+  }
+  const identity = await verifyLineIdToken(env, token);
+  const userId = await getOrCreateDefaultUser(env, identity.lineUserId);
   return userId;
 }
 
@@ -72,9 +75,11 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
 
     return Response.json({ groups: groupsWithMembers, care_profiles: profiles.map(serializeCareProfile), user_memberships: memberships });
   } catch (error) {
+    const message = error instanceof Error ? error.message : "Groups API failed";
+    const status = message.includes("請先登入") ? 401 : 500;
     return Response.json(
-      { error: error instanceof Error ? error.message : "Groups API failed" },
-      { status: 500 },
+      { error: message },
+      { status },
     );
   }
 };
@@ -186,7 +191,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     return Response.json({ error: "不支援的操作" }, { status: 400 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Groups API failed";
-    const status = message.includes("管理者") ? 403 : 500;
+    const status = message.includes("請先登入") ? 401 : message.includes("管理者") ? 403 : 500;
     return Response.json({ error: message }, { status });
   }
 };

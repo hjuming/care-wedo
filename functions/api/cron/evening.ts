@@ -1,4 +1,5 @@
 import { supabaseFetch, Env as SupabaseEnv } from "../../_shared/supabase";
+import { logError, logEvent } from "../../_shared/logger";
 
 const DEFAULT_RECIPIENT = "親愛的爸爸 / 媽媽";
 
@@ -50,7 +51,12 @@ async function pushText(env: Env, userId: string, text: string) {
   });
 
   if (!response.ok) {
-    console.error(`LINE push failed: ${await response.text()}`);
+    const detail = await response.text();
+    logError("cron.evening_push_failed", new Error(`LINE push failed (${response.status})`), {
+      line_user_suffix: userId.slice(-4),
+      status: response.status,
+      detail,
+    });
   }
 }
 
@@ -156,15 +162,22 @@ function resolveLineRecipients(
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const authHeader = request.headers.get("Authorization");
+  if (!env.CRON_SECRET) {
+    logEvent("cron.evening_missing_secret");
+    return Response.json({ error: "CRON_SECRET is not configured." }, { status: 500 });
+  }
   if (env.CRON_SECRET && authHeader !== `Bearer ${env.CRON_SECRET}`) {
+    logEvent("cron.evening_unauthorized");
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const startedAt = Date.now();
   try {
     const now = new Date();
     const twTime = new Date(now.getTime() + 8 * 60 * 60 * 1000);
     twTime.setDate(twTime.getDate() + 1);
     const targetDate = twTime.toISOString().split("T")[0];
+    logEvent("cron.evening_started", { target_date: targetDate });
 
     const fastingApts = await fetchFastingAppointments(env, targetDate);
     const profileIds = new Set<number>();
@@ -229,9 +242,15 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       sentCount++;
     }
 
+    logEvent("cron.evening_completed", {
+      processed_date: targetDate,
+      sent_count: sentCount,
+      fasting_appointment_count: fastingApts.length,
+      duration_ms: Date.now() - startedAt,
+    });
     return Response.json({ success: true, processed_date: targetDate, sent_count: sentCount });
   } catch (error) {
-    console.error("Evening Cron Error:", error);
+    logError("cron.evening_failed", error, { duration_ms: Date.now() - startedAt });
     return Response.json({ error: String(error) }, { status: 500 });
   }
 };

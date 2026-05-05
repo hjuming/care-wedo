@@ -1,9 +1,27 @@
-const LIFF_ID = import.meta.env?.VITE_LINE_LIFF_ID || "";
+// LIFF ID is public. Keep a code fallback so manual local builds cannot produce
+// a login button that silently skips LINE OAuth.
+const DEFAULT_LIFF_ID = "2009972224-fQcfBXw5";
+const LIFF_ID = import.meta.env?.VITE_LINE_LIFF_ID || DEFAULT_LIFF_ID;
 
 // LINE Developers Console 的 LIFF Endpoint URL 必須設為此值：
 // https://care.wedopr.com/app
 // redirectUri 需與 Endpoint URL 完全相符（或為其子路徑）
-const APP_URL = `${window.location.origin}/app`;
+function getAppUrl() {
+  return `${window.location.origin}/app`;
+}
+
+export function buildLiffEntryUrl(liffId = LIFF_ID) {
+  return `https://liff.line.me/${encodeURIComponent(liffId)}`;
+}
+
+export function shouldOpenLiffEntryUrl(userAgent = window.navigator.userAgent) {
+  return /Android|iPhone|iPad|iPod/i.test(userAgent);
+}
+
+function openDashboardRoute() {
+  window.history.pushState(null, "", "/app");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+}
 
 /** 初始化 LIFF 並取得身分。在 DashboardApp boot() 中呼叫。 */
 export async function initLineIdentity() {
@@ -32,7 +50,7 @@ export async function initLineIdentity() {
     if (!liff.isLoggedIn()) {
       // 無論在 LINE App 內或一般瀏覽器，都觸發 LINE OAuth。
       // redirectUri 必須與 LINE Developers 的 LIFF Endpoint URL 相符。
-      liff.login({ redirectUri: APP_URL });
+      liff.login({ redirectUri: getAppUrl() });
       return {
         status: "redirecting",
         idToken: null,
@@ -66,25 +84,30 @@ export async function initLineIdentity() {
 export async function loginWithLine() {
   if (!LIFF_ID) {
     // 開發環境：直接進 /app（demo 模式）
-    window.history.pushState(null, "", "/app");
-    window.dispatchEvent(new PopStateEvent("popstate"));
+    openDashboardRoute();
     return;
   }
+
+  // 手機瀏覽器優先走 LIFF URL，讓 iOS Universal Link / Android App Link
+  // 有機會直接打開 LINE App 內的 LIFF Browser，而不是停在 Safari/Chrome 的 access-auto.line.me。
+  if (shouldOpenLiffEntryUrl()) {
+    window.location.assign(buildLiffEntryUrl());
+    return;
+  }
+
   try {
     const { default: liff } = await import("@line/liff");
     await liff.init({ liffId: LIFF_ID });
     if (liff.isLoggedIn()) {
       // 已登入 → 直接進後台
-      window.history.pushState(null, "", "/app");
-      window.dispatchEvent(new PopStateEvent("popstate"));
+      openDashboardRoute();
       return;
     }
     // redirectUri 必須與 LINE Developers LIFF Endpoint URL（https://care.wedopr.com/app）一致
-    liff.login({ redirectUri: APP_URL });
+    liff.login({ redirectUri: getAppUrl() });
   } catch {
     // 初始化失敗 → 也嘗試進 /app，讓 boot() 顯示錯誤訊息
-    window.history.pushState(null, "", "/app");
-    window.dispatchEvent(new PopStateEvent("popstate"));
+    openDashboardRoute();
   }
 }
 

@@ -7,6 +7,7 @@ import {
   supabaseFetch,
   verifyLineIdToken,
 } from "../../_shared/supabase";
+import { logError, logEvent } from "../../_shared/logger";
 
 type Env = {
   GOOGLE_API_KEY: string;
@@ -201,6 +202,7 @@ async function saveParsedData(env: Env, parsed: ParsedMedicalData, userId: numbe
 }
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+  const requestStartedAt = Date.now();
   try {
     const contentType = request.headers.get("content-type") || "";
     const images: Array<{ data: string; media_type: string }> = [];
@@ -216,33 +218,50 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       const files = formData.getAll("images").filter((item): item is File => item instanceof File);
 
       if (!files.length) {
+        logEvent("ocr.validation_failed", { reason: "missing_files" });
         return Response.json({ error: "請上傳至少一張圖片" }, { status: 400 });
       }
       if (files.length > MAX_FILES) {
+        logEvent("ocr.validation_failed", { reason: "too_many_files", file_count: files.length });
         return Response.json({ error: `最多上傳 ${MAX_FILES} 張圖片` }, { status: 400 });
       }
 
       for (const file of files) {
         if (!ALLOWED_TYPES.has(file.type)) {
+          logEvent("ocr.validation_failed", { reason: "unsupported_type", file_type: file.type });
           return Response.json({ error: `不支援的檔案格式: ${file.type}` }, { status: 400 });
         }
         if (file.size > MAX_FILE_SIZE) {
+          logEvent("ocr.validation_failed", { reason: "file_too_large", file_size: file.size });
           return Response.json({ error: "單張圖片不可超過 10MB" }, { status: 400 });
         }
         images.push({ data: await fileToBase64(file), media_type: file.type });
       }
     } else {
+      logEvent("ocr.validation_failed", { reason: "unsupported_content_type" });
       return Response.json({ error: "不支援的 Content-Type" }, { status: 400 });
     }
 
     const token = getBearerToken(request);
-    const identity = token ? await verifyLineIdToken(env, token) : null;
-    const userId = await getOrCreateDefaultUser(env, identity?.lineUserId);
+    if (!token) {
+      logEvent("ocr.unauthenticated", { file_count: images.length });
+      return Response.json({ error: "請先登入後再使用 OCR。" }, { status: 401 });
+    }
+
+    const identity = await verifyLineIdToken(env, token);
+    const userId = await getOrCreateDefaultUser(env, identity.lineUserId);
+    logEvent("ocr.request_started", {
+      user_id: userId,
+      profile_id: requestedProfileId,
+      file_count: images.length,
+      line_user_suffix: identity.lineUserId.slice(-4),
+    });
 
     // Check OCR quota for free plan users
     try {
       await checkOcrQuota(env, userId);
     } catch (quotaError) {
+      logError("ocr.quota_exceeded", quotaError, { user_id: userId });
       return Response.json(
         { error: quotaError instanceof Error ? quotaError.message : "超過使用次數限制" },
         { status: 429 },
@@ -251,8 +270,18 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
     const data = await parseMedicalImages(env, images);
     const saved = await saveParsedData(env, data, userId, requestedProfileId);
+    logEvent("ocr.request_completed", {
+      user_id: userId,
+      profile_id: requestedProfileId,
+      appointment_count: data.appointments?.length || 0,
+      medication_count: data.medications?.length || 0,
+      saved_appointment_count: saved.appointment_ids.length,
+      saved_medication_count: saved.medication_ids.length,
+      duration_ms: Date.now() - requestStartedAt,
+    });
     return Response.json({ success: true, data, saved });
   } catch (error) {
+    logError("ocr.request_failed", error, { duration_ms: Date.now() - requestStartedAt });
     return Response.json(
       { error: error instanceof Error ? error.message : "OCR API failed" },
       { status: 500 },

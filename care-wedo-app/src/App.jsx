@@ -3,22 +3,24 @@ import "./index.css";
 import GroupManager from "./components/GroupManager";
 import GroupSettings from "./components/GroupSettings";
 import LoginSetup from "./components/LoginSetup";
+import MobileBottomNav from "./components/MobileBottomNav";
 import OcrResult from "./components/OcrResult";
 import { patientData, medicines, timeline as initialTimeline, checklist as initialChecklist } from "./data/patient";
-import { fetchDashboard, ocrAnalyze, patchAppointment, updateProfile } from "./services/api";
+import { fetchDashboard, ocrAnalyze, patchAppointment, patchMedication, updateProfile } from "./services/api";
 import { initLineIdentity, loginWithLine, logoutLineIdentity } from "./services/liff";
+import { trackError, trackEvent } from "./services/telemetry";
 import PrivacyPage from "./components/PrivacyPage";
 import TermsPage from "./components/TermsPage";
 import aiAvatar from "./assets/ai-avatar.png";
-import { resolveCareWedoRoute } from "./routing";
+import { isLineCallbackSearch, resolveCareWedoRoute, resolveInitialCareWedoRoute } from "./routing";
 
 
 const SECTIONS = [
-  { id: "overview", label: "今天重點", icon: "⌂", color: "#256f5b" }, // 綠
-  { id: "calendar", label: "看診日曆", icon: "□", color: "#2b6cb0" }, // 藍
-  { id: "meds", label: "吃藥提醒", icon: "○", color: "#c57b37" }, // 橘
-  { id: "records", label: "看過什麼", icon: "≡", color: "#6b46c1" }, // 紫
-  { id: "settings", label: "家人設定", icon: "⚙", color: "#744210" }, // 褐
+  { id: "overview", label: "今天重點", mobileLabel: "今天", icon: "⌂", color: "#256f5b" },
+  { id: "calendar", label: "看診日曆", mobileLabel: "日曆", icon: "□", color: "#2b6cb0" },
+  { id: "meds", label: "吃藥提醒", mobileLabel: "用藥", icon: "○", color: "#c57b37" },
+  { id: "records", label: "看過什麼", mobileLabel: "紀錄", icon: "≡", color: "#6b46c1" },
+  { id: "settings", label: "家人設定", mobileLabel: "家人", icon: "⚙", color: "#744210" },
 ];
 
 function typeLabel(type) {
@@ -80,6 +82,22 @@ function normalizeMedication(med, index) {
 function matchSearch(item, query) {
   if (!query) return true;
   return Object.values(item).join(" ").toLowerCase().includes(query.toLowerCase());
+}
+
+function dashboardHasCareData(data) {
+  return Boolean((data?.appointments?.length || 0) + (data?.medications?.length || 0) + (data?.checklist?.length || 0));
+}
+
+function mergeDashboardShell(profileData, shellData) {
+  if (!profileData || !shellData) return profileData || shellData;
+  return {
+    ...profileData,
+    mode: shellData.mode || profileData.mode,
+    plan: shellData.plan ?? profileData.plan,
+    ocr_used: shellData.ocr_used ?? profileData.ocr_used,
+    ocr_limit: shellData.ocr_limit ?? profileData.ocr_limit,
+    care_profiles: shellData.care_profiles?.length ? shellData.care_profiles : profileData.care_profiles,
+  };
 }
 
 const AVATAR_MAX_SOURCE_SIZE = 5 * 1024 * 1024;
@@ -423,16 +441,9 @@ function LoginPage() {
 
 export default function App() {
   const [route, setRoute] = useState(() => {
-    // LINE OAuth 完成後會帶 liff.state 或 code 參數回到 Endpoint URL。
-    // 若 LIFF 把使用者導回首頁（Endpoint URL 設為 /），這裡偵測到 callback
-    // 參數就自動把路由切到 /app，確保使用者進入 Dashboard 而非首頁。
-    const params = new URLSearchParams(window.location.search);
-    const isLiffCallback = params.has("liff.state") || params.has("code");
-    if (isLiffCallback && window.location.pathname !== "/app") {
-      window.history.replaceState(null, "", "/app" + window.location.search);
-      return "app";
-    }
-    return resolveCareWedoRoute(window.location.pathname);
+    // LINE OAuth callback URL must remain untouched until liff.init() completes.
+    // We only route the SPA view to /app here; URL cleanup happens after LIFF init.
+    return resolveInitialCareWedoRoute(window.location.pathname, window.location.search);
   });
 
   useEffect(() => {
@@ -482,26 +493,75 @@ function DashboardApp() {
   const [scanCount, setScanCount] = useState(0);
   const [ocrData, setOcrData] = useState(null);
   const [ocrError, setOcrError] = useState(null);
+  const [showUploadGuide, setShowUploadGuide] = useState(false);
+  const [scanStep, setScanStep] = useState(null);
   const [dashboard, setDashboard] = useState(null);
   const [dashboardError, setDashboardError] = useState(null);
   const [activeProfileId, setActiveProfileId] = useState(null);
   const [identity, setIdentity] = useState({ status: "loading", idToken: null, profile: null, message: null });
   const [showEditProfile, setShowEditProfile] = useState(false);
+  const dashboardRequestSeqRef = useRef(0);
+  const dashboardCacheRef = useRef(new Map());
+  const dashboardShellRef = useRef(null);
 
   const loadDashboard = useCallback(async (lineIdentity, profileId = null) => {
+    const requestSeq = dashboardRequestSeqRef.current + 1;
+    dashboardRequestSeqRef.current = requestSeq;
+    const cacheKey = profileId ? String(profileId) : "default";
+
     try {
       const data = await fetchDashboard({ idToken: lineIdentity?.idToken, profileId });
-      setDashboard(data);
+      if (requestSeq !== dashboardRequestSeqRef.current) {
+        return data;
+      }
+
+      const resolvedProfileId = data.active_profile_id || profileId || null;
+      const resolvedCacheKey = resolvedProfileId ? String(resolvedProfileId) : cacheKey;
+      const cachedProfileData = dashboardCacheRef.current.get(resolvedCacheKey);
+      const nextData = cachedProfileData && dashboardHasCareData(cachedProfileData) && !dashboardHasCareData(data)
+        ? mergeDashboardShell(cachedProfileData, data)
+        : data;
+
+      dashboardShellRef.current = {
+        ...(dashboardShellRef.current || {}),
+        ...nextData,
+        appointments: [],
+        medications: [],
+        checklist: [],
+      };
+
+      dashboardCacheRef.current.set(resolvedCacheKey, nextData);
+      if (!profileId) {
+        dashboardCacheRef.current.set("default", nextData);
+      }
+
+      setDashboard(nextData);
       setDashboardError(null);
-      if (!profileId && data.active_profile_id) {
-        setActiveProfileId(data.active_profile_id);
+      if (resolvedProfileId) {
+        setActiveProfileId(resolvedProfileId);
       }
       return data;
     } catch (err) {
+      if (requestSeq !== dashboardRequestSeqRef.current) {
+        return null;
+      }
+      trackError("frontend.dashboard", err, { profileId });
       setDashboardError(err.message);
       return null;
     }
   }, []);
+
+  const updateActiveDashboard = useCallback((updater) => {
+    setDashboard((prev) => {
+      if (!prev) return prev;
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      const cacheProfileId = next.active_profile_id || activeProfileId;
+      if (cacheProfileId) {
+        dashboardCacheRef.current.set(String(cacheProfileId), next);
+      }
+      return next;
+    });
+  }, [activeProfileId]);
 
   async function handleProfileUpdate(updates) {
     if (!activeProfileId) {
@@ -529,6 +589,9 @@ function DashboardApp() {
         }
 
         setIdentity(lineIdentity);
+        if (isLineCallbackSearch(window.location.search)) {
+          window.history.replaceState(null, "", "/app");
+        }
         await loadDashboard(lineIdentity);
       } catch (err) {
         if (!active) return;
@@ -559,6 +622,14 @@ function DashboardApp() {
       active = false;
     };
   }, [loadDashboard]);
+
+  useEffect(() => {
+    if (!scanning) { setScanStep(null); return; }
+    setScanStep(0);
+    const t1 = setTimeout(() => setScanStep(1), 1200);
+    const t2 = setTimeout(() => setScanStep(2), 2800);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [scanning]);
 
   const isPersonalMode = dashboard?.mode === "personal" || identity.status === "authenticated";
   const careProfiles = dashboard?.care_profiles || [];
@@ -604,10 +675,11 @@ function DashboardApp() {
 
   const urgentItems = appointments.filter((item) => (item.fasting_required || item.type === "refill_reminder") && item.status !== "completed").slice(0, 3);
   const records = appointments.filter((item) => item.status === "completed");
+  const hasCareData = dashboardHasCareData(dashboard);
 
   async function handleComplete(aptId) {
     // Optimistic UI update
-    setDashboard(prev => {
+    updateActiveDashboard(prev => {
       if (!prev) return prev;
       return {
         ...prev,
@@ -625,7 +697,7 @@ function DashboardApp() {
     } catch (err) {
       console.error("Failed to complete task", err);
       // Rollback optimistic update on failure
-      setDashboard(prev => {
+      updateActiveDashboard(prev => {
         if (!prev) return prev;
         return {
           ...prev,
@@ -648,7 +720,7 @@ function DashboardApp() {
         profileId: activeProfileId,
       });
       if (result.success && result.data) {
-        setOcrData(result.data);
+        setOcrData({ data: result.data, saved: result.saved });
         setScanCount(files.length);
         setScanned(true);
         await loadDashboard(identity, activeProfileId);
@@ -657,6 +729,10 @@ function DashboardApp() {
         setScanned(false);
       }
     } catch (err) {
+      trackError("frontend.ocr", err, {
+        fileCount: files.length,
+        profileId: activeProfileId,
+      });
       setOcrError(err.message);
       setScanned(false);
     } finally {
@@ -670,8 +746,51 @@ function DashboardApp() {
     event.target.value = "";
   }
 
+  function handleUploadClick() {
+    setShowUploadGuide(true);
+  }
+
+  function handleUploadConfirm() {
+    setShowUploadGuide(false);
+    fileInputRef.current?.click();
+  }
+
+  async function handleOcrCorrectionsSave({ appointments: correctedAppointments = [], medications: correctedMedications = [] }) {
+    const appointmentIds = ocrData?.saved?.appointment_ids || [];
+    const medicationIds = ocrData?.saved?.medication_ids || [];
+
+    await Promise.all([
+      ...correctedAppointments.map((apt, index) => {
+        const id = appointmentIds[index];
+        if (!id) return null;
+        return patchAppointment(id, apt, { idToken: identity.idToken });
+      }).filter(Boolean),
+      ...correctedMedications.map((med, index) => {
+        const id = medicationIds[index];
+        if (!id) return null;
+        return patchMedication(id, med, { idToken: identity.idToken });
+      }).filter(Boolean),
+    ]);
+
+    setOcrData((prev) => prev ? {
+      ...prev,
+      data: {
+        ...prev.data,
+        appointments: correctedAppointments,
+        medications: correctedMedications,
+      },
+    } : prev);
+    await loadDashboard(identity, activeProfileId);
+  }
+
   function handleProfileChange(profileId) {
+    trackEvent("frontend.profile_switch", { profileId });
     setActiveProfileId(profileId);
+    const cached = dashboardCacheRef.current.get(String(profileId));
+    if (cached) {
+      setDashboard(mergeDashboardShell(cached, dashboardShellRef.current));
+      setDashboardError(null);
+    }
     loadDashboard(identity, profileId);
   }
 
@@ -744,22 +863,37 @@ function DashboardApp() {
             <button className="primary-action" type="button" onClick={() => setActiveSection("calendar")}>
               查看今日照護
             </button>
-            <button className="secondary-action" type="button" onClick={() => fileInputRef.current?.click()} disabled={scanning}>
-              {scanning ? "正在整理單據..." : scanned ? `已整理 ${scanCount} 張` : "上傳看診單"}
+            <button className="secondary-action" type="button" onClick={handleUploadClick} disabled={scanning}>
+              {scanned ? `已整理 ${scanCount} 張` : "上傳看診單"}
             </button>
           </div>
         </div>
       </section>
 
-      {(dashboardError || identity.message || ocrError) && (
-        <section className="notice-stack" aria-live="polite">
-          {dashboardError && <p>現在是範例畫面。</p>}
-          {identity.message && !dashboardError && <p>{identity.message}</p>}
-          {ocrError && <p className="notice-danger">{ocrError}</p>}
-        </section>
+      {scanning ? (
+        <ScanProgress step={scanStep} />
+      ) : (
+        <>
+          {(dashboardError || identity.message || ocrError) && (
+            <section className="notice-stack" aria-live="polite">
+              {dashboardError && <p>現在是範例畫面。</p>}
+              {identity.message && !dashboardError && <p>{identity.message}</p>}
+              {ocrError && <p className="notice-danger">{ocrError}</p>}
+            </section>
+          )}
+          {ocrData && (
+            <OcrResult
+              data={ocrData}
+              onClose={() => setOcrData(null)}
+              onSaveCorrections={handleOcrCorrectionsSave}
+              onNavigate={(section) => {
+                setOcrData(null);
+                setActiveSection(section);
+              }}
+            />
+          )}
+        </>
       )}
-
-      {ocrData && <OcrResult data={ocrData} onClose={() => setOcrData(null)} />}
 
       <section className="dashboard-grid">
         <aside className="side-rail" aria-label="健康小管家選單">
@@ -821,22 +955,32 @@ function DashboardApp() {
               urgentItems={urgentItems}
               medications={medications}
               checklistItems={checklistItems}
+              hasCareData={hasCareData}
               onOpenCalendar={() => setActiveSection("calendar")}
-              onUpload={() => fileInputRef.current?.click()}
+              onUpload={handleUploadClick}
               onComplete={handleComplete}
             />
           )}
 
           {activeSection === "calendar" && (
-            <CalendarView appointments={appointments} />
+            <CalendarView
+              appointments={appointments}
+              onUpload={handleUploadClick}
+            />
           )}
 
           {activeSection === "meds" && (
-            <MedicationView medications={medications} />
+            <MedicationView
+              medications={medications}
+              onUpload={handleUploadClick}
+            />
           )}
 
           {activeSection === "records" && (
-            <RecordsView records={records} />
+            <RecordsView
+              records={records}
+              onUpload={handleUploadClick}
+            />
           )}
 
           {activeSection === "settings" && (
@@ -848,6 +992,7 @@ function DashboardApp() {
               selectedProfile={selectedProfile}
               onGroupChange={() => loadDashboard(identity, activeProfileId)}
               onEditProfile={() => setShowEditProfile(true)}
+              onLogout={logoutLineIdentity}
             />
           )}
         </section>
@@ -861,6 +1006,19 @@ function DashboardApp() {
           canPersist={Boolean(activeProfileId)}
         />
       )}
+
+      {showUploadGuide && (
+        <UploadGuide
+          onConfirm={handleUploadConfirm}
+          onClose={() => setShowUploadGuide(false)}
+        />
+      )}
+
+      <MobileBottomNav
+        sections={SECTIONS}
+        activeSection={activeSection}
+        onChange={setActiveSection}
+      />
     </main>
   );
 }
@@ -1036,7 +1194,85 @@ function SectionHeading({ section }) {
 }
 
 
-function OverviewView({ nextAppointment, urgentItems, medications, checklistItems, onOpenCalendar, onUpload, onComplete }) {
+const SCAN_STEPS = ["讀取照片", "辨識文字", "整理提醒"];
+
+function ScanProgress({ step }) {
+  return (
+    <section className="ocr-progress" aria-live="polite">
+      <div className="ocr-progress-header">
+        <p className="ocr-progress-title">正在幫你整理照護資訊…</p>
+        <p className="ocr-progress-sub">等等請你再確認一次內容是否正確。</p>
+      </div>
+      <div className="ocr-progress-steps">
+        {SCAN_STEPS.map((label, index) => (
+          <div
+            key={label}
+            className={[
+              "ocr-progress-step",
+              step === null ? "" : index < step ? "done" : index === step ? "active" : "",
+            ].filter(Boolean).join(" ")}
+          >
+            <span className="ocr-step-dot" aria-hidden="true" />
+            <span>{label}</span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function UploadGuide({ onConfirm, onClose }) {
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>上傳照護單據</h2>
+          <button type="button" onClick={onClose} className="btn-close">✕</button>
+        </div>
+        <div className="modal-body upload-guide-body">
+          <p className="upload-guide-intro">
+            請拍下<strong>看診單、藥袋、處方箋或提醒單</strong>。
+          </p>
+          <ul className="upload-guide-tips">
+            <li>照片文字清楚、盡量拍完整</li>
+            <li>盡量避免反光或模糊</li>
+            <li>可以一次上傳多張</li>
+          </ul>
+          <p className="upload-guide-note">
+            Care WEDO 會協助整理出回診時間、用藥資訊與注意事項。
+          </p>
+        </div>
+        <div className="modal-footer">
+          <button type="button" className="secondary-action" onClick={onClose}>取消</button>
+          <button type="button" className="primary-action" onClick={onConfirm}>拍照或上傳照片</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EmptyGuide({ title, description, primaryLabel, onPrimary, secondaryLabel, onSecondary }) {
+  return (
+    <div className="empty-guide">
+      <p className="empty-guide-title">{title}</p>
+      <p className="empty-guide-copy">{description}</p>
+      <div className="empty-guide-actions">
+        {primaryLabel && (
+          <button type="button" className="primary-action" onClick={onPrimary}>
+            {primaryLabel}
+          </button>
+        )}
+        {secondaryLabel && (
+          <button type="button" className="secondary-action" onClick={onSecondary}>
+            {secondaryLabel}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function OverviewView({ nextAppointment, urgentItems, medications, checklistItems, hasCareData, onOpenCalendar, onUpload, onComplete }) {
   return (
     <div className="overview-grid">
       <section className="summary-panel next-panel">
@@ -1058,8 +1294,16 @@ function OverviewView({ nextAppointment, urgentItems, medications, checklistItem
             {nextAppointment.location && <p className="location-line">地點：{nextAppointment.location}</p>}
             {nextAppointment.reminder_text && <p className="soft-note">{nextAppointment.reminder_text}</p>}
           </>
-        ) : (
+        ) : hasCareData ? (
           <p className="empty-state">🎉 太棒了！目前沒有待辦事項。</p>
+        ) : (
+          <EmptyGuide
+            title="今天還沒有照護事項。"
+            description="你可以先上傳一張看診單，或新增一件小提醒。Care WEDO 會幫你把重要的回診、用藥與注意事項整理成每日清單。"
+            primaryLabel="上傳看診單"
+            onPrimary={onUpload}
+            secondaryLabel="記一件小提醒"
+          />
         )}
         <button type="button" className="inline-action" onClick={onOpenCalendar}>看全部日曆</button>
       </section>
@@ -1091,6 +1335,9 @@ function OverviewView({ nextAppointment, urgentItems, medications, checklistItem
           <button type="button" onClick={onUpload}>拍照放進來</button>
           <button type="button">找以前紀錄</button>
           <button type="button">記一件小提醒</button>
+          <button type="button">看診行程</button>
+          <button type="button">用藥提醒</button>
+          <button type="button">家人同步</button>
         </div>
         <p className="helper-copy">現在建議先用 LINE 傳照片。這裡的上傳功能會慢慢補齊。</p>
       </section>
@@ -1113,7 +1360,7 @@ function OverviewView({ nextAppointment, urgentItems, medications, checklistItem
   );
 }
 
-function CalendarView({ appointments }) {
+function CalendarView({ appointments, onUpload }) {
   const [currentDate, setCurrentDate] = useState(new Date());
 
   const year = currentDate.getFullYear();
@@ -1192,13 +1439,21 @@ function CalendarView({ appointments }) {
               {apt.notes && <p className="soft-note">{apt.notes}</p>}
             </div>
           </article>
-        )) : <p className="empty-state">沒有找到符合的提醒。</p>}
+        )) : (
+          <EmptyGuide
+            title="目前還沒有看診提醒。"
+            description="你可以從看診單照片開始，或手動新增下一次回診日期。建立後，家人也能一起同步查看。"
+            primaryLabel="上傳看診單"
+            onPrimary={onUpload}
+            secondaryLabel="新增看診提醒"
+          />
+        )}
       </section>
     </div>
   );
 }
 
-function MedicationView({ medications }) {
+function MedicationView({ medications, onUpload }) {
   return (
     <div className="medicine-grid">
       {medications.length ? medications.map((med) => (
@@ -1214,12 +1469,20 @@ function MedicationView({ medications }) {
             </dl>
           </div>
         </article>
-      )) : <p className="empty-state">沒有找到符合的藥。</p>}
+      )) : (
+        <EmptyGuide
+          title="目前還沒有用藥提醒。"
+          description="你可以拍下藥袋或處方資訊，讓 Care WEDO 幫你整理用藥時間、注意事項與提醒。"
+          primaryLabel="上傳藥袋照片"
+          onPrimary={onUpload}
+          secondaryLabel="新增用藥提醒"
+        />
+      )}
     </div>
   );
 }
 
-function RecordsView({ records }) {
+function RecordsView({ records, onUpload }) {
   const grouped = useMemo(() => {
     const groups = {};
     records.forEach(record => {
@@ -1251,12 +1514,20 @@ function RecordsView({ records }) {
             ))}
           </div>
         </section>
-      )) : <p className="empty-state">還沒有已完成的紀錄。</p>}
+      )) : (
+        <EmptyGuide
+          title="目前還沒有照護紀錄。"
+          description="每一次看診、用藥調整、症狀觀察，都可以慢慢整理成家人看得懂的健康時間線。"
+          primaryLabel="上傳看診單"
+          onPrimary={onUpload}
+          secondaryLabel="新增照護紀錄"
+        />
+      )}
     </div>
   );
 }
 
-function SettingsView({ patient, identity, isPersonalMode, careProfiles, selectedProfile, onGroupChange }) {
+function SettingsView({ patient, identity, isPersonalMode, careProfiles, selectedProfile, onGroupChange, onLogout }) {
   return (
     <div className="settings-grid">
       <section className="summary-panel">
@@ -1281,7 +1552,12 @@ function SettingsView({ patient, identity, isPersonalMode, careProfiles, selecte
               <span>{profile.is_default ? "主要照護對象" : "共同管理"}</span>
             </article>
           )) : (
-            <p className="empty-state">登入後，可以先建立媽媽或爸爸的資料。</p>
+            <EmptyGuide
+              title="目前還沒有加入其他家人。"
+              description="你可以邀請家人一起管理照護空間，讓提醒、紀錄與重要事項不再只靠一個人記得。"
+              primaryLabel="邀請家人"
+              secondaryLabel="複製邀請碼"
+            />
           )}
         </div>
       </section>
@@ -1316,6 +1592,21 @@ function SettingsView({ patient, identity, isPersonalMode, careProfiles, selecte
           </article>
         </div>
       </section>
+
+      {isPersonalMode && onLogout && (
+        <section className="summary-panel wide-panel">
+          <p className="panel-eyebrow">帳號</p>
+          <div className="account-row">
+            <div>
+              <p className="account-name">{identity.profile?.displayName || "LINE 帳號"}</p>
+              <p className="account-sub">目前以 LINE 帳號登入</p>
+            </div>
+            <button type="button" className="btn-logout" onClick={onLogout}>
+              登出
+            </button>
+          </div>
+        </section>
+      )}
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { supabaseFetch, Env as SupabaseEnv } from "../../_shared/supabase";
+import { logError, logEvent } from "../../_shared/logger";
 
 const DEFAULT_RECIPIENT = "親愛的爸爸 / 媽媽";
 
@@ -71,7 +72,11 @@ async function pushText(env: Env, userId: string, text: string) {
 
   if (!response.ok) {
     const detail = await response.text();
-    console.error(`LINE push failed (${response.status}): ${detail}`);
+    logError("cron.reminders_push_failed", new Error(`LINE push failed (${response.status})`), {
+      line_user_suffix: userId.slice(-4),
+      status: response.status,
+      detail,
+    });
   }
 }
 
@@ -162,15 +167,22 @@ function resolveLineRecipients(
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const authHeader = request.headers.get("Authorization");
+  if (!env.CRON_SECRET) {
+    logEvent("cron.reminders_missing_secret");
+    return Response.json({ error: "CRON_SECRET is not configured." }, { status: 500 });
+  }
   if (env.CRON_SECRET && authHeader !== `Bearer ${env.CRON_SECRET}`) {
+    logEvent("cron.reminders_unauthorized");
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const startedAt = Date.now();
   try {
     const now = new Date();
     const twTime = new Date(now.getTime() + 8 * 60 * 60 * 1000);
     twTime.setDate(twTime.getDate() + 1);
     const targetDate = twTime.toISOString().split("T")[0];
+    logEvent("cron.reminders_started", { target_date: targetDate });
 
     const reminders = await fetchReminderAppointments(env, targetDate);
     const activeMeds = await fetchActiveMedications(env);
@@ -282,9 +294,16 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       body: JSON.stringify({ status: "expired" }),
     });
 
+    logEvent("cron.reminders_completed", {
+      processed_date: targetDate,
+      users_notified: sentCount,
+      reminder_count: reminders.length,
+      medication_count: activeMeds.length,
+      duration_ms: Date.now() - startedAt,
+    });
     return Response.json({ success: true, processed_date: targetDate, users_notified: sentCount });
   } catch (error) {
-    console.error("Cron Worker Error:", error);
+    logError("cron.reminders_failed", error, { duration_ms: Date.now() - startedAt });
     return Response.json({ error: String(error) }, { status: 500 });
   }
 };

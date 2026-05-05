@@ -17,6 +17,7 @@
 | Sprint C | LINE Bot OCR 互動升級（快速切換、歸屬修正）| ✅ 程式碼完成 |
 | Sprint 4 | LINE 實機閉環驗證 | 🟡 **驗證中** |
 | Sprint 5 | 正式上線防護（法規頁、帳號刪除）| ✅ 程式碼完成 |
+| Beta Observability | 實測結構化 log（前端、OCR、LINE、cron）| ✅ 程式碼完成 |
 
 ---
 
@@ -184,13 +185,14 @@ LINE Developers Console
 | 5-B 服務條款 + 非醫療聲明（同首頁版型）| `components/TermsPage.jsx` | ✅ |
 | 5-C `DELETE /api/me` 帳號刪除 | `functions/api/me.ts` | ✅ |
 | 5-D routing.js 新增 privacy / terms 路由 | `src/routing.js` | ✅ |
+| 5-E Beta 結構化 log | `services/telemetry.js`, `functions/_shared/logger.ts` | ✅ |
 
 ### 尚未完成
 
 | 任務 | 說明 |
 |---|---|
-| 5-E 錯誤監控 | Sentry 或 Cloudflare Analytics 錯誤追蹤，目前沒有 |
-| 5-F API JWT 驗證閘門 | `_middleware.ts` 仍只做 CORS，未驗證身分 |
+| 5-F 正式告警平台 | Sentry 或 Cloudflare Analytics 尚未接入；目前已有安全結構化 log 可支援 Beta 實測 |
+| 5-G 生產部署後安全驗證 | 程式碼已改為 JWT fail-closed，仍需部署後用正式 URL 驗證 401 / authenticated 流程 |
 
 ---
 
@@ -200,9 +202,9 @@ LINE Developers Console
 
 | 優先 | 問題 | 影響 |
 |---|---|---|
-| P0 | `_middleware.ts` 無 JWT 驗證 | 任何人可呼叫 API |
-| P1 | 無 Sentry / 錯誤監控 | 生產問題無法即時發現 |
-| P1 | OCR 結果未經人工校正機制 | 手寫字跡辨識錯誤無法修正 |
+| P0 | 生產安全驗證尚未跑完 | 程式碼已修補 API fail-closed、OCR 必須登入、Groups 必須登入、Postback 權限檢查；仍需部署後實測 |
+| P1 | 無正式告警平台 | 已有結構化 log，但尚未接 Sentry / Cloudflare Analytics 告警 |
+| P1 | OCR 結果人工校正需實機驗證 | Dashboard 已可校正 OCR 結果，仍需用真實單據確認流程 |
 | P2 | 付費方案升級流程（金流）| 目前 quota 機制設計好，但無付費入口 |
 | P2 | 資料刪除回覆（LINE 訊息確認）| `DELETE /api/me` 尚未推播 LINE 確認訊息 |
 | P3 | 前端 bundle size 未分析 | 未做 code splitting，首次載入可能慢 |
@@ -219,9 +221,9 @@ LINE Developers Console
 - [x] Sprint 2：免費方案 OCR 次數限制生效
 - [x] Sprint 3：家庭群組 admin/member 角色可正常運作
 - [x] Sprint 5：隱私政策與非醫療聲明頁面上線
-- [ ] LINE Developers LIFF Endpoint URL 修正為 `https://care.wedopr.com/app`
+- [x] LINE Developers LIFF Endpoint URL 修正為 `https://care.wedopr.com/app`
 - [ ] Sprint 4：LINE 實機流程 A + B + C 全部跑通
-- [ ] 手機首頁空白問題解決
+- [x] 手機首頁空白問題解決
 
 ---
 
@@ -234,7 +236,7 @@ LINE Developers Console
 - [ ] Cron 推播連續 7 天無漏送
 - [ ] 至少 10 組家庭回饋正面（4/5 分以上）
 - [ ] 付費方案啟用流程（串接金流，推薦 ECPay 或 NewebPay）
-- [ ] `_middleware.ts` JWT 驗證完成
+- [x] `_middleware.ts` JWT 驗證完成
 
 ---
 
@@ -247,8 +249,9 @@ LINE Developers Console
 1. **Sprint 4 實機閉環驗證**：
    * 測試 LINE Bot 傳圖 -> OCR 解析 -> Quick Reply 切換身分。
    * 測試 LIFF 登入後，Dashboard 是否能即時反映身分切換後的資料。
-2. **API 安全性加固**：
-   * 修改 `functions/_middleware.ts`，為 `/api/` 下的所有寫入操作（POST/PATCH/DELETE）強制檢查 JWT。目前僅做 CORS，存在安全風險。
+2. **API 安全性驗證**：
+   * 程式碼已修補 `functions/_middleware.ts`、OCR、Groups、Postback 權限檢查。
+   * 下一步需部署後用正式 URL 驗證：未登入寫入回 401、登入後流程正常、LINE Postback 只能重分派自己的群組資料。
 
 ### 之後的任務（第 1–2 週）
 

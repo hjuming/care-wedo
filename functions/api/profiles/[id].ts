@@ -10,14 +10,11 @@ export const onRequestPatch: PagesFunction<Env> = async (context) => {
 
   try {
     const idToken = getBearerToken(request);
-    let userId: number;
-
-    if (idToken) {
-      const identity = await verifyLineIdToken(env, idToken);
-      userId = await getOrCreateDefaultUser(env, identity.lineUserId);
-    } else {
-      userId = await getOrCreateDefaultUser(env);
+    if (!idToken) {
+      return Response.json({ error: "請先登入" }, { status: 401 });
     }
+    const identity = await verifyLineIdToken(env, idToken);
+    const userId = await getOrCreateDefaultUser(env, identity.lineUserId);
 
     const accessibleProfiles = await getAccessibleProfiles(env, userId);
     const canManageProfile = accessibleProfiles.some((profile) => String(profile.id) === String(profileId));

@@ -1,189 +1,286 @@
-import aiAvatar from '../assets/ai-avatar.png';
+import { useEffect, useMemo, useState } from "react";
+import aiAvatar from "../assets/ai-avatar.png";
 
-/**
- * OCR 解析結果顯示元件
- * 顯示 AI 整理後的單據重點
- */
-export default function OcrResult({ data, onClose }) {
-  if (!data) return null;
-
-  const { patient, department, visit_date, diagnoses, medications, appointments, exams, reminders, next_visit } = data;
-
-  return (
-    <div style={{ padding: "0 20px 20px" }}>
-      {/* 標題列 */}
-      <div style={{
-        display: "flex", justifyContent: "space-between", alignItems: "center",
-        margin: "16px 0 12px",
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <img src={aiAvatar} alt="健康小管家" style={{ width: 24, height: 24, borderRadius: "50%", objectFit: "cover" }} />
-          <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>
-            小管家幫您整理好了
-          </p>
-        </div>
-        <button onClick={onClose} style={{
-          background: "none", border: "none", fontSize: 12, color: "var(--text-secondary)",
-          cursor: "pointer", padding: "4px 8px",
-        }}>
-          先收起
-        </button>
-      </div>
-
-      {/* 患者資訊 */}
-      {patient?.name && (
-        <Card>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{
-              width: 36, height: 36, borderRadius: "50%",
-              background: "linear-gradient(135deg, #2d6a4f, #40916c)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: 14, fontWeight: 500, color: "#fff",
-            }}>
-              {patient.name.charAt(0)}
-            </div>
-            <div>
-              <p style={{ margin: 0, fontWeight: 500, fontSize: 15, color: "var(--text-primary)" }}>
-                {patient.name}
-              </p>
-              <p style={{ margin: 0, fontSize: 12, color: "var(--text-secondary)" }}>
-                {[patient.age, department, visit_date].filter(Boolean).join(" · ")}
-              </p>
-            </div>
-          </div>
-          {diagnoses?.length > 0 && (
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
-              {diagnoses.map((dx, i) => (
-                <span key={i} style={{
-                  fontSize: 11, padding: "2px 8px", borderRadius: 20,
-                  background: "rgba(231,76,60,0.15)", color: "#e74c3c",
-                  border: "0.5px solid rgba(231,76,60,0.3)",
-                }}>
-                  {dx}
-                </span>
-              ))}
-            </div>
-          )}
-        </Card>
-      )}
-
-      {/* 藥物清單 */}
-      {medications?.length > 0 && (
-        <Card>
-          <SectionTitle>要注意的藥 ({medications.length} 種)</SectionTitle>
-          {medications.map((m, i) => (
-            <div key={i} style={{
-              display: "flex", justifyContent: "space-between", alignItems: "flex-start",
-              padding: "10px 0",
-              borderBottom: i < medications.length - 1 ? "0.5px solid var(--border-color, rgba(255,255,255,0.08))" : "none",
-            }}>
-              <div>
-                <p style={{ margin: 0, fontSize: 13, fontWeight: 500, color: "var(--text-primary)" }}>
-                  {m.name}
-                </p>
-                <p style={{ margin: "2px 0 0", fontSize: 11, color: "var(--text-secondary)" }}>
-                  {[m.use, m.freq].filter(Boolean).join(" · ")}
-                </p>
-              </div>
-              <div style={{ fontSize: 12, color: "var(--text-secondary)", textAlign: "right" }}>
-                {m.qty && <div>{m.qty}</div>}
-                {m.days > 0 && <div>{m.days} 天</div>}
-              </div>
-            </div>
-          ))}
-        </Card>
-      )}
-
-      {/* 預約 / 檢查 */}
-      {appointments?.length > 0 && (
-        <Card>
-          <SectionTitle>看診或領藥提醒 ({appointments.length} 筆)</SectionTitle>
-          {appointments.map((apt, i) => (
-            <div key={i} style={{ padding: "8px 0", borderBottom: i < appointments.length - 1 ? "0.5px solid var(--border-color, rgba(255,255,255,0.08))" : "none" }}>
-              <p style={{ margin: 0, fontSize: 13, fontWeight: 500, color: "var(--text-primary)" }}>
-                {apt.date} {apt.time && `${apt.time}`} — {apt.department || apt.hospital}
-              </p>
-              {apt.doctor && <p style={{ margin: "2px 0 0", fontSize: 11, color: "var(--text-secondary)" }}>{apt.doctor} 醫師</p>}
-              {apt.location && <p style={{ margin: "2px 0 0", fontSize: 11, color: "var(--text-secondary)" }}>📍 {apt.location}</p>}
-              {apt.fasting_required && <p style={{ margin: "4px 0 0", fontSize: 11, color: "#e74c3c", fontWeight: 500 }}>⚠️ 前 {apt.fasting_hours || 8} 小時先不要吃東西</p>}
-            </div>
-          ))}
-        </Card>
-      )}
-
-      {/* 檢查項目 */}
-      {exams?.length > 0 && (
-        <Card>
-          <SectionTitle>檢查安排 ({exams.length} 項)</SectionTitle>
-          {exams.map((ex, i) => (
-            <div key={i} style={{ padding: "8px 0", borderBottom: i < exams.length - 1 ? "0.5px solid var(--border-color, rgba(255,255,255,0.08))" : "none" }}>
-              <p style={{ margin: 0, fontSize: 13, fontWeight: 500, color: "var(--text-primary)" }}>
-                {ex.type} {ex.date && `— ${ex.date}`} {ex.time && ex.time}
-              </p>
-              {ex.location && <p style={{ margin: "2px 0 0", fontSize: 11, color: "var(--text-secondary)" }}>📍 {ex.location}</p>}
-              {ex.notes && <p style={{ margin: "2px 0 0", fontSize: 11, color: "var(--text-secondary)" }}>{ex.notes}</p>}
-            </div>
-          ))}
-        </Card>
-      )}
-
-      {/* 提醒事項 */}
-      {reminders?.length > 0 && (
-        <Card>
-          <SectionTitle>家人小提醒 ({reminders.length} 個)</SectionTitle>
-          {reminders.map((r, i) => (
-            <div key={i} style={{
-              display: "flex", gap: 10, alignItems: "flex-start",
-              padding: "8px 0",
-              borderBottom: i < reminders.length - 1 ? "0.5px solid var(--border-color, rgba(255,255,255,0.08))" : "none",
-            }}>
-              <div style={{
-                width: 8, height: 8, borderRadius: "50%", flexShrink: 0, marginTop: 5,
-                background: r.urgent ? "#e74c3c" : "#3498db",
-              }} />
-              <div>
-                <p style={{ margin: 0, fontSize: 12, fontWeight: 500, color: r.urgent ? "#e74c3c" : "#3498db" }}>
-                  {r.date}
-                </p>
-                <p style={{ margin: "2px 0 0", fontSize: 13, color: "var(--text-primary)" }}>{r.label}</p>
-                <p style={{ margin: "2px 0 0", fontSize: 11, color: "var(--text-secondary)" }}>{r.desc}</p>
-              </div>
-            </div>
-          ))}
-        </Card>
-      )}
-
-      {/* 下次回診 */}
-      {next_visit?.date && (
-        <Card>
-          <SectionTitle>下次要去醫院的時間</SectionTitle>
-          <p style={{ margin: 0, fontSize: 13, color: "var(--text-primary)" }}>
-            {next_visit.date} {next_visit.dept && `— ${next_visit.dept}`}
-          </p>
-          {next_visit.doctor && <p style={{ margin: "2px 0 0", fontSize: 11, color: "var(--text-secondary)" }}>{next_visit.doctor}</p>}
-          {next_visit.note && <p style={{ margin: "2px 0 0", fontSize: 11, color: "var(--text-secondary)" }}>{next_visit.note}</p>}
-        </Card>
-      )}
-    </div>
-  );
+function normalizeAppointmentDraft(apt = {}) {
+  return {
+    type: apt.type || "clinic_visit",
+    date: apt.date || "",
+    time: apt.time || "",
+    hospital: apt.hospital || "",
+    department: apt.department || "",
+    doctor: apt.doctor || "",
+    number: apt.number || "",
+    location: apt.location || "",
+    fasting_required: Boolean(apt.fasting_required),
+    fasting_hours: apt.fasting_hours || "",
+    notes: apt.notes || "",
+    reminder_text: apt.reminder_text || "",
+  };
 }
 
-function Card({ children }) {
+function normalizeMedicationDraft(med = {}) {
+  return {
+    name: med.name || "",
+    dosage: med.dosage || med.qty || "",
+    frequency: med.frequency || med.freq || "",
+    purpose: med.purpose || med.use || "",
+    warnings: med.warnings || "",
+    reminder_text: med.reminder_text || "",
+  };
+}
+
+function cleanAppointmentDraft(apt) {
+  return {
+    ...apt,
+    fasting_required: Boolean(apt.fasting_required),
+    fasting_hours: apt.fasting_hours ? Number(apt.fasting_hours) : null,
+  };
+}
+
+function cleanMedicationDraft(med) {
+  return { ...med };
+}
+
+export default function OcrResult({ data, onClose, onSaveCorrections, onNavigate }) {
+  const parsed = data?.data || data;
+  const saved = data?.saved || {};
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [savedMessage, setSavedMessage] = useState("");
+  const [draft, setDraft] = useState({ appointments: [], medications: [] });
+
+  const canPersist = Boolean(onSaveCorrections)
+    && ((saved.appointment_ids || []).length > 0 || (saved.medication_ids || []).length > 0);
+
+  useEffect(() => {
+    setDraft({
+      appointments: (parsed?.appointments || []).map(normalizeAppointmentDraft),
+      medications: (parsed?.medications || []).map(normalizeMedicationDraft),
+    });
+    setEditing(false);
+    setSaveError("");
+    setSavedMessage("");
+  }, [parsed]);
+
+  const hasContent = useMemo(() => {
+    return Boolean(
+      parsed?.patient?.name
+      || parsed?.appointments?.length
+      || parsed?.medications?.length
+      || parsed?.exams?.length
+      || parsed?.reminders?.length
+      || parsed?.next_visit?.date,
+    );
+  }, [parsed]);
+
+  if (!parsed) return null;
+
+  async function handleSave() {
+    if (!onSaveCorrections) return;
+    setSaving(true);
+    setSaveError("");
+    setSavedMessage("");
+    try {
+      const appointments = draft.appointments.map(cleanAppointmentDraft);
+      const medications = draft.medications.map(cleanMedicationDraft);
+      await onSaveCorrections({ appointments, medications });
+      setEditing(false);
+      setSavedMessage("已更新到照護紀錄。");
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "儲存失敗，請再試一次。");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function updateAppointment(index, field, value) {
+    setDraft((prev) => ({
+      ...prev,
+      appointments: prev.appointments.map((apt, i) => i === index ? { ...apt, [field]: value } : apt),
+    }));
+  }
+
+  function updateMedication(index, field, value) {
+    setDraft((prev) => ({
+      ...prev,
+      medications: prev.medications.map((med, i) => i === index ? { ...med, [field]: value } : med),
+    }));
+  }
+
   return (
-    <div style={{
-      background: "var(--card-bg, rgba(255,255,255,0.04))",
-      border: "0.5px solid var(--border-color, rgba(255,255,255,0.08))",
-      borderRadius: 12, padding: "12px 16px", marginBottom: 10,
-    }}>
-      {children}
+    <div className="ocr-result-panel">
+      <div className="ocr-result-header">
+        <div className="ocr-result-title">
+          <img src={aiAvatar} alt="健康小管家" />
+          <div>
+            <p>{editing ? "正在校正內容" : "我先幫你整理成一份待確認紀錄。"}</p>
+            <span>{editing ? "你可以修正任何不正確的欄位" : "請檢查日期、藥名、提醒事項是否正確；確認後可以儲存修正。"}</span>
+          </div>
+        </div>
+        <div className="ocr-result-actions">
+          {canPersist && !editing && (
+            <button type="button" className="secondary-action compact-action" onClick={() => setEditing(true)}>
+              編輯辨識結果
+            </button>
+          )}
+          {editing && (
+            <>
+              <button type="button" className="secondary-action compact-action" onClick={() => setEditing(false)} disabled={saving}>
+                取消
+              </button>
+              <button type="button" className="primary-action compact-action" onClick={handleSave} disabled={saving}>
+                {saving ? "儲存中..." : "確認並儲存修正"}
+              </button>
+            </>
+          )}
+          <button type="button" className="inline-action ocr-close-action" onClick={onClose}>
+            收起
+          </button>
+        </div>
+      </div>
+
+      {saveError && (
+        <div className="ocr-save-note danger">{saveError}</div>
+      )}
+      {savedMessage && (
+        <div className="ocr-success-card">
+          <p className="ocr-success-title">✓ 已更新照護清單。</p>
+          <p className="ocr-success-copy">
+            你可以在「今天重點」查看下一件要記得的事，也可以到「看診日曆」查看回診提醒。
+          </p>
+          <div className="ocr-nav-actions">
+            <button type="button" className="primary-action compact-action" onClick={() => onNavigate?.("overview")}>
+              查看今日照護
+            </button>
+            <button type="button" className="secondary-action compact-action" onClick={() => onNavigate?.("calendar")}>
+              看診日曆
+            </button>
+          </div>
+        </div>
+      )}
+
+      {!hasContent && (
+        <section className="ocr-card">
+          <p className="empty-state">這張單據沒有解析出可保存的提醒。</p>
+        </section>
+      )}
+
+      {parsed.patient?.name && (
+        <section className="ocr-card ocr-person-card">
+          <div className="ocr-person-avatar">{parsed.patient.name.charAt(0)}</div>
+          <div>
+            <strong>{parsed.patient.name}</strong>
+            <span>{[parsed.patient.age, parsed.department, parsed.visit_date].filter(Boolean).join(" · ")}</span>
+          </div>
+        </section>
+      )}
+
+      {draft.appointments.length > 0 && (
+        <section className="ocr-card">
+          <SectionTitle>看診或領藥提醒 ({draft.appointments.length} 筆)</SectionTitle>
+          {editing
+            ? draft.appointments.map((apt, index) => (
+              <AppointmentEditor key={index} appointment={apt} onChange={(field, value) => updateAppointment(index, field, value)} />
+            ))
+            : draft.appointments.map((apt, index) => <AppointmentPreview key={index} appointment={apt} />)}
+        </section>
+      )}
+
+      {draft.medications.length > 0 && (
+        <section className="ocr-card">
+          <SectionTitle>要注意的藥 ({draft.medications.length} 種)</SectionTitle>
+          {editing
+            ? draft.medications.map((med, index) => (
+              <MedicationEditor key={index} medication={med} onChange={(field, value) => updateMedication(index, field, value)} />
+            ))
+            : draft.medications.map((med, index) => <MedicationPreview key={index} medication={med} />)}
+        </section>
+      )}
+
+      {parsed.exams?.length > 0 && !editing && (
+        <section className="ocr-card">
+          <SectionTitle>檢查安排 ({parsed.exams.length} 項)</SectionTitle>
+          {parsed.exams.map((exam, index) => (
+            <div key={index} className="ocr-row">
+              <strong>{[exam.type, exam.date, exam.time].filter(Boolean).join(" · ")}</strong>
+              <span>{[exam.location, exam.notes].filter(Boolean).join(" · ")}</span>
+            </div>
+          ))}
+        </section>
+      )}
     </div>
   );
 }
 
 function SectionTitle({ children }) {
+  return <p className="ocr-section-title">{children}</p>;
+}
+
+function AppointmentPreview({ appointment }) {
   return (
-    <p style={{ margin: "0 0 4px", fontSize: 12, fontWeight: 500, color: "var(--text-secondary)" }}>
-      {children}
-    </p>
+    <div className="ocr-row">
+      <strong>{[appointment.date, appointment.time, appointment.department || appointment.hospital].filter(Boolean).join(" · ")}</strong>
+      <span>{[appointment.hospital, appointment.doctor && `${appointment.doctor}醫師`, appointment.location].filter(Boolean).join(" · ")}</span>
+      {appointment.fasting_required && <em>前 {appointment.fasting_hours || 8} 小時先不要吃東西</em>}
+    </div>
+  );
+}
+
+function MedicationPreview({ medication }) {
+  return (
+    <div className="ocr-row">
+      <strong>{medication.name || "藥名待確認"}</strong>
+      <span>{[medication.frequency, medication.dosage, medication.purpose].filter(Boolean).join(" · ")}</span>
+      {medication.warnings && <em>{medication.warnings}</em>}
+    </div>
+  );
+}
+
+function AppointmentEditor({ appointment, onChange }) {
+  return (
+    <div className="ocr-edit-grid">
+      <Field label="日期" value={appointment.date} onChange={(value) => onChange("date", value)} type="date" />
+      <Field label="時間" value={appointment.time} onChange={(value) => onChange("time", value)} type="time" />
+      <Field label="醫院" value={appointment.hospital} onChange={(value) => onChange("hospital", value)} />
+      <Field label="科別" value={appointment.department} onChange={(value) => onChange("department", value)} />
+      <Field label="醫師" value={appointment.doctor} onChange={(value) => onChange("doctor", value)} />
+      <Field label="號碼" value={appointment.number} onChange={(value) => onChange("number", value)} />
+      <Field label="地點" value={appointment.location} onChange={(value) => onChange("location", value)} wide />
+      <Field label="提醒文字" value={appointment.reminder_text} onChange={(value) => onChange("reminder_text", value)} wide />
+      <label className="ocr-checkbox-field">
+        <input
+          type="checkbox"
+          checked={appointment.fasting_required}
+          onChange={(event) => onChange("fasting_required", event.target.checked)}
+        />
+        需要空腹
+      </label>
+      {appointment.fasting_required && (
+        <Field label="空腹小時" value={appointment.fasting_hours} onChange={(value) => onChange("fasting_hours", value)} type="number" />
+      )}
+    </div>
+  );
+}
+
+function MedicationEditor({ medication, onChange }) {
+  return (
+    <div className="ocr-edit-grid">
+      <Field label="藥名" value={medication.name} onChange={(value) => onChange("name", value)} />
+      <Field label="劑量" value={medication.dosage} onChange={(value) => onChange("dosage", value)} />
+      <Field label="頻率" value={medication.frequency} onChange={(value) => onChange("frequency", value)} />
+      <Field label="用途" value={medication.purpose} onChange={(value) => onChange("purpose", value)} />
+      <Field label="注意事項" value={medication.warnings} onChange={(value) => onChange("warnings", value)} wide />
+      <Field label="提醒文字" value={medication.reminder_text} onChange={(value) => onChange("reminder_text", value)} wide />
+    </div>
+  );
+}
+
+function Field({ label, value, onChange, type = "text", wide = false }) {
+  return (
+    <label className={wide ? "ocr-field wide" : "ocr-field"}>
+      <span>{label}</span>
+      <input type={type} value={value ?? ""} onChange={(event) => onChange(event.target.value)} />
+    </label>
   );
 }

@@ -365,8 +365,8 @@ export async function patchAppointment(
   updates: AppointmentUpdateFields,
 ): Promise<AppointmentRow> {
   // Verify ownership: appointment must belong to this user or one of their groups
-  const filters = [`user_id=eq.${userId}`];
-  if (groupIds.length > 0) filters.push(`group_id=in.(${groupIds.join(",")})`);
+  const filters = [`user_id.eq.${userId}`];
+  if (groupIds.length > 0) filters.push(`group_id.in.(${groupIds.join(",")})`);
   const owned = await supabaseFetch<AppointmentRow[]>(
     env,
     `appointments?id=eq.${id}&or=(${filters.join(",")})&select=id&limit=1`,
@@ -394,8 +394,8 @@ export async function patchMedication(
   updates: MedicationUpdateFields,
 ): Promise<MedicationRow> {
   // Verify ownership
-  const filters = [`user_id=eq.${userId}`];
-  if (groupIds.length > 0) filters.push(`group_id=in.(${groupIds.join(",")})`);
+  const filters = [`user_id.eq.${userId}`];
+  if (groupIds.length > 0) filters.push(`group_id.in.(${groupIds.join(",")})`);
   const owned = await supabaseFetch<MedicationRow[]>(
     env,
     `medications?id=eq.${id}&or=(${filters.join(",")})&select=id&limit=1`,

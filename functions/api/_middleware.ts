@@ -34,22 +34,17 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   if (!isPublicPath(url.pathname, request.method)) {
     const token = getBearerToken(request);
 
-    if (token) {
-      // Validate the token — if invalid, still let the request through
-      // since individual handlers may gracefully degrade to demo mode.
-      // But store the verification result for downstream use.
-      try {
-        const identity = await verifyLineIdToken(env, token);
-        // Attach identity to request context (Cloudflare Pages Functions pattern)
-        (context as any).data = { ...(context as any).data, identity };
-      } catch {
-        // Token is present but invalid — let the handler decide how to respond.
-        // Most handlers already call verifyLineIdToken themselves.
-      }
+    if (!token) {
+      return Response.json({ error: "請先登入" }, { status: 401, headers: corsHeaders });
     }
-    // Note: We don't block requests without tokens here because many handlers
-    // (dashboard, ocr) support both authenticated and unauthenticated modes.
-    // The DELETE /api/me handler explicitly checks for token presence.
+
+    try {
+      const identity = await verifyLineIdToken(env, token);
+      (context as any).data = { ...(context as any).data, identity };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "登入已失效，請重新登入。";
+      return Response.json({ error: message }, { status: 401, headers: corsHeaders });
+    }
   }
 
   const response = await next();

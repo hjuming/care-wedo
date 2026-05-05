@@ -1,5 +1,6 @@
 import { parseMedicalImages, saveParsedData, Env as OcrEnv } from "./_shared/medical_ocr";
-import { getAccessibleProfiles, getOrCreateDefaultUser, supabaseFetch } from "./_shared/supabase";
+import { logError, logEvent } from "./_shared/logger";
+import { getAccessibleProfiles, getOrCreateDefaultUser, getUserMemberships, supabaseFetch } from "./_shared/supabase";
 
 type Env = OcrEnv & {
   LINE_CHANNEL_ACCESS_TOKEN?: string;
@@ -110,7 +111,11 @@ async function pushText(env: Env, userId: string, text: string, quickReply?: any
 
   if (!response.ok) {
     const detail = await response.text();
-    console.error(`LINE push failed (${response.status}): ${detail}`);
+    logError("line.push_failed", new Error(`LINE push failed (${response.status})`), {
+      line_user_suffix: userId.slice(-4),
+      status: response.status,
+      detail,
+    });
   }
 }
 
@@ -173,7 +178,12 @@ function formatResultSummary(parsed: import("./_shared/medical_ocr").ParsedMedic
 /** 處理圖片 OCR（背景執行，用 Push API 回傳結果） */
 async function processImageOCR(env: Env, event: LineEvent) {
   const lineUserId = event.source.userId;
+  const startedAt = Date.now();
   try {
+    logEvent("line.ocr_started", {
+      line_user_suffix: lineUserId.slice(-4),
+      message_id_suffix: event.message?.id?.slice(-4),
+    });
     const base64Image = await fetchLineContent(env, event.message!.id!);
     const parsedData = await parseMedicalImages(env, [{ data: base64Image, media_type: "image/jpeg" }]);
     const saved = await saveParsedData(env, parsedData, lineUserId);
@@ -211,10 +221,83 @@ async function processImageOCR(env: Env, event: LineEvent) {
     }
 
     await pushText(env, lineUserId, reply, quickReply);
+    logEvent("line.ocr_completed", {
+      line_user_suffix: lineUserId.slice(-4),
+      appointment_count: parsedData.appointments?.length || 0,
+      medication_count: parsedData.medications?.length || 0,
+      profile_count: profiles.length,
+      has_quick_reply: Boolean(quickReply),
+      duration_ms: Date.now() - startedAt,
+    });
   } catch (error) {
-    console.error("OCR Error:", error);
+    logError("line.ocr_failed", error, {
+      line_user_suffix: lineUserId.slice(-4),
+      duration_ms: Date.now() - startedAt,
+    });
     const msg = error instanceof Error ? error.message : "未知錯誤";
     await pushText(env, lineUserId, `${DEFAULT_RECIPIENT}，這張照片我暫時看不清楚。\n\n可以再拍一次嗎？盡量讓整張單子平放、字清楚一點。\n\n系統訊息：${msg}`);
+  }
+}
+
+function parseIdList(value: string | null) {
+  if (!value) return [];
+  return value
+    .split(",")
+    .map((id) => Number(id))
+    .filter((id) => Number.isInteger(id) && id > 0);
+}
+
+async function reassignRecordsToProfile(
+  env: Env,
+  lineUserId: string,
+  targetProfileId: number,
+  appointmentIds: number[],
+  medicationIds: number[],
+) {
+  const userId = await getOrCreateDefaultUser(env, lineUserId);
+  const [profiles, memberships] = await Promise.all([
+    getAccessibleProfiles(env, userId),
+    getUserMemberships(env, userId),
+  ]);
+
+  const targetProfile = profiles.find((profile) => profile.id === targetProfileId);
+  if (!targetProfile) {
+    throw new Error("您沒有這個照護對象的權限");
+  }
+
+  const groupIds = memberships.map((membership) => membership.group_id);
+  const accessFilters = [`user_id.eq.${userId}`];
+  if (groupIds.length > 0) accessFilters.push(`group_id.in.(${groupIds.join(",")})`);
+  const accessQuery = `or=(${accessFilters.join(",")})`;
+
+  if (appointmentIds.length > 0) {
+    const rows = await supabaseFetch<Array<{ id: number }>>(
+      env,
+      `appointments?id=in.(${appointmentIds.join(",")})&${accessQuery}&select=id`,
+      {
+        method: "PATCH",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify({ profile_id: targetProfile.id }),
+      },
+    );
+    if (rows.length !== appointmentIds.length) {
+      throw new Error("部分看診紀錄沒有修改權限");
+    }
+  }
+
+  if (medicationIds.length > 0) {
+    const rows = await supabaseFetch<Array<{ id: number }>>(
+      env,
+      `medications?id=in.(${medicationIds.join(",")})&${accessQuery}&select=id`,
+      {
+        method: "PATCH",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify({ profile_id: targetProfile.id }),
+      },
+    );
+    if (rows.length !== medicationIds.length) {
+      throw new Error("部分用藥紀錄沒有修改權限");
+    }
   }
 }
 
@@ -222,26 +305,29 @@ async function handleEvent(env: Env, event: LineEvent, waitUntil: (promise: Prom
   if (event.type === "postback" && event.postback?.data && event.replyToken) {
     const params = new URLSearchParams(event.postback.data);
     if (params.get("action") === "reassign") {
-      const targetProfileId = params.get("p");
-      const aptIds = params.get("a");
-      const medIds = params.get("m");
+      const targetProfileId = Number(params.get("p"));
+      const appointmentIds = parseIdList(params.get("a"));
+      const medicationIds = parseIdList(params.get("m"));
       
       try {
-        if (aptIds && targetProfileId) {
-          await supabaseFetch(env, `appointments?id=in.(${aptIds})`, {
-            method: "PATCH",
-            body: JSON.stringify({ profile_id: Number(targetProfileId) })
-          });
+        if (!Number.isInteger(targetProfileId) || targetProfileId <= 0) {
+          throw new Error("照護對象資料不正確");
         }
-        if (medIds && targetProfileId) {
-          await supabaseFetch(env, `medications?id=in.(${medIds})`, {
-            method: "PATCH",
-            body: JSON.stringify({ profile_id: Number(targetProfileId) })
-          });
-        }
+        await reassignRecordsToProfile(env, event.source.userId, targetProfileId, appointmentIds, medicationIds);
+        logEvent("line.reassign_completed", {
+          line_user_suffix: event.source.userId.slice(-4),
+          target_profile_id: targetProfileId,
+          appointment_count: appointmentIds.length,
+          medication_count: medicationIds.length,
+        });
         await replyText(env, event.replyToken, `沒問題，已經幫您歸類好了！`);
       } catch (err) {
-        console.error("Reassign error:", err);
+        logError("line.reassign_failed", err, {
+          line_user_suffix: event.source.userId.slice(-4),
+          target_profile_id: targetProfileId,
+          appointment_count: appointmentIds.length,
+          medication_count: medicationIds.length,
+        });
         await replyText(env, event.replyToken, `抱歉，歸類時發生錯誤，請稍後再試。`);
       }
       return;
@@ -251,6 +337,10 @@ async function handleEvent(env: Env, event: LineEvent, waitUntil: (promise: Prom
   if (event.type !== "message" || !event.replyToken) return;
 
   if (event.message?.type === "image" && event.message.id) {
+    logEvent("line.image_received", {
+      line_user_suffix: event.source.userId.slice(-4),
+      message_id_suffix: event.message.id.slice(-4),
+    });
     // 1. 立即回覆「解析中」讓使用者安心
     await replyText(env, event.replyToken, `${DEFAULT_RECIPIENT}，收到照片了。\n我正在幫您看單子，等一下整理好給您。`);
 
@@ -280,6 +370,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, waitUnti
   const isValid = await verifyLineSignature(request, bodyText, env);
 
   if (!isValid) {
+    logEvent("line.invalid_signature");
     return Response.json({ error: "Invalid LINE signature" }, { status: 401 });
   }
 
@@ -288,6 +379,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, waitUnti
 
   // 偵測同一批 webhook 中是否有多張圖片
   const imageEvents = events.filter((e) => e.type === "message" && e.message?.type === "image");
+  logEvent("line.webhook_received", {
+    event_count: events.length,
+    image_count: imageEvents.length,
+  });
 
   if (imageEvents.length > 1) {
     // 多張圖片：只處理第一張，提醒使用者一次傳一張
@@ -306,7 +401,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, waitUnti
     await Promise.all(
       otherEvents.map((event) =>
         handleEvent(env, event, waitUntil).catch((err) => {
-          console.error("Event handling error:", err);
+          logError("line.event_failed", err, { event_type: event.type });
         }),
       ),
     );
@@ -315,7 +410,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, waitUnti
     await Promise.all(
       events.map((event) =>
         handleEvent(env, event, waitUntil).catch((err) => {
-          console.error("Event handling error:", err);
+          logError("line.event_failed", err, { event_type: event.type });
         }),
       ),
     );
