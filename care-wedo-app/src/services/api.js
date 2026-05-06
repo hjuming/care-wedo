@@ -47,6 +47,24 @@ export async function ocrAnalyze(files, options = {}) {
   return res.json();
 }
 
+export async function confirmOcrDocument(documentId, { idToken }) {
+  const headers = { "Content-Type": "application/json" };
+  if (idToken) headers.Authorization = `Bearer ${idToken}`;
+
+  const res = await fetch(`${API_BASE}/ocr/confirm`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ document_id: documentId }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || "無法確認文件");
+  }
+
+  return res.json();
+}
+
 export async function fetchDashboard(identity) {
   const { url, init } = buildDashboardRequest(API_BASE, identity);
   const res = await fetch(url, init);

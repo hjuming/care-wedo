@@ -240,7 +240,7 @@ create table if not exists public.care_documents (
   ocr_text text,
   ai_summary jsonb,
   status text not null default 'uploaded',
-  -- uploaded / processing / draft / confirmed / failed
+  -- uploaded / processing / pending_review / confirmed / failed
   captured_at timestamptz,
   created_at timestamptz not null default now()
 );

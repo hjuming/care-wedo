@@ -6,7 +6,7 @@ import LoginSetup from "./components/LoginSetup";
 import MobileBottomNav from "./components/MobileBottomNav";
 import OcrResult from "./components/OcrResult";
 import { patientData, medicines, timeline as initialTimeline, checklist as initialChecklist } from "./data/patient";
-import { fetchDashboard, ocrAnalyze, patchAppointment, patchMedication, updateProfile } from "./services/api";
+import { confirmOcrDocument, fetchDashboard, ocrAnalyze, patchAppointment, patchMedication, updateProfile } from "./services/api";
 import { initLineIdentity, loginWithLine, logoutLineIdentity } from "./services/liff";
 import { trackError, trackEvent } from "./services/telemetry";
 import { buildTodayTasks, formatTaipeiTodayLabel } from "./services/todayTasks";
@@ -837,6 +837,7 @@ function DashboardApp() {
   async function handleOcrCorrectionsSave({ appointments: correctedAppointments = [], medications: correctedMedications = [] }) {
     const appointmentIds = ocrData?.saved?.appointment_ids || [];
     const medicationIds = ocrData?.saved?.medication_ids || [];
+    const documentId = ocrData?.saved?.document_id;
 
     await Promise.all([
       ...correctedAppointments.map((apt, index) => {
@@ -850,6 +851,10 @@ function DashboardApp() {
         return patchMedication(id, med, { idToken: identity.idToken });
       }).filter(Boolean),
     ]);
+
+    if (documentId) {
+      await confirmOcrDocument(documentId, { idToken: identity.idToken });
+    }
 
     setOcrData((prev) => prev ? {
       ...prev,
@@ -920,6 +925,7 @@ function DashboardApp() {
               data={ocrData}
               onClose={() => setOcrData(null)}
               onSaveCorrections={handleOcrCorrectionsSave}
+              onAskFamily={handleAskFamily}
               onNavigate={(section) => {
                 setOcrData(null);
                 setActiveSection(section);
@@ -1264,6 +1270,8 @@ function GlobalCareContactDock({ collaborators = [], botContact, onAskFamily }) 
   const [expanded, setExpanded] = useState(false);
   const [contactSheet, setContactSheet] = useState(null);
   const [showAllCollaborators, setShowAllCollaborators] = useState(false);
+  const lastContactTriggerRef = useRef(null);
+  const contactSheetPrimaryRef = useRef(null);
   const normalizedCollaborators = useMemo(() => collaborators
     .map(normalizeCollaborator)
     .filter((item) => item.canContact)
@@ -1278,11 +1286,47 @@ function GlobalCareContactDock({ collaborators = [], botContact, onAskFamily }) 
   const hiddenCollaboratorCount = Math.max(normalizedCollaborators.length - visibleCollaborators.length, 0);
   const contactName = contactSheet?.name || "家人";
 
-  function openBotSheet() {
+  const restoreContactTriggerFocus = useCallback(() => {
+    requestAnimationFrame(() => lastContactTriggerRef.current?.focus());
+  }, []);
+
+  const closeContactSheet = useCallback(() => {
+    setContactSheet(null);
+    restoreContactTriggerFocus();
+  }, [restoreContactTriggerFocus]);
+
+  const closeCollaboratorList = useCallback(() => {
+    setShowAllCollaborators(false);
+    restoreContactTriggerFocus();
+  }, [restoreContactTriggerFocus]);
+
+  useEffect(() => {
+    if (!contactSheet && !showAllCollaborators) return undefined;
+
+    contactSheetPrimaryRef.current?.focus();
+
+    function handleSheetKeyDown(event) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        if (contactSheet) {
+          closeContactSheet();
+        } else {
+          closeCollaboratorList();
+        }
+      }
+    }
+
+    window.addEventListener("keydown", handleSheetKeyDown);
+    return () => window.removeEventListener("keydown", handleSheetKeyDown);
+  }, [closeCollaboratorList, closeContactSheet, contactSheet, showAllCollaborators]);
+
+  function openBotSheet(event) {
+    lastContactTriggerRef.current = event.currentTarget;
     setContactSheet({ type: "bot", name: botContact.label });
   }
 
-  function openCollaboratorSheet(collaborator) {
+  function openCollaboratorSheet(collaborator, triggerElement = null) {
+    if (triggerElement) lastContactTriggerRef.current = triggerElement;
     setContactSheet({
       type: "family",
       name: collaborator.displayName,
@@ -1326,7 +1370,7 @@ function GlobalCareContactDock({ collaborators = [], botContact, onAskFamily }) 
             key={collaborator.id}
             type="button"
             className="care-contact-item"
-            onClick={() => openCollaboratorSheet(collaborator)}
+            onClick={(event) => openCollaboratorSheet(collaborator, event.currentTarget)}
             aria-label={`聯絡 ${collaborator.displayName}`}
             title={collaborator.displayName}
           >
@@ -1334,19 +1378,22 @@ function GlobalCareContactDock({ collaborators = [], botContact, onAskFamily }) 
           </button>
         ))}
         {expanded && hiddenCollaboratorCount > 0 && (
-          <button type="button" className="care-contact-more" onClick={() => setShowAllCollaborators(true)} aria-label={`顯示其他 ${hiddenCollaboratorCount} 位家人`}>
+          <button type="button" className="care-contact-more" onClick={(event) => {
+            lastContactTriggerRef.current = event.currentTarget;
+            setShowAllCollaborators(true);
+          }} aria-label={`顯示其他 ${hiddenCollaboratorCount} 位家人`}>
             +{hiddenCollaboratorCount}
           </button>
         )}
       </aside>
 
       {showAllCollaborators && (
-        <div className="contact-sheet-backdrop" role="presentation" onClick={() => setShowAllCollaborators(false)}>
+        <div className="contact-sheet-backdrop" role="presentation" onClick={closeCollaboratorList}>
           <section className="contact-sheet" role="dialog" aria-modal="true" aria-labelledby="collaborator-list-title" onClick={(event) => event.stopPropagation()}>
             <h3 id="collaborator-list-title">可以聯絡的家人</h3>
             <div className="collaborator-list">
-              {normalizedCollaborators.map((collaborator) => (
-                <button key={collaborator.id} type="button" onClick={() => {
+              {normalizedCollaborators.map((collaborator, index) => (
+                <button key={collaborator.id} type="button" ref={index === 0 ? contactSheetPrimaryRef : null} onClick={() => {
                   setShowAllCollaborators(false);
                   openCollaboratorSheet(collaborator);
                 }}>
@@ -1355,16 +1402,16 @@ function GlobalCareContactDock({ collaborators = [], botContact, onAskFamily }) 
                 </button>
               ))}
             </div>
-            <button type="button" className="secondary-action" onClick={() => setShowAllCollaborators(false)}>取消</button>
+            <button type="button" className="secondary-action" onClick={closeCollaboratorList}>取消</button>
           </section>
         </div>
       )}
 
       {contactSheet && (
-        <div className="contact-sheet-backdrop" role="presentation" onClick={() => setContactSheet(null)}>
+        <div className="contact-sheet-backdrop" role="presentation" onClick={closeContactSheet}>
           <section className="contact-sheet" role="dialog" aria-modal="true" aria-labelledby="contact-sheet-title" onClick={(event) => event.stopPropagation()}>
             <h3 id="contact-sheet-title">{contactSheet.type === "bot" ? "要問 Care WEDO 照護小管家嗎？" : `要聯絡 ${contactName} 嗎？`}</h3>
-            <button type="button" className="primary-action" onClick={handleContactConfirm}>
+            <button type="button" className="primary-action" ref={contactSheetPrimaryRef} onClick={handleContactConfirm}>
               {contactSheet.type === "bot" ? "打開 LINE 對話" : "傳 LINE 訊息"}
             </button>
             {contactSheet.type !== "bot" && (
@@ -1372,7 +1419,7 @@ function GlobalCareContactDock({ collaborators = [], botContact, onAskFamily }) 
                 打 LINE 語音
               </button>
             )}
-            <button type="button" className="secondary-action subtle" onClick={() => setContactSheet(null)}>取消</button>
+            <button type="button" className="secondary-action subtle" onClick={closeContactSheet}>取消</button>
           </section>
         </div>
       )}

@@ -185,7 +185,7 @@ async function saveParsedData(
       document_type: inferDocumentType(parsed),
       ocr_text: JSON.stringify(parsed),
       ai_summary: parsed,
-      status: "draft",
+      status: "pending_review",
       captured_at: new Date().toISOString(),
     }),
   });
@@ -212,7 +212,7 @@ async function saveParsedData(
     fasting_hours: apt.fasting_hours || null,
     notes: apt.notes || null,
     reminder_text: apt.reminder_text || null,
-    status: "upcoming",
+    status: "pending_review",
   }));
 
   if (appointments.length) {
@@ -236,7 +236,7 @@ async function saveParsedData(
     purpose: med.purpose || med.use || null,
     warnings: med.warnings || null,
     reminder_text: med.reminder_text || null,
-    active: true,
+    active: false,
   }));
 
   if (medications.length) {

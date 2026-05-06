@@ -111,6 +111,40 @@ function chooseProfile(profiles: CareProfileRow[], requestedProfileId: number | 
   return profiles[0] || null;
 }
 
+type DashboardMemberRow = {
+  user_id: number;
+  role: string | null;
+  can_manage: boolean | null;
+  receive_daily_brief: boolean | null;
+  receive_evening_alert: boolean | null;
+  receive_upload_summary: boolean | null;
+  users: { name: string | null; line_user_id: string | null; picture_url: string | null } | null;
+};
+
+async function fetchDashboardMembers(env: Env, groupId: number | null, currentUserId: number) {
+  if (!groupId) return [];
+
+  const rows = await supabaseFetch<DashboardMemberRow[]>(
+    env,
+    `user_family_groups?group_id=eq.${groupId}&select=user_id,role,can_manage,receive_daily_brief,receive_evening_alert,receive_upload_summary,users(name,line_user_id,picture_url)`,
+  );
+
+  return rows
+    .filter((row) => row.user_id !== currentUserId)
+    .map((row) => ({
+      id: row.user_id,
+      user_id: row.user_id,
+      display_name: row.users?.name || "家人",
+      avatar_url: row.users?.picture_url || "",
+      role: row.role || "member",
+      can_manage: row.can_manage === true,
+      can_contact: Boolean(row.users?.line_user_id),
+      receive_daily_brief: row.receive_daily_brief !== false,
+      receive_evening_alert: row.receive_evening_alert !== false,
+      receive_upload_summary: row.receive_upload_summary !== false,
+    }));
+}
+
 async function fetchAppointments(env: Env, groupId: number | null, profileId: number | null): Promise<AppointmentRow[]> {
   if (!profileId && !groupId) return [];
   const path = profileId
@@ -192,9 +226,10 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     const activeProfileId = selectedProfile.id;
 
     // Step 3: Fetch care data scoped to group + profile
-    const [appointments, medications] = await Promise.all([
+    const [appointments, medications, members] = await Promise.all([
       fetchAppointments(env, activeGroupId, activeProfileId),
       fetchMedications(env, activeGroupId, activeProfileId),
+      fetchDashboardMembers(env, activeGroupId, userId),
     ]);
 
     const checklist = appointments.slice(0, 3).map((apt) => {
@@ -222,6 +257,8 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       care_profiles: profiles.map(serializeCareProfile),
       appointments: appointments.map(serializeAppointment),
       medications: medications.map(serializeMedication),
+      members,
+      collaborators: members,
       checklist,
       needs_setup: false,
       needs_profile_setup: false,

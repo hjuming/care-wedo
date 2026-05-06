@@ -44,6 +44,23 @@ test("Groups API keeps invite join idempotent for existing members before plan l
   assert.match(source, /if \(existingMembership\.length === 0\) \{/);
 });
 
+test("Dashboard API returns family members for the global care contact dock", () => {
+  const source = readProjectFile("functions/api/dashboard.ts");
+  assert.match(source, /getDashboardMembers|fetchDashboardMembers/);
+  assert.match(source, /users\(name,line_user_id,picture_url\)/);
+  assert.match(source, /members:/);
+  assert.match(source, /collaborators:/);
+});
+
+test("Global care contact sheets support keyboard close and focus return", () => {
+  const source = readProjectFile("care-wedo-app/src/App.jsx");
+  const dock = source.slice(source.indexOf("function GlobalCareContactDock"));
+  assert.match(dock, /lastContactTriggerRef/);
+  assert.match(dock, /contactSheetPrimaryRef/);
+  assert.match(dock, /event\.key === "Escape"/);
+  assert.match(dock, /\.focus\(\)/);
+});
+
 test("Family group creation uses a user feature flag, not group plans", () => {
   const groupsApi = readProjectFile("functions/api/groups.ts");
   const supabase = readProjectFile("functions/_shared/supabase.ts");

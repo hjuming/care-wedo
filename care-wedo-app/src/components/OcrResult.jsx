@@ -41,7 +41,7 @@ function cleanMedicationDraft(med) {
   return { ...med };
 }
 
-export default function OcrResult({ data, onClose, onSaveCorrections, onNavigate }) {
+export default function OcrResult({ data, onClose, onSaveCorrections, onAskFamily, onNavigate }) {
   const parsed = data?.data || data;
   const saved = data?.saved || {};
   const [editing, setEditing] = useState(false);
@@ -86,9 +86,9 @@ export default function OcrResult({ data, onClose, onSaveCorrections, onNavigate
       const medications = draft.medications.map(cleanMedicationDraft);
       await onSaveCorrections({ appointments, medications });
       setEditing(false);
-      setSavedMessage("已更新到照護紀錄。");
+      setSavedMessage("已經幫你記好了。");
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : "儲存失敗，請再試一次。");
+      setSaveError(error instanceof Error ? error.message : "暫時無法存起來，請再試一次。");
     } finally {
       setSaving(false);
     }
@@ -114,15 +114,23 @@ export default function OcrResult({ data, onClose, onSaveCorrections, onNavigate
         <div className="ocr-result-title">
           <img src={aiAvatar} alt="健康小管家" />
           <div>
-            <p>{editing ? "正在校正內容" : "我先幫你整理成一份待確認紀錄。"}</p>
-            <span>{editing ? "你可以修正任何不正確的欄位" : "請檢查日期、藥名、提醒事項是否正確；確認後可以儲存修正。"}</span>
+            <p>{editing ? "正在校正內容" : "我幫你看出這些內容，對嗎？"}</p>
+            <span>{editing ? "你可以修正任何不正確的欄位" : "確認後才會放進今日照護、看診與吃藥清單。"}</span>
           </div>
         </div>
         <div className="ocr-result-actions">
           {canPersist && !editing && (
-            <button type="button" className="secondary-action compact-action" onClick={() => setEditing(true)}>
-              編輯辨識結果
-            </button>
+            <>
+              <button type="button" className="primary-action compact-action" onClick={handleSave} disabled={saving}>
+                {saving ? "存起來…" : "正確，存起來"}
+              </button>
+              <button type="button" className="secondary-action compact-action" onClick={() => setEditing(true)} disabled={saving}>
+                有錯，我要修改
+              </button>
+              <button type="button" className="secondary-action compact-action" onClick={() => onAskFamily?.(null)} disabled={saving}>
+                我看不懂，問家人
+              </button>
+            </>
           )}
           {editing && (
             <>
@@ -130,7 +138,7 @@ export default function OcrResult({ data, onClose, onSaveCorrections, onNavigate
                 取消
               </button>
               <button type="button" className="primary-action compact-action" onClick={handleSave} disabled={saving}>
-                {saving ? "儲存中..." : "確認並儲存修正"}
+                {saving ? "存起來…" : "正確，存起來"}
               </button>
             </>
           )}
@@ -145,9 +153,9 @@ export default function OcrResult({ data, onClose, onSaveCorrections, onNavigate
       )}
       {savedMessage && (
         <div className="ocr-success-card">
-          <p className="ocr-success-title">✓ 已更新照護清單。</p>
+          <p className="ocr-success-title">✓ 已經幫你記好了。</p>
           <p className="ocr-success-copy">
-            你可以在「今天重點」查看下一件要記得的事，也可以到「看診日曆」查看回診提醒。
+            你可以在「今日照護」查看下一件要記得的事，也可以到「看診排程」查看回診提醒。
           </p>
           <div className="ocr-nav-actions">
             <button type="button" className="primary-action compact-action" onClick={() => onNavigate?.("overview")}>
