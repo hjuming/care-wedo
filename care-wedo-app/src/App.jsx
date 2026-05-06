@@ -6,7 +6,7 @@ import LoginSetup from "./components/LoginSetup";
 import MobileBottomNav from "./components/MobileBottomNav";
 import OcrResult from "./components/OcrResult";
 import { patientData, medicines, timeline as initialTimeline, checklist as initialChecklist } from "./data/patient";
-import { confirmOcrDocument, fetchDashboard, markMedicationTaken, ocrAnalyze, patchAppointment, patchMedication, updateProfile } from "./services/api";
+import { confirmOcrDocument, fetchDashboard, markMedicationSlotStatus, ocrAnalyze, patchAppointment, patchMedication, updateProfile } from "./services/api";
 import { initLineIdentity, loginWithLine, logoutLineIdentity } from "./services/liff";
 import { trackError, trackEvent } from "./services/telemetry";
 import { buildTodayTasks, formatTaipeiTodayLabel, groupMedicationsBySchedule } from "./services/todayTasks";
@@ -117,6 +117,7 @@ function mergeDashboardShell(profileData, shellData) {
 const AVATAR_MAX_SOURCE_SIZE = 5 * 1024 * 1024;
 const AVATAR_CANVAS_SIZE = 480;
 const CARE_WEDO_LINE_URL = "https://lin.ee/xzbyyvf";
+const CARE_WEDO_APP_ICON = "/android-chrome-512x512.png";
 
 function getAvatarName(avatarUrl) {
   const match = avatarUrl?.match(/^data:[^;,]+;name=([^;]+);base64,/);
@@ -867,10 +868,12 @@ function DashboardApp() {
     await loadDashboard(identity, activeProfileId);
   }
 
-  async function handleMedicationTaken(medication) {
-    await markMedicationTaken(medication.id, {
+  async function handleMedicationTaken(group, status) {
+    await markMedicationSlotStatus({
+      medicationIds: group.medicationIds,
+      status,
       idToken: identity.idToken,
-      timeSlot: medication.schedule?.slot,
+      timeSlot: group.slot,
     });
     await loadDashboard(identity, activeProfileId);
   }
@@ -1030,7 +1033,6 @@ function DashboardApp() {
               medications={medications}
               onUpload={handleUploadClick}
               onTaken={handleMedicationTaken}
-              onAskFamily={handleAskFamily}
             />
           )}
 
@@ -1082,7 +1084,7 @@ function DashboardApp() {
       <GlobalCareContactDock
         botContact={{
           label: "小管家",
-          avatarUrl: aiAvatar,
+          avatarUrl: CARE_WEDO_APP_ICON,
           lineUrl: CARE_WEDO_LINE_URL,
           available: true,
         }}
@@ -1270,10 +1272,17 @@ function normalizeCollaborator(item, index) {
   return {
     id: String(item?.id || item?.user_id || user.id || displayName),
     displayName,
-    avatarUrl: item?.avatarUrl || item?.avatar_url || user.avatar_url || "",
+    avatarUrl: item?.avatarUrl || item?.avatar_url || item?.picture_url || user.avatar_url || user.picture_url || "",
     role: item?.role || "member",
     canContact: item?.canContact ?? item?.can_contact ?? true,
   };
+}
+
+function getMedicationShortName(name = "藥") {
+  return String(name || "藥")
+    .replace(/[（(].*?[）)]/g, "")
+    .replace(/\s+/g, "")
+    .slice(0, 4) || "藥";
 }
 
 function GlobalCareContactDock({ collaborators = [], botContact, onAskFamily }) {
@@ -1361,17 +1370,16 @@ function GlobalCareContactDock({ collaborators = [], botContact, onAskFamily }) 
       <aside className={`global-care-contact-dock ${expanded ? "is-expanded" : ""}`} aria-label="照護協助入口">
         <button
           type="button"
-          className="care-contact-main-button with-label"
+          className="care-contact-main-button"
           onClick={() => setExpanded((current) => !current)}
           aria-expanded={expanded}
           aria-label={expanded ? "收合照護協助入口" : "展開照護協助入口"}
         >
-          <img src={botContact.avatarUrl || aiAvatar} alt="" />
-          <span>{botContact.label}</span>
+          <img src={botContact.avatarUrl || CARE_WEDO_APP_ICON} alt="" />
         </button>
         {expanded && botContact.available && (
           <button type="button" className="care-contact-item with-label" onClick={openBotSheet} aria-label="問 Care WEDO 照護小管家">
-            <img src={botContact.avatarUrl || aiAvatar} alt="" />
+            <img src={botContact.avatarUrl || CARE_WEDO_APP_ICON} alt="" />
             <span>{botContact.label}</span>
           </button>
         )}
@@ -1407,7 +1415,7 @@ function GlobalCareContactDock({ collaborators = [], botContact, onAskFamily }) 
                   setShowAllCollaborators(false);
                   openCollaboratorSheet(collaborator);
                 }}>
-                  <span>{getInitial(collaborator.displayName)}</span>
+                  {collaborator.avatarUrl ? <img src={collaborator.avatarUrl} alt="" /> : <span>{getInitial(collaborator.displayName)}</span>}
                   {collaborator.displayName}
                 </button>
               ))}
@@ -1755,61 +1763,74 @@ function CalendarView({ appointments, onUpload }) {
   );
 }
 
-function MedicationView({ medications, onUpload, onTaken, onAskFamily }) {
-  const [savingTakenId, setSavingTakenId] = useState(null);
+function MedicationView({ medications, onUpload, onTaken }) {
+  const [savingSlot, setSavingSlot] = useState(null);
+  const [expandedMedicationId, setExpandedMedicationId] = useState(null);
   const medicationGroups = useMemo(() => groupMedicationsBySchedule(medications), [medications]);
 
-  async function handleTaken(medication) {
-    setSavingTakenId(medication.id);
+  async function handleSlotStatus(group, status) {
+    setSavingSlot(`${group.slot}-${status}`);
     try {
-      await onTaken?.(medication);
+      await onTaken?.(group, status);
     } finally {
-      setSavingTakenId(null);
+      setSavingSlot(null);
     }
   }
 
-  function handleForgotMedication(medication) {
+  function handleForgotMedication() {
     window.alert("請先不要重複吃藥。建議查看藥盒，或請家人協助確認。");
-    onAskFamily?.({
-      kind: "medication",
-      title: medication.name,
-      time: medication.schedule?.timeLabel || medication.frequency || "時間待確認",
-      subtitle: [medication.schedule?.mealTimingLabel, medication.dosage].filter(Boolean).join(" ｜ "),
-      detail: medication.warnings || medication.reminder_text || "",
-    });
   }
 
   return (
     <div className="medicine-grid">
       {medicationGroups.length ? medicationGroups.map((group) => (
         <section key={group.slot} className="medicine-time-group">
-          <h3>{group.label}</h3>
-          {group.medications.map((med) => (
-            <article key={med.id} className="medicine-card">
-              <span className="medicine-color" style={{ backgroundColor: med.color }} />
-              <div>
-                <div className="medicine-card-head">
-                  <div>
-                    <p>{[med.schedule.timeLabel, med.schedule.mealTimingLabel, med.dosage].filter(Boolean).join(" ｜ ")}</p>
-                    <h3>{med.name || "藥名待確認"}</h3>
-                  </div>
-                  <div className="medicine-card-actions">
-                    <button type="button" className="primary-action compact-action" onClick={() => handleTaken(med)} disabled={savingTakenId === med.id || med.taken_status === "taken"}>
-                      {med.taken_status === "taken" ? "已記好了" : savingTakenId === med.id ? "記錄中…" : "我吃了"}
-                    </button>
-                    <button type="button" className="secondary-action compact-action" onClick={() => handleForgotMedication(med)} disabled={savingTakenId === med.id}>
-                      我忘記有沒有吃
-                    </button>
-                  </div>
-                </div>
-                <dl>
-                  <div><dt>份量</dt><dd>{med.dosage || "待確認"}</dd></div>
-                  {med.purpose && <div><dt>用途</dt><dd>{med.purpose}</dd></div>}
-                  {med.warnings && <div><dt>注意</dt><dd>{med.warnings}</dd></div>}
-                </dl>
-              </div>
-            </article>
-          ))}
+          <div className="medicine-slot-head">
+            <div>
+              <p>{group.medications.length} 種藥</p>
+              <h3>{group.label}</h3>
+            </div>
+            <div className="medicine-slot-actions">
+              <button type="button" className="primary-action compact-action" onClick={() => handleSlotStatus(group, "taken")} disabled={savingSlot === `${group.slot}-taken` || group.medications.every((med) => med.taken_status === "taken")}>
+                {savingSlot === `${group.slot}-taken` ? "記錄中…" : "吃了"}
+              </button>
+              <button type="button" className="secondary-action compact-action" onClick={() => { handleForgotMedication(); handleSlotStatus(group, "forgotten"); }} disabled={savingSlot === `${group.slot}-forgotten`}>
+                忘了
+              </button>
+            </div>
+          </div>
+          <div className="medicine-chip-list">
+            {group.medications.map((med) => {
+              const isExpanded = expandedMedicationId === med.id;
+              return (
+                <article key={med.id} className={`medicine-card ${isExpanded ? "is-expanded" : ""}`}>
+                  <button
+                    type="button"
+                    className="medicine-chip-button"
+                    onClick={() => setExpandedMedicationId(isExpanded ? null : med.id)}
+                    aria-expanded={isExpanded}
+                    aria-label={`查看 ${med.name || "藥名待確認"} 說明`}
+                  >
+                    <span className="medicine-color" style={{ backgroundColor: med.color }} aria-hidden="true">
+                      {getMedicationShortName(med.name).slice(0, 1)}
+                    </span>
+                    <span>{getMedicationShortName(med.name)}</span>
+                  </button>
+                  {isExpanded && (
+                    <dl>
+                      <div><dt>全名</dt><dd>{med.name || "藥名待確認"}</dd></div>
+                      <div><dt>份量</dt><dd>{med.dosage || "待確認"}</dd></div>
+                      {[med.schedule.timeLabel, med.schedule.mealTimingLabel].filter(Boolean).length > 0 && (
+                        <div><dt>時間</dt><dd>{[med.schedule.timeLabel, med.schedule.mealTimingLabel].filter(Boolean).join(" ｜ ")}</dd></div>
+                      )}
+                      {med.purpose && <div><dt>用途</dt><dd>{med.purpose}</dd></div>}
+                      {med.warnings && <div><dt>注意</dt><dd>{med.warnings}</dd></div>}
+                    </dl>
+                  )}
+                </article>
+              );
+            })}
+          </div>
         </section>
       )) : (
         <EmptyGuide

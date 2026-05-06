@@ -112,3 +112,19 @@ test("groupMedicationsBySchedule groups active medicines by elder-friendly time 
     { label: "晚上", names: ["胃藥"], mealTiming: ["飯前"] },
   ]);
 });
+
+test("groupMedicationsBySchedule exposes slot-level ids for one-tap confirmation", () => {
+  const groups = groupMedicationsBySchedule([
+    { id: 1, name: "A", time_slot: "morning", active: true },
+    { id: 2, name: "B", time_slot: "morning", active: true },
+    { id: 3, name: "C", time_slot: "bedtime", active: true },
+  ]);
+
+  assert.deepEqual(groups.map((group) => ({
+    slot: group.slot,
+    medicationIds: group.medicationIds,
+  })), [
+    { slot: "morning", medicationIds: [1, 2] },
+    { slot: "bedtime", medicationIds: [3] },
+  ]);
+});

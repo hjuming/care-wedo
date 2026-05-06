@@ -1973,52 +1973,90 @@ input:focus-visible {
 .medicine-time-group {
   display: grid;
   gap: 12px;
-}
-
-.medicine-time-group > h3 {
-  margin: 0;
-  color: var(--primary-dark);
-  font-size: 24px;
-}
-
-.medicine-card {
-  display: grid;
-  grid-template-columns: 12px minmax(0, 1fr);
-  gap: 16px;
+  align-content: start;
   padding: 18px;
+  border-radius: var(--radius-card);
+  background: var(--card-bg);
+  box-shadow: var(--shadow-soft);
 }
 
-.medicine-color {
-  border-radius: 999px;
-}
-
-.medicine-card h3 {
-  font-size: 24px;
-  overflow-wrap: anywhere;
-}
-
-.medicine-card-head {
+.medicine-slot-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
 }
 
-.medicine-card-actions {
+.medicine-slot-head p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-weight: 800;
+}
+
+.medicine-slot-head h3 {
+  margin: 0;
+  color: var(--primary-dark);
+  font-size: 24px;
+}
+
+.medicine-slot-actions {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
 }
 
-.medicine-card-actions .compact-action {
-  flex: 0 0 auto;
+.medicine-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.medicine-card {
+  display: block;
+  min-width: 0;
+  padding: 0;
+  border: 1px solid rgba(37, 111, 91, 0.12);
+  border-radius: 18px;
+  background: var(--surface-strong);
+  overflow: hidden;
+}
+
+.medicine-card.is-expanded {
+  flex-basis: 100%;
+}
+
+.medicine-color {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.medicine-chip-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 8px 12px 8px 8px;
+  color: var(--primary-dark);
+  font-size: 17px;
+  font-weight: 900;
+  cursor: pointer;
 }
 
 .medicine-card dl {
   display: grid;
   gap: 8px;
-  margin-top: 14px;
+  margin: 0;
+  padding: 12px 14px 14px;
 }
 
 .medicine-card dl div {
@@ -3400,12 +3438,9 @@ button:disabled,
 }
 
 .care-contact-main-button {
-  min-width: 64px;
-  min-height: 64px;
-  gap: 7px;
+  width: 64px;
+  height: 64px;
   box-shadow: var(--shadow-float);
-  font-size: 14px;
-  flex-direction: row-reverse;
 }
 
 .care-contact-main-button img,
@@ -3426,6 +3461,12 @@ button:disabled,
 .care-contact-item.with-label {
   width: auto;
   padding: 8px 12px 8px 8px;
+}
+
+.care-contact-main-button img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .care-contact-item img {
@@ -3515,6 +3556,13 @@ button:disabled,
   height: 36px;
   border-radius: 999px;
   background: rgba(37, 111, 91, 0.12);
+}
+
+.collaborator-list img {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  object-fit: cover;
 }
 
 .today-hero-panel {
@@ -3685,10 +3733,10 @@ button:disabled,
   }
 
   .global-care-contact-dock {
-    right: max(16px, calc((100vw - min(100vw, 430px)) / 2 + 72px));
+    right: 16px;
     left: auto;
-    bottom: 96px;
-    bottom: calc(96px + env(safe-area-inset-bottom));
+    bottom: 88px;
+    bottom: calc(88px + env(safe-area-inset-bottom));
   }
 
   .elder-task-card {

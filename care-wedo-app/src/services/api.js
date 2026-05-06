@@ -302,14 +302,16 @@ export async function patchMedication(id, updates, { idToken }) {
   return response.json();
 }
 
-export async function markMedicationTaken(id, { idToken, takenDate, timeSlot } = {}) {
+export async function markMedicationSlotStatus({ medicationIds, status, idToken, takenDate, timeSlot } = {}) {
   const headers = { "Content-Type": "application/json" };
   if (idToken) headers.Authorization = `Bearer ${idToken}`;
 
-  const response = await fetch(`${API_BASE}/medications/${id}/taken`, {
+  const response = await fetch(`${API_BASE}/medications/taken`, {
     method: "POST",
     headers,
     body: JSON.stringify({
+      medication_ids: medicationIds,
+      status,
       taken_date: takenDate,
       time_slot: timeSlot,
     }),

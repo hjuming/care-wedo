@@ -106,10 +106,13 @@ export function groupMedicationsBySchedule(medications = []) {
           slot: schedule.slot,
           label: schedule.slotLabel,
           medications: [],
+          medicationIds: [],
           rank: SLOT_ORDER[schedule.slotLabel] || 5000,
         });
       }
-      groups.get(schedule.slot).medications.push({ ...medication, schedule });
+      const group = groups.get(schedule.slot);
+      group.medications.push({ ...medication, schedule });
+      group.medicationIds.push(medication.id);
     });
 
   return Array.from(groups.values())
@@ -118,6 +121,7 @@ export function groupMedicationsBySchedule(medications = []) {
       const publicGroup = {
         slot: group.slot,
         label: group.label,
+        medicationIds: group.medicationIds,
         medications: group.medications.sort((a, b) => (timeRank(a.schedule.timeLabel) - timeRank(b.schedule.timeLabel)) || String(a.name || "").localeCompare(String(b.name || ""), "zh-Hant")),
       };
       return publicGroup;

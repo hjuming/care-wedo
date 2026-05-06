@@ -66,10 +66,13 @@ test("Medication view groups medicines by time and keeps forgotten-dose safety a
   const medicationView = source.slice(source.indexOf("function MedicationView"));
   assert.match(medicationView, /groupMedicationsBySchedule/);
   assert.match(medicationView, /medicine-time-group/);
-  assert.match(medicationView, /我吃了/);
-  assert.match(medicationView, /已記好了/);
-  assert.match(source, /markMedicationTaken/);
-  assert.match(medicationView, /我忘記有沒有吃/);
+  assert.match(medicationView, /medicine-slot-actions/);
+  assert.match(medicationView, /medicine-chip-button/);
+  assert.match(medicationView, /getMedicationShortName/);
+  assert.match(medicationView, /"吃了"/);
+  assert.match(medicationView, />\s*忘了\s*</);
+  assert.doesNotMatch(medicationView, /我忘記有沒有吃/);
+  assert.match(source, /markMedicationSlotStatus/);
   assert.match(medicationView, /請先不要重複吃藥/);
 });
 
@@ -86,17 +89,30 @@ test("Medication records expose schedule fields for elder-friendly medicine inst
   assert.match(shared, /taken_status:\s*row\.taken_status/);
 });
 
-test("Medication taken API records dated logs with ownership checks", () => {
+test("Medication slot status API records dated logs with ownership checks", () => {
   const schema = readProjectFile("supabase/schema.sql");
-  const api = readProjectFile("functions/api/medications/[id]/taken.ts");
+  const api = readProjectFile("functions/api/medications/taken.ts");
   assert.match(schema, /create table if not exists public\.medication_logs/);
   assert.match(schema, /taken_date date not null/);
   assert.match(schema, /confirmed_by_user_id bigint/);
   assert.match(api, /getBearerToken/);
   assert.match(api, /getUserMemberships/);
-  assert.match(api, /medications\?id=eq\.\$\{id\}/);
+  assert.match(api, /medication_ids/);
+  assert.match(api, /medications\?id=in\.\(\$\{medicationIds\.join\(","\)\}\)/);
   assert.match(api, /medication_logs\?select=/);
-  assert.match(api, /status:\s*"taken"/);
+  assert.match(api, /status:\s*status/);
+});
+
+test("Global care contact dock uses a circular icon-only app avatar on mobile", () => {
+  const app = readProjectFile("care-wedo-app/src/App.jsx");
+  const css = readProjectFile("care-wedo-app/src/index.css");
+  const dock = app.slice(app.indexOf("function GlobalCareContactDock"));
+  assert.match(app, /CARE_WEDO_APP_ICON/);
+  assert.match(app, /android-chrome-512x512\.png/);
+  assert.doesNotMatch(dock, /care-contact-main-button with-label/);
+  assert.match(css, /\.care-contact-main-button\s*\{[^}]*width:\s*64px/s);
+  assert.match(css, /\.global-care-contact-dock\s*\{[^}]*right:\s*16px/s);
+  assert.doesNotMatch(css, /calc\(\(100vw - min\(100vw, 430px\)\) \/ 2 \+ 72px\)/);
 });
 
 test("Family group creation uses a user feature flag, not group plans", () => {
