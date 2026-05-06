@@ -66,6 +66,9 @@ test("Medication view groups medicines by time and keeps forgotten-dose safety a
   const medicationView = source.slice(source.indexOf("function MedicationView"));
   assert.match(medicationView, /groupMedicationsBySchedule/);
   assert.match(medicationView, /medicine-time-group/);
+  assert.match(medicationView, /我吃了/);
+  assert.match(medicationView, /已記好了/);
+  assert.match(source, /markMedicationTaken/);
   assert.match(medicationView, /我忘記有沒有吃/);
   assert.match(medicationView, /請先不要重複吃藥/);
 });
@@ -81,6 +84,19 @@ test("Medication records expose schedule fields for elder-friendly medicine inst
   assert.match(shared, /meal_timing:\s*row\.meal_timing/);
   assert.match(shared, /scheduled_time:\s*row\.scheduled_time/);
   assert.match(shared, /taken_status:\s*row\.taken_status/);
+});
+
+test("Medication taken API records dated logs with ownership checks", () => {
+  const schema = readProjectFile("supabase/schema.sql");
+  const api = readProjectFile("functions/api/medications/[id]/taken.ts");
+  assert.match(schema, /create table if not exists public\.medication_logs/);
+  assert.match(schema, /taken_date date not null/);
+  assert.match(schema, /confirmed_by_user_id bigint/);
+  assert.match(api, /getBearerToken/);
+  assert.match(api, /getUserMemberships/);
+  assert.match(api, /medications\?id=eq\.\$\{id\}/);
+  assert.match(api, /medication_logs\?select=/);
+  assert.match(api, /status:\s*"taken"/);
 });
 
 test("Family group creation uses a user feature flag, not group plans", () => {

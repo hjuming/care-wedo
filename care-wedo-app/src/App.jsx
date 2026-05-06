@@ -6,7 +6,7 @@ import LoginSetup from "./components/LoginSetup";
 import MobileBottomNav from "./components/MobileBottomNav";
 import OcrResult from "./components/OcrResult";
 import { patientData, medicines, timeline as initialTimeline, checklist as initialChecklist } from "./data/patient";
-import { confirmOcrDocument, fetchDashboard, ocrAnalyze, patchAppointment, patchMedication, updateProfile } from "./services/api";
+import { confirmOcrDocument, fetchDashboard, markMedicationTaken, ocrAnalyze, patchAppointment, patchMedication, updateProfile } from "./services/api";
 import { initLineIdentity, loginWithLine, logoutLineIdentity } from "./services/liff";
 import { trackError, trackEvent } from "./services/telemetry";
 import { buildTodayTasks, formatTaipeiTodayLabel, groupMedicationsBySchedule } from "./services/todayTasks";
@@ -867,6 +867,14 @@ function DashboardApp() {
     await loadDashboard(identity, activeProfileId);
   }
 
+  async function handleMedicationTaken(medication) {
+    await markMedicationTaken(medication.id, {
+      idToken: identity.idToken,
+      timeSlot: medication.schedule?.slot,
+    });
+    await loadDashboard(identity, activeProfileId);
+  }
+
   function handleProfileChange(profileId) {
     trackEvent("frontend.profile_switch", { profileId });
     setActiveProfileId(profileId);
@@ -1021,6 +1029,7 @@ function DashboardApp() {
             <MedicationView
               medications={medications}
               onUpload={handleUploadClick}
+              onTaken={handleMedicationTaken}
               onAskFamily={handleAskFamily}
             />
           )}
@@ -1746,8 +1755,18 @@ function CalendarView({ appointments, onUpload }) {
   );
 }
 
-function MedicationView({ medications, onUpload, onAskFamily }) {
+function MedicationView({ medications, onUpload, onTaken, onAskFamily }) {
+  const [savingTakenId, setSavingTakenId] = useState(null);
   const medicationGroups = useMemo(() => groupMedicationsBySchedule(medications), [medications]);
+
+  async function handleTaken(medication) {
+    setSavingTakenId(medication.id);
+    try {
+      await onTaken?.(medication);
+    } finally {
+      setSavingTakenId(null);
+    }
+  }
 
   function handleForgotMedication(medication) {
     window.alert("請先不要重複吃藥。建議查看藥盒，或請家人協助確認。");
@@ -1774,9 +1793,14 @@ function MedicationView({ medications, onUpload, onAskFamily }) {
                     <p>{[med.schedule.timeLabel, med.schedule.mealTimingLabel, med.dosage].filter(Boolean).join(" ｜ ")}</p>
                     <h3>{med.name || "藥名待確認"}</h3>
                   </div>
-                  <button type="button" className="secondary-action compact-action" onClick={() => handleForgotMedication(med)}>
-                    我忘記有沒有吃
-                  </button>
+                  <div className="medicine-card-actions">
+                    <button type="button" className="primary-action compact-action" onClick={() => handleTaken(med)} disabled={savingTakenId === med.id || med.taken_status === "taken"}>
+                      {med.taken_status === "taken" ? "已記好了" : savingTakenId === med.id ? "記錄中…" : "我吃了"}
+                    </button>
+                    <button type="button" className="secondary-action compact-action" onClick={() => handleForgotMedication(med)} disabled={savingTakenId === med.id}>
+                      我忘記有沒有吃
+                    </button>
+                  </div>
                 </div>
                 <dl>
                   <div><dt>份量</dt><dd>{med.dosage || "待確認"}</dd></div>

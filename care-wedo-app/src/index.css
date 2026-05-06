@@ -2004,7 +2004,14 @@ input:focus-visible {
   gap: 12px;
 }
 
-.medicine-card-head .compact-action {
+.medicine-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.medicine-card-actions .compact-action {
   flex: 0 0 auto;
 }
 

@@ -302,6 +302,25 @@ export async function patchMedication(id, updates, { idToken }) {
   return response.json();
 }
 
+export async function markMedicationTaken(id, { idToken, takenDate, timeSlot } = {}) {
+  const headers = { "Content-Type": "application/json" };
+  if (idToken) headers.Authorization = `Bearer ${idToken}`;
+
+  const response = await fetch(`${API_BASE}/medications/${id}/taken`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      taken_date: takenDate,
+      time_slot: timeSlot,
+    }),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(async () => ({ error: await response.text() }));
+    throw new Error(error.error || "無法記錄吃藥狀態");
+  }
+  return response.json();
+}
+
 /**
  * 更新照護對象的資訊（如：名稱、頭像、附註）
  */
