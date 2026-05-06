@@ -1970,6 +1970,17 @@ input:focus-visible {
   gap: 16px;
 }
 
+.medicine-time-group {
+  display: grid;
+  gap: 12px;
+}
+
+.medicine-time-group > h3 {
+  margin: 0;
+  color: var(--primary-dark);
+  font-size: 24px;
+}
+
 .medicine-card {
   display: grid;
   grid-template-columns: 12px minmax(0, 1fr);
@@ -1984,6 +1995,17 @@ input:focus-visible {
 .medicine-card h3 {
   font-size: 24px;
   overflow-wrap: anywhere;
+}
+
+.medicine-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.medicine-card-head .compact-action {
+  flex: 0 0 auto;
 }
 
 .medicine-card dl {

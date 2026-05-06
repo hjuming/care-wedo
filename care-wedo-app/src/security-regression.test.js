@@ -61,6 +61,28 @@ test("Global care contact sheets support keyboard close and focus return", () =>
   assert.match(dock, /\.focus\(\)/);
 });
 
+test("Medication view groups medicines by time and keeps forgotten-dose safety action", () => {
+  const source = readProjectFile("care-wedo-app/src/App.jsx");
+  const medicationView = source.slice(source.indexOf("function MedicationView"));
+  assert.match(medicationView, /groupMedicationsBySchedule/);
+  assert.match(medicationView, /medicine-time-group/);
+  assert.match(medicationView, /我忘記有沒有吃/);
+  assert.match(medicationView, /請先不要重複吃藥/);
+});
+
+test("Medication records expose schedule fields for elder-friendly medicine instructions", () => {
+  const schema = readProjectFile("supabase/schema.sql");
+  const shared = readProjectFile("functions/_shared/supabase.ts");
+  assert.match(schema, /time_slot text/);
+  assert.match(schema, /meal_timing text/);
+  assert.match(schema, /scheduled_time text/);
+  assert.match(schema, /taken_status text/);
+  assert.match(shared, /time_slot:\s*row\.time_slot/);
+  assert.match(shared, /meal_timing:\s*row\.meal_timing/);
+  assert.match(shared, /scheduled_time:\s*row\.scheduled_time/);
+  assert.match(shared, /taken_status:\s*row\.taken_status/);
+});
+
 test("Family group creation uses a user feature flag, not group plans", () => {
   const groupsApi = readProjectFile("functions/api/groups.ts");
   const supabase = readProjectFile("functions/_shared/supabase.ts");

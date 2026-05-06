@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildTodayTasks, formatTaipeiTodayLabel } from "./todayTasks.js";
+import { buildTodayTasks, formatTaipeiTodayLabel, groupMedicationsBySchedule } from "./todayTasks.js";
 
 test("buildTodayTasks turns same-day appointments and medications into elder-friendly tasks", () => {
   const tasks = buildTodayTasks({
@@ -75,4 +75,40 @@ test("formatTaipeiTodayLabel returns a large-date friendly label", () => {
     headline: "今天",
     date: "5 月 6 日（三）",
   });
+});
+
+test("groupMedicationsBySchedule groups active medicines by elder-friendly time slots", () => {
+  const groups = groupMedicationsBySchedule([
+    {
+      id: 1,
+      name: "降血壓藥",
+      dosage: "1 顆",
+      frequency: "早餐後",
+      active: true,
+    },
+    {
+      id: 2,
+      name: "胃藥",
+      dosage: "1 顆",
+      time_slot: "evening",
+      meal_timing: "before_meal",
+      active: true,
+    },
+    {
+      id: 3,
+      name: "已停用藥",
+      dosage: "1 顆",
+      time_slot: "morning",
+      active: false,
+    },
+  ]);
+
+  assert.deepEqual(groups.map((group) => ({
+    label: group.label,
+    names: group.medications.map((med) => med.name),
+    mealTiming: group.medications.map((med) => med.schedule.mealTimingLabel),
+  })), [
+    { label: "早上", names: ["降血壓藥"], mealTiming: ["飯後"] },
+    { label: "晚上", names: ["胃藥"], mealTiming: ["飯前"] },
+  ]);
 });

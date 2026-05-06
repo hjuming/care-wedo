@@ -46,6 +46,10 @@ export type MedicationRow = {
   name: string | null;
   dosage: string | null;
   frequency: string | null;
+  time_slot?: string | null;
+  meal_timing?: string | null;
+  scheduled_time?: string | null;
+  taken_status?: string | null;
   purpose: string | null;
   warnings: string | null;
   reminder_text: string | null;
@@ -415,7 +419,7 @@ export type AppointmentUpdateFields = Partial<Pick<AppointmentRow,
 >>;
 
 export type MedicationUpdateFields = Partial<Pick<MedicationRow,
-  "active" | "name" | "dosage" | "frequency" | "purpose" | "warnings" | "reminder_text"
+  "active" | "name" | "dosage" | "frequency" | "time_slot" | "meal_timing" | "scheduled_time" | "taken_status" | "purpose" | "warnings" | "reminder_text"
 >>;
 
 export async function patchAppointment(
@@ -503,6 +507,10 @@ export function serializeMedication(row: MedicationRow) {
     name: row.name,
     dosage: row.dosage,
     frequency: row.frequency,
+    time_slot: row.time_slot,
+    meal_timing: row.meal_timing,
+    scheduled_time: row.scheduled_time,
+    taken_status: row.taken_status,
     purpose: row.purpose,
     warnings: row.warnings,
     reminder_text: row.reminder_text,

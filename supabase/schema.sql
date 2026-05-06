@@ -172,6 +172,10 @@ create table if not exists public.medications (
   name text,
   dosage text,
   frequency text,
+  time_slot text,
+  meal_timing text,
+  scheduled_time text,
+  taken_status text,
   purpose text,
   warnings text,
   reminder_text text,
@@ -188,7 +192,11 @@ alter table public.appointments
 
 alter table public.medications
   add column if not exists group_id bigint references public.family_groups(id) on delete cascade,
-  add column if not exists profile_id bigint references public.care_profiles(id) on delete set null;
+  add column if not exists profile_id bigint references public.care_profiles(id) on delete set null,
+  add column if not exists time_slot text,
+  add column if not exists meal_timing text,
+  add column if not exists scheduled_time text,
+  add column if not exists taken_status text;
 
 alter table public.user_family_groups
   add column if not exists can_manage boolean not null default true,

@@ -9,7 +9,7 @@ import { patientData, medicines, timeline as initialTimeline, checklist as initi
 import { confirmOcrDocument, fetchDashboard, ocrAnalyze, patchAppointment, patchMedication, updateProfile } from "./services/api";
 import { initLineIdentity, loginWithLine, logoutLineIdentity } from "./services/liff";
 import { trackError, trackEvent } from "./services/telemetry";
-import { buildTodayTasks, formatTaipeiTodayLabel } from "./services/todayTasks";
+import { buildTodayTasks, formatTaipeiTodayLabel, groupMedicationsBySchedule } from "./services/todayTasks";
 import PrivacyPage from "./components/PrivacyPage";
 import TermsPage from "./components/TermsPage";
 import aiAvatar from "./assets/ai-avatar.png";
@@ -1021,6 +1021,7 @@ function DashboardApp() {
             <MedicationView
               medications={medications}
               onUpload={handleUploadClick}
+              onAskFamily={handleAskFamily}
             />
           )}
 
@@ -1745,29 +1746,54 @@ function CalendarView({ appointments, onUpload }) {
   );
 }
 
-function MedicationView({ medications, onUpload }) {
+function MedicationView({ medications, onUpload, onAskFamily }) {
+  const medicationGroups = useMemo(() => groupMedicationsBySchedule(medications), [medications]);
+
+  function handleForgotMedication(medication) {
+    window.alert("請先不要重複吃藥。建議查看藥盒，或請家人協助確認。");
+    onAskFamily?.({
+      kind: "medication",
+      title: medication.name,
+      time: medication.schedule?.timeLabel || medication.frequency || "時間待確認",
+      subtitle: [medication.schedule?.mealTimingLabel, medication.dosage].filter(Boolean).join(" ｜ "),
+      detail: medication.warnings || medication.reminder_text || "",
+    });
+  }
+
   return (
     <div className="medicine-grid">
-      {medications.length ? medications.map((med) => (
-        <article key={med.id} className="medicine-card">
-          <span className="medicine-color" style={{ backgroundColor: med.color }} />
-          <div>
-            <h3>{med.name}</h3>
-            <p>{med.purpose}</p>
-            <dl>
-              <div><dt>時間</dt><dd>{med.frequency}</dd></div>
-              <div><dt>份量</dt><dd>{med.dosage}</dd></div>
-              {med.warnings && <div><dt>注意</dt><dd>{med.warnings}</dd></div>}
-            </dl>
-          </div>
-        </article>
+      {medicationGroups.length ? medicationGroups.map((group) => (
+        <section key={group.slot} className="medicine-time-group">
+          <h3>{group.label}</h3>
+          {group.medications.map((med) => (
+            <article key={med.id} className="medicine-card">
+              <span className="medicine-color" style={{ backgroundColor: med.color }} />
+              <div>
+                <div className="medicine-card-head">
+                  <div>
+                    <p>{[med.schedule.timeLabel, med.schedule.mealTimingLabel, med.dosage].filter(Boolean).join(" ｜ ")}</p>
+                    <h3>{med.name || "藥名待確認"}</h3>
+                  </div>
+                  <button type="button" className="secondary-action compact-action" onClick={() => handleForgotMedication(med)}>
+                    我忘記有沒有吃
+                  </button>
+                </div>
+                <dl>
+                  <div><dt>份量</dt><dd>{med.dosage || "待確認"}</dd></div>
+                  {med.purpose && <div><dt>用途</dt><dd>{med.purpose}</dd></div>}
+                  {med.warnings && <div><dt>注意</dt><dd>{med.warnings}</dd></div>}
+                </dl>
+              </div>
+            </article>
+          ))}
+        </section>
       )) : (
         <EmptyGuide
-          title="目前還沒有用藥提醒。"
-          description="你可以拍下藥袋或處方資訊，讓 Care WEDO 幫你整理用藥時間、注意事項與提醒。"
+          title="目前還沒有吃藥說明。"
+          description="你可以拍下藥袋或處方資訊，讓 Care WEDO 幫你整理吃藥時間、份量與注意事項。"
           primaryLabel="上傳藥袋照片"
           onPrimary={onUpload}
-          secondaryLabel="新增用藥提醒"
+          secondaryLabel="新增吃藥說明"
         />
       )}
     </div>
