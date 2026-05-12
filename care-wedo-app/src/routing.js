@@ -4,7 +4,8 @@ export function isLineCallbackSearch(search = "") {
 }
 
 export function resolveCareWedoRoute(pathname = "/") {
-  const normalized = pathname.replace(/\/+$/, "") || "/";
+  const cleanPathname = pathname.split(/[?#]/, 1)[0] || "/";
+  const normalized = cleanPathname.replace(/\/+$/, "") || "/";
   if (normalized === "/app") return "app";
   if (normalized === "/login") return "login";
   if (normalized === "/privacy") return "privacy";

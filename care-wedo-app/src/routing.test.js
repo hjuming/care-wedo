@@ -9,6 +9,8 @@ test("resolveCareWedoRoute sends the public homepage to the landing page", () =>
 test("resolveCareWedoRoute sends the app path to the care dashboard", () => {
   assert.equal(resolveCareWedoRoute("/app"), "app");
   assert.equal(resolveCareWedoRoute("/app/"), "app");
+  assert.equal(resolveCareWedoRoute("/app?code=abc&liff.state=%2Fapp"), "app");
+  assert.equal(resolveCareWedoRoute("/app#dashboard"), "app");
 });
 
 test("resolveCareWedoRoute sends the login path to the login page", () => {
