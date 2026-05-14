@@ -73,6 +73,14 @@ test("Dashboard fetches group-level reminders with the active profile", () => {
   assert.match(dashboard, /group_id=eq\.\$\{groupId\}/);
 });
 
+test("Dashboard honors an explicitly selected profile over stale group state", () => {
+  const dashboard = readProjectFile("functions/api/dashboard.ts");
+  const chooseProfile = dashboard.slice(dashboard.indexOf("function chooseProfile"), dashboard.indexOf("type DashboardMemberRow"));
+  assert.match(chooseProfile, /if \(requestedProfileId\)/);
+  assert.match(chooseProfile, /if \(found\) return found/);
+  assert.doesNotMatch(chooseProfile, /found && \(!requestedGroupId \|\| found\.group_id === requestedGroupId\)/);
+});
+
 test("Global care contact sheets support keyboard close and focus return", () => {
   const source = readProjectFile("care-wedo-app/src/App.jsx");
   const dock = source.slice(source.indexOf("function GlobalCareContactDock"));

@@ -118,7 +118,7 @@ function parseGroupId(request: Request): number | null {
 function chooseProfile(profiles: CareProfileRow[], requestedProfileId: number | null, requestedGroupId: number | null): CareProfileRow | null {
   if (requestedProfileId) {
     const found = profiles.find((p) => p.id === requestedProfileId);
-    if (found && (!requestedGroupId || found.group_id === requestedGroupId)) return found;
+    if (found) return found;
   }
   if (requestedGroupId) {
     return profiles.find((p) => p.group_id === requestedGroupId) || null;
