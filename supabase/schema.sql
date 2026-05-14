@@ -114,6 +114,8 @@ create table if not exists public.care_profiles (
   avatar_url text,
   birth_year integer,
   birth_date date,
+  emergency_phone text,
+  email text,
   gender text,
   main_hospital text,
   main_department text,
@@ -124,6 +126,8 @@ create table if not exists public.care_profiles (
 
 alter table public.care_profiles
   add column if not exists birth_date date,
+  add column if not exists emergency_phone text,
+  add column if not exists email text,
   add column if not exists gender text;
 
 create table if not exists public.user_family_groups (

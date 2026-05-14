@@ -35,7 +35,33 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
     return data.user_memberships?.filter((m) => m.group_id === groupId) || [];
   }
 
-  function copyInviteCode(code) {
+  function buildInviteMessage(group, code) {
+    const inviteUrl = `${window.location.origin}/login?invite_code=${encodeURIComponent(code)}`;
+    return `邀請你加入 Care WEDO「${group.name || "家庭群組"}」，一起照顧家人。\n\n邀請碼：${code}\n加入網址：${inviteUrl}\n\n打開網址後，用 LINE 登入並完成基本資料，就能同步看今日照護、未來行程與提醒。`;
+  }
+
+  function copyInviteCode(group) {
+    const message = buildInviteMessage(group, group.invite_code);
+    navigator.clipboard.writeText(message);
+    setCopiedCode(group.invite_code);
+    setTimeout(() => setCopiedCode(null), 2000);
+  }
+
+  function openLineProfile(lineUserId) {
+    if (!lineUserId) return;
+    const lineUrl = `https://line.me/R/ti/p/${encodeURIComponent(lineUserId)}`;
+    window.open(lineUrl, "_blank", "noopener,noreferrer");
+  }
+
+  function getMemberDisplayName(member, index) {
+    return member.user?.name || (member.user?.line_user_id ? `LINE 用戶 …${member.user.line_user_id.slice(-4)}` : `成員 ${index + 1}`);
+  }
+
+  function getMemberAvatar(member, name) {
+    return member.user?.picture_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=E6F0F1&color=315F68&bold=true`;
+  }
+
+  function copyInviteCodeOnly(code) {
     navigator.clipboard.writeText(code);
     setCopiedCode(code);
     setTimeout(() => setCopiedCode(null), 2000);
@@ -161,9 +187,9 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
                     <button
                       type="button"
                       className="btn-copy"
-                      onClick={() => copyInviteCode(group.invite_code)}
+                      onClick={() => copyInviteCode(group)}
                     >
-                      {copiedCode === group.invite_code ? "✓ 已複製" : "複製"}
+                      {copiedCode === group.invite_code ? "✓ 已複製邀請文案" : "複製邀請"}
                     </button>
                     {isAdmin && (
                       <button
@@ -175,19 +201,28 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
                       </button>
                     )}
                   </div>
-                  <p className="helper-copy">分享邀請碼給家人，他們就能加入這個群組。</p>
+                  <button type="button" className="btn-secondary-sm" onClick={() => copyInviteCodeOnly(group.invite_code)}>
+                    只複製邀請碼
+                  </button>
+                  <p className="helper-copy">複製後可直接貼到 LINE 家庭群組。家人點網址登入後會自動帶入邀請碼。</p>
                 </div>
 
                 <div className="members-list">
                   <label>群組成員</label>
                   <div className="members-grid">
                     {members.map((m, idx) => {
-                      const displayName = m.user?.name || (m.user?.line_user_id ? `LINE 用戶 …${m.user.line_user_id.slice(-4)}` : `成員 ${idx + 1}`);
+                      const displayName = getMemberDisplayName(m, idx);
+                      const avatarUrl = getMemberAvatar(m, displayName);
                       return (
-                        <div key={m.user_id ?? idx} className="member-item">
-                          <span className="member-role">
-                            {m.role === "admin" ? "👑" : "👤"}
-                          </span>
+                        <div key={m.user_id ?? idx} className="member-item member-avatar-item">
+                          <button
+                            type="button"
+                            className="member-avatar-button"
+                            onClick={() => openLineProfile(m.user?.line_user_id)}
+                            title={m.user?.line_user_id ? "開啟 LINE" : "尚未提供 LINE 連結"}
+                          >
+                            <img src={avatarUrl} alt={`${displayName} 頭像`} />
+                          </button>
                           <span className="member-label">{displayName}</span>
                           {isAdmin && m.role !== "admin" && (
                             <button

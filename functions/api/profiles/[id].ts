@@ -25,7 +25,16 @@ export const onRequestPatch: PagesFunction<Env> = async (context) => {
     const updates = await request.json<any>();
     
     // We only allow updating specific fields
-    const allowedFields = ["display_name", "avatar_url", "notes", "main_hospital", "main_department"];
+    const allowedFields = [
+      "display_name",
+      "avatar_url",
+      "birth_date",
+      "emergency_phone",
+      "email",
+      "notes",
+      "main_hospital",
+      "main_department",
+    ];
     const filteredUpdates: any = {};
     
     for (const field of allowedFields) {

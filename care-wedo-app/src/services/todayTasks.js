@@ -1,20 +1,20 @@
 const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"];
 
 const SLOT_ORDER = {
-  "早上": 700,
-  "上午": 800,
-  "中午": 1200,
-  "下午": 1500,
-  "晚上": 1900,
+  "早": 700,
+  "中": 1200,
+  "晚": 1900,
   "睡前": 2200,
+  "其他": 9000,
   "日期待確認": 9900,
 };
 
 const MEDICATION_SLOT_LABELS = {
-  morning: "早上",
-  noon: "中午",
-  evening: "晚上",
+  morning: "早",
+  noon: "中",
+  evening: "晚",
   bedtime: "睡前",
+  other: "其他",
 };
 
 function parseTaipeiDate(dateValue) {
@@ -89,7 +89,7 @@ export function getMedicationSchedule(medication = {}) {
 
   return {
     slot,
-    slotLabel: MEDICATION_SLOT_LABELS[slot] || "其他時間",
+    slotLabel: MEDICATION_SLOT_LABELS[slot] || "其他",
     timeLabel: medication.scheduled_time || MEDICATION_SLOT_LABELS[slot] || medication.frequency || "時間待確認",
     mealTimingLabel: mealTimingText || inferredMealTiming,
   };
@@ -151,9 +151,11 @@ function buildAppointmentTask(appointment, today) {
 export function formatTaipeiTodayLabel(today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Taipei" })) {
   const date = parseTaipeiDate(today);
   if (!date) return { headline: "今天", date: today };
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
   return {
     headline: "今天",
-    date: `${date.getMonth() + 1} 月 ${date.getDate()} 日（${WEEKDAYS[date.getDay()]}）`,
+    date: `${date.getFullYear()}年${month}月${day}日（${WEEKDAYS[date.getDay()]}）`,
   };
 }
 

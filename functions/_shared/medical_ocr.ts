@@ -122,7 +122,13 @@ export async function parseMedicalImages(env: Env, images: Array<{ data: string;
 export async function saveParsedData(env: Env, parsed: ParsedMedicalData, lineUserId?: string) {
   const userId = await getOrCreateDefaultUser(env, lineUserId);
   const careContext = await resolveDefaultCareContext(env, userId);
-  const saved = { appointment_ids: [] as number[], medication_ids: [] as number[], profileName: careContext.profileName || "家人" };
+  const saved = {
+    appointment_ids: [] as number[],
+    medication_ids: [] as number[],
+    profileName: careContext.profileName || "家人",
+    groupId: careContext.groupId,
+    profileId: careContext.profileId,
+  };
 
   if (parsed.appointments?.length) {
     // 1. 取得該使用者現有的行程，用以比對防呆。

@@ -175,6 +175,24 @@ function formatResultSummary(parsed: import("./_shared/medical_ocr").ParsedMedic
   return lines.join("\n");
 }
 
+async function notifyUploadSummaryRecipients(env: Env, groupId: number | null, uploaderLineUserId: string, text: string) {
+  if (!groupId) return 0;
+
+  const rows = await supabaseFetch<Array<{ users: { line_user_id: string | null } | null }>>(
+    env,
+    `user_family_groups?group_id=eq.${groupId}&receive_upload_summary=eq.true&select=users(line_user_id)`,
+  );
+
+  let sent = 0;
+  for (const row of rows) {
+    const lineId = row.users?.line_user_id;
+    if (!lineId || lineId === "web-mvp" || lineId === uploaderLineUserId) continue;
+    await pushText(env, lineId, text);
+    sent++;
+  }
+  return sent;
+}
+
 /** 處理圖片 OCR（背景執行，用 Push API 回傳結果） */
 async function processImageOCR(env: Env, event: LineEvent) {
   const lineUserId = event.source.userId;
@@ -221,12 +239,15 @@ async function processImageOCR(env: Env, event: LineEvent) {
     }
 
     await pushText(env, lineUserId, reply, quickReply);
+    const familySummary = `家人剛上傳了一筆 ${saved.profileName} 的照護資料。\n\n${reply}`;
+    const uploadSummaryCount = await notifyUploadSummaryRecipients(env, saved.groupId, lineUserId, familySummary);
     logEvent("line.ocr_completed", {
       line_user_suffix: lineUserId.slice(-4),
       appointment_count: parsedData.appointments?.length || 0,
       medication_count: parsedData.medications?.length || 0,
       profile_count: profiles.length,
       has_quick_reply: Boolean(quickReply),
+      upload_summary_count: uploadSummaryCount,
       duration_ms: Date.now() - startedAt,
     });
   } catch (error) {

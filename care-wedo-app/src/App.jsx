@@ -6,7 +6,7 @@ import LoginSetup from "./components/LoginSetup";
 import MobileBottomNav from "./components/MobileBottomNav";
 import OcrResult from "./components/OcrResult";
 import { patientData, medicines, timeline as initialTimeline } from "./data/patient";
-import { confirmOcrDocument, fetchDashboard, markMedicationSlotStatus, ocrAnalyze, patchAppointment, patchMedication, updateProfile } from "./services/api";
+import { confirmOcrDocument, createAppointment, fetchDashboard, joinGroup, markMedicationSlotStatus, ocrAnalyze, patchAppointment, patchMedication, updateProfile } from "./services/api";
 import { initLineIdentity, loginWithLine, logoutLineIdentity } from "./services/liff";
 import { trackError, trackEvent } from "./services/telemetry";
 import { buildTodayTasks, formatTaipeiTodayLabel, groupMedicationsBySchedule } from "./services/todayTasks";
@@ -20,6 +20,35 @@ const IS_PROD = import.meta.env.PROD;
 
 function todayInTaipei() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Taipei" });
+}
+
+function isDateTodayOrFuture(dateValue, today = todayInTaipei()) {
+  if (!dateValue) return false;
+  const dateText = String(dateValue);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateText)) return false;
+  return dateText >= String(today);
+}
+
+function calculateAge(profile) {
+  const birthDate = profile?.birth_date;
+  const birthYear = profile?.birth_year;
+  const today = new Date(`${todayInTaipei()}T00:00:00+08:00`);
+
+  if (birthDate) {
+    const date = new Date(`${birthDate}T00:00:00+08:00`);
+    if (!Number.isNaN(date.getTime())) {
+      let age = today.getFullYear() - date.getFullYear();
+      const monthDelta = today.getMonth() - date.getMonth();
+      if (monthDelta < 0 || (monthDelta === 0 && today.getDate() < date.getDate())) age -= 1;
+      return age > 0 ? `${age} 歲` : "";
+    }
+  }
+
+  const year = Number(birthYear);
+  if (Number.isFinite(year) && year > 1900) {
+    return `${today.getFullYear() - year} 歲`;
+  }
+  return "";
 }
 
 const SECTIONS = [
@@ -79,6 +108,7 @@ function normalizeAppointment(apt, index) {
     reminder_text: apt.reminder_text || apt.desc || "",
     fasting_required: Boolean(apt.fasting_required || apt.urgent),
     fasting_hours: apt.fasting_hours || null,
+    status: apt.status || "upcoming",
   };
 }
 
@@ -90,6 +120,12 @@ function normalizeMedication(med, index) {
     frequency: med.frequency || med.freq || "照單子上的時間吃",
     dosage: med.dosage || med.qty || "份量待確認",
     warnings: med.warnings || "",
+    reminder_text: med.reminder_text || "",
+    time_slot: med.time_slot || "",
+    meal_timing: med.meal_timing || "",
+    scheduled_time: med.scheduled_time || "",
+    taken_status: med.taken_status || "",
+    active: med.active !== false,
     color: med.color || ["#b7791f", "#2f855a", "#2b6cb0", "#805ad5"][index % 4],
   };
 }
@@ -119,11 +155,6 @@ const AVATAR_MAX_SOURCE_SIZE = 5 * 1024 * 1024;
 const AVATAR_CANVAS_SIZE = 480;
 const CARE_WEDO_LINE_URL = "https://lin.ee/xzbyyvf";
 const CARE_WEDO_APP_ICON = "/android-chrome-512x512.png";
-
-function getAvatarName(avatarUrl) {
-  const match = avatarUrl?.match(/^data:[^;,]+;name=([^;]+);base64,/);
-  return match ? decodeURIComponent(match[1]) : "";
-}
 
 function setAvatarName(avatarUrl, name) {
   if (!avatarUrl) return "";
@@ -391,6 +422,13 @@ function LandingPage() {
 function LoginPage() {
   const [loggingIn, setLoggingIn] = useState(false);
   const [loginError, setLoginError] = useState(null);
+  const inviteCode = new URLSearchParams(window.location.search).get("invite_code");
+
+  useEffect(() => {
+    if (inviteCode) {
+      window.localStorage.setItem("care_wedo_pending_invite_code", inviteCode);
+    }
+  }, [inviteCode]);
 
   async function handleLineLogin() {
     setLoggingIn(true);
@@ -417,6 +455,9 @@ function LoginPage() {
           <p>
             使用 LINE 登入後，就可以查看今日照護事項。
           </p>
+          {inviteCode && (
+            <p className="helper-copy">登入後會自動加入家庭群組，邀請碼：{inviteCode}</p>
+          )}
 
           {loginError && (
             <p className="notice-danger" style={{ marginTop: "12px", fontSize: "15px" }}>
@@ -521,6 +562,12 @@ function DashboardApp() {
   const [activeProfileId, setActiveProfileId] = useState(null);
   const [identity, setIdentity] = useState({ status: "loading", idToken: null, profile: null, message: null });
   const [showEditProfile, setShowEditProfile] = useState(false);
+  const [showManualReminder, setShowManualReminder] = useState(false);
+  const [familyNotes, setFamilyNotes] = useState([
+    "哪些藥不能吃、以前有沒有過敏",
+    "看診前要不要量血壓、空腹、帶健保卡",
+    "緊急時要打給誰、常去哪家醫院",
+  ]);
   const dashboardRequestSeqRef = useRef(0);
   const dashboardCacheRef = useRef(new Map());
   const dashboardShellRef = useRef(null);
@@ -631,7 +678,19 @@ function DashboardApp() {
         if (isLineCallbackSearch(window.location.search)) {
           window.history.replaceState(null, "", "/app");
         }
-        await loadDashboard(lineIdentity);
+        const inviteCode = new URLSearchParams(window.location.search).get("invite_code")
+          || window.localStorage.getItem("care_wedo_pending_invite_code");
+        if (inviteCode && lineIdentity.idToken) {
+          try {
+            await joinGroup({ idToken: lineIdentity.idToken, code: inviteCode });
+            window.localStorage.removeItem("care_wedo_pending_invite_code");
+          } catch (err) {
+            trackError("frontend.invite_join", err, {});
+          }
+        }
+
+        const preferredProfileId = Number(window.localStorage.getItem("care_wedo_active_profile_id"));
+        await loadDashboard(lineIdentity, Number.isFinite(preferredProfileId) && preferredProfileId > 0 ? preferredProfileId : null);
       } catch (err) {
         if (!active) return;
         // 正式環境發生錯誤代表無法驗證身分，導向 /login
@@ -675,7 +734,7 @@ function DashboardApp() {
   const selectedProfile = careProfiles.find((profile) => profile.id === activeProfileId) || careProfiles[0] || null;
 
   const patient = (isPersonalMode && dashboard) 
-    ? { ...dashboard.patient, name: selectedProfile?.display_name || dashboard.patient.name } 
+    ? { ...dashboard.patient, name: selectedProfile?.display_name || dashboard.patient.name, age: calculateAge(selectedProfile) } 
     : (dashboard?.patient?.name ? dashboard.patient : patientData);
   const appointments = useMemo(() => {
     let source = [];
@@ -699,7 +758,7 @@ function DashboardApp() {
 
   const nextAppointment = useMemo(() => {
     return appointments
-      .filter(apt => apt.status !== "completed" && apt.date)
+      .filter(apt => apt.status !== "completed" && isDateTodayOrFuture(apt.date, todayInTaipei()))
       .sort((a, b) => {
         try {
           const dateA = new Date(a.date.includes("-") ? `${a.date}T${a.time || "00:00"}` : a.date);
@@ -711,7 +770,7 @@ function DashboardApp() {
       })[0];
   }, [appointments]);
 
-  const urgentItems = appointments.filter((item) => (item.fasting_required || item.type === "refill_reminder") && item.status !== "completed").slice(0, 3);
+  const urgentItems = appointments.filter((item) => (item.fasting_required || item.type === "refill_reminder") && item.status !== "completed" && isDateTodayOrFuture(item.date, todayInTaipei())).slice(0, 3);
   const records = appointments.filter((item) => item.status === "completed");
   const hasCareData = dashboardHasCareData(dashboard);
   const todayDate = todayInTaipei();
@@ -721,6 +780,33 @@ function DashboardApp() {
     appointments,
   }), [appointments, todayDate]);
   const showContactDock = !IS_PROD || isPersonalMode;
+
+  useEffect(() => {
+    const key = `care_wedo_family_notes_${activeProfileId || "default"}`;
+    const stored = window.localStorage.getItem(key);
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length) {
+          setFamilyNotes(parsed);
+          return;
+        }
+      } catch {
+        // keep defaults
+      }
+    }
+    setFamilyNotes([
+      "哪些藥不能吃、以前有沒有過敏",
+      "看診前要不要量血壓、空腹、帶健保卡",
+      "緊急時要打給誰、常去哪家醫院",
+    ]);
+  }, [activeProfileId]);
+
+  function handleFamilyNotesChange(notes) {
+    const nextNotes = notes.map((item) => item.trim()).filter(Boolean);
+    setFamilyNotes(nextNotes);
+    window.localStorage.setItem(`care_wedo_family_notes_${activeProfileId || "default"}`, JSON.stringify(nextNotes));
+  }
 
   async function handleAskFamily(task = null) {
     const careName = selectedProfile?.display_name || patient.name || "家人";
@@ -870,9 +956,19 @@ function DashboardApp() {
     await loadDashboard(identity, activeProfileId);
   }
 
+  async function handleManualReminderSave(payload) {
+    if (!activeProfileId) {
+      throw new Error("請先選擇照護對象。");
+    }
+    await createAppointment({ ...payload, profile_id: activeProfileId }, { idToken: identity.idToken });
+    await loadDashboard(identity, activeProfileId);
+    setShowManualReminder(false);
+  }
+
   function handleProfileChange(profileId) {
     trackEvent("frontend.profile_switch", { profileId });
     setActiveProfileId(profileId);
+    window.localStorage.setItem("care_wedo_active_profile_id", String(profileId));
     const cached = dashboardCacheRef.current.get(String(profileId));
     if (cached) {
       setDashboard(mergeDashboardShell(cached, dashboardShellRef.current));
@@ -997,9 +1093,12 @@ function DashboardApp() {
           {activeSection === "overview" && (
             <OverviewView
               todayLabel={todayLabel}
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
               todayTasks={todayTasks}
               nextAppointment={nextAppointment}
               urgentItems={urgentItems}
+              familyNotes={familyNotes}
               hasCareData={hasCareData}
               patient={patient}
               selectedProfile={selectedProfile}
@@ -1009,6 +1108,7 @@ function DashboardApp() {
               onOpenFamily={() => setActiveSection("settings")}
               onOpenProfile={() => setShowEditProfile(true)}
               onUpload={handleUploadClick}
+              onAddReminder={() => setShowManualReminder(true)}
               onComplete={handleComplete}
               onAskFamily={handleAskFamily}
             />
@@ -1018,6 +1118,7 @@ function DashboardApp() {
             <CalendarView
               appointments={appointments}
               onUpload={handleUploadClick}
+              onAddReminder={() => setShowManualReminder(true)}
             />
           )}
 
@@ -1043,8 +1144,12 @@ function DashboardApp() {
               isPersonalMode={isPersonalMode}
               careProfiles={careProfiles}
               selectedProfile={selectedProfile}
+              activeProfileId={activeProfileId}
+              onProfileChange={handleProfileChange}
               onGroupChange={() => loadDashboard(identity, activeProfileId)}
               onEditProfile={() => setShowEditProfile(true)}
+              familyNotes={familyNotes}
+              onFamilyNotesChange={handleFamilyNotesChange}
               onLogout={logoutLineIdentity}
             />
           )}
@@ -1064,6 +1169,13 @@ function DashboardApp() {
         <UploadGuide
           onConfirm={handleUploadConfirm}
           onClose={() => setShowUploadGuide(false)}
+        />
+      )}
+
+      {showManualReminder && (
+        <ManualReminderModal
+          onClose={() => setShowManualReminder(false)}
+          onSave={handleManualReminderSave}
         />
       )}
 
@@ -1094,9 +1206,11 @@ function ProfileEditModal({ profile, onClose, onSave, canPersist }) {
   const [formData, setFormData] = useState({
     display_name: profile?.display_name || "",
     avatar_url: profile?.avatar_url || "",
+    birth_date: profile?.birth_date || "",
+    emergency_phone: profile?.emergency_phone || "",
+    email: profile?.email || "",
     notes: profile?.notes || "",
   });
-  const [avatarName, setAvatarNameValue] = useState(getAvatarName(profile?.avatar_url) || "照護對象頭像");
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
@@ -1110,20 +1224,11 @@ function ProfileEditModal({ profile, onClose, onSave, canPersist }) {
     setError("");
     try {
       const avatarUrl = await prepareAvatarDataUrl(file);
-      const name = getAvatarName(avatarUrl) || file.name.replace(/\.[^.]+$/, "");
-      setAvatarNameValue(name);
-      setFormData((current) => ({ ...current, avatar_url: avatarUrl }));
+      setFormData((current) => ({ ...current, avatar_url: setAvatarName(avatarUrl, file.name.replace(/\.[^.]+$/, "") || "照護對象頭像") }));
     } catch (err) {
       setError(err.message);
     } finally {
       setUploading(false);
-    }
-  }
-
-  function handleAvatarNameChange(value) {
-    setAvatarNameValue(value);
-    if (formData.avatar_url) {
-      setFormData((current) => ({ ...current, avatar_url: setAvatarName(current.avatar_url, value) }));
     }
   }
 
@@ -1133,7 +1238,10 @@ function ProfileEditModal({ profile, onClose, onSave, canPersist }) {
     try {
       await onSave({
         ...formData,
-        avatar_url: formData.avatar_url ? setAvatarName(formData.avatar_url, avatarName) : null,
+        avatar_url: formData.avatar_url || null,
+        birth_date: formData.birth_date || null,
+        emergency_phone: formData.emergency_phone || null,
+        email: formData.email || null,
       });
     } catch (err) {
       setError(err.message || "無法儲存修改");
@@ -1164,39 +1272,45 @@ function ProfileEditModal({ profile, onClose, onSave, canPersist }) {
             />
           </div>
 
-          <div className="avatar-manager">
-            <div className="avatar-preview-frame">
+          <div className="avatar-manager compact-avatar-manager">
+            <label className={`avatar-preview-frame avatar-replace-control ${uploading ? "is-uploading" : ""}`}>
               <img src={formData.avatar_url || aiAvatar} alt="照護對象頭像預覽" />
-            </div>
+              <span>{uploading ? "處理中" : "點選替換"}</span>
+              <input type="file" accept="image/jpeg,image/png,image/webp" onChange={handleAvatarUpload} disabled={uploading} />
+            </label>
             <div className="avatar-controls">
-              <div className="form-group">
-                <label>圖片名稱</label>
-                <input
-                  value={avatarName}
-                  onChange={(e) => handleAvatarNameChange(e.target.value)}
-                  placeholder="例如：爸爸生活照"
-                  disabled={!formData.avatar_url}
-                />
-              </div>
-              <div className="avatar-actions">
-                <label className="secondary-action avatar-upload-action">
-                  {uploading ? "處理圖片中..." : "上傳頭像"}
-                  <input type="file" accept="image/jpeg,image/png,image/webp" onChange={handleAvatarUpload} />
-                </label>
-                <button
-                  type="button"
-                  className="inline-action"
-                  onClick={() => {
-                    setAvatarNameValue("照護對象頭像");
-                    setFormData((current) => ({ ...current, avatar_url: null }));
-                  }}
-                  disabled={!formData.avatar_url}
-                >
-                  刪除圖片
-                </button>
-              </div>
-              <p className="helper-copy">系統會自動壓縮圖片後存入照護對象資料，適合上傳清楚的正面頭像。</p>
+              <p className="helper-copy">點頭像即可重新上傳並直接替換。沒有上傳時，會先使用 LINE 頭像或系統預設圖示。</p>
             </div>
+          </div>
+
+          <div className="form-row-two">
+            <div className="form-group">
+              <label>出生年月日</label>
+              <input
+                type="date"
+                value={formData.birth_date}
+                onChange={(e) => setFormData({ ...formData, birth_date: e.target.value })}
+              />
+            </div>
+            <div className="form-group">
+              <label>緊急聯絡電話</label>
+              <input
+                type="tel"
+                value={formData.emergency_phone}
+                onChange={(e) => setFormData({ ...formData, emergency_phone: e.target.value })}
+                placeholder="例如：0912-345-678"
+              />
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label>EMAIL</label>
+            <input
+              type="email"
+              value={formData.email}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              placeholder="example@email.com"
+            />
           </div>
 
           <div className="form-group">
@@ -1517,11 +1631,177 @@ function EmptyGuide({ title, description, primaryLabel, onPrimary, secondaryLabe
   );
 }
 
+function ManualReminderModal({ onClose, onSave }) {
+  const [formData, setFormData] = useState({
+    type: "reminder",
+    title: "",
+    date: todayInTaipei(),
+    time: "",
+    hospital: "",
+    department: "",
+    doctor: "",
+    location: "",
+    notes: "",
+    fasting_required: false,
+    fasting_hours: 8,
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setSaving(true);
+    setError("");
+    try {
+      await onSave({
+        ...formData,
+        title: formData.title || formData.department || formData.hospital,
+        department: formData.department || formData.title,
+        fasting_hours: formData.fasting_required ? formData.fasting_hours : null,
+      });
+    } catch (err) {
+      setError(err.message || "新增提醒失敗");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal-content manual-reminder-modal">
+        <div className="modal-header">
+          <h2>新增提醒</h2>
+          <button type="button" onClick={onClose} className="btn-close">✕</button>
+        </div>
+        <form onSubmit={handleSubmit}>
+          <div className="modal-body">
+            {error && <p className="error-msg">{error}</p>}
+            <div className="form-row-two">
+              <div className="form-group">
+                <label>提醒類型</label>
+                <select
+                  value={formData.type}
+                  onChange={(event) => setFormData({ ...formData, type: event.target.value })}
+                >
+                  <option value="reminder">提醒</option>
+                  <option value="clinic_visit">門診</option>
+                  <option value="inspection">檢查</option>
+                  <option value="refill_reminder">領藥</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label>提醒名稱</label>
+                <input
+                  value={formData.title}
+                  onChange={(event) => setFormData({ ...formData, title: event.target.value })}
+                  placeholder="例如：腫瘤醫學部回診"
+                  required
+                />
+              </div>
+            </div>
+            <div className="form-row-two">
+              <div className="form-group">
+                <label>日期</label>
+                <input
+                  type="date"
+                  value={formData.date}
+                  onChange={(event) => setFormData({ ...formData, date: event.target.value })}
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>時間</label>
+                <input
+                  type="time"
+                  value={formData.time}
+                  onChange={(event) => setFormData({ ...formData, time: event.target.value })}
+                />
+              </div>
+            </div>
+            <div className="form-row-two">
+              <div className="form-group">
+                <label>醫院 / 地點</label>
+                <input
+                  value={formData.hospital}
+                  onChange={(event) => setFormData({ ...formData, hospital: event.target.value })}
+                  placeholder="例如：臺大醫院"
+                />
+              </div>
+              <div className="form-group">
+                <label>診別 / 科別</label>
+                <input
+                  value={formData.department}
+                  onChange={(event) => setFormData({ ...formData, department: event.target.value })}
+                  placeholder="例如：藥局、腫瘤醫學部"
+                />
+              </div>
+            </div>
+            <div className="form-row-two">
+              <div className="form-group">
+                <label>醫師</label>
+                <input
+                  value={formData.doctor}
+                  onChange={(event) => setFormData({ ...formData, doctor: event.target.value })}
+                  placeholder="醫師姓名"
+                />
+              </div>
+              <div className="form-group">
+                <label>詳細地點</label>
+                <input
+                  value={formData.location}
+                  onChange={(event) => setFormData({ ...formData, location: event.target.value })}
+                  placeholder="例如：總院西址門診藥局"
+                />
+              </div>
+            </div>
+            <label className="settings-toggle compact-toggle">
+              <span>需要空腹提醒</span>
+              <input
+                type="checkbox"
+                checked={formData.fasting_required}
+                onChange={(event) => setFormData({ ...formData, fasting_required: event.target.checked })}
+              />
+            </label>
+            {formData.fasting_required && (
+              <div className="form-group">
+                <label>空腹小時數</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="24"
+                  value={formData.fasting_hours}
+                  onChange={(event) => setFormData({ ...formData, fasting_hours: Number(event.target.value) })}
+                />
+              </div>
+            )}
+            <div className="form-group">
+              <label>提醒內容</label>
+              <textarea
+                value={formData.notes}
+                onChange={(event) => setFormData({ ...formData, notes: event.target.value })}
+                placeholder="例如：帶健保卡、處方箋正本"
+                rows={4}
+              />
+            </div>
+          </div>
+          <div className="modal-footer">
+            <button type="button" className="secondary-action" onClick={onClose} disabled={saving}>取消</button>
+            <button type="submit" className="primary-action" disabled={saving}>{saving ? "儲存中..." : "儲存提醒"}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function OverviewView({
   todayLabel,
+  searchQuery,
+  onSearchChange,
   todayTasks,
   nextAppointment,
   urgentItems,
+  familyNotes,
   hasCareData,
   patient,
   selectedProfile,
@@ -1531,6 +1811,7 @@ function OverviewView({
   onOpenFamily,
   onOpenProfile,
   onUpload,
+  onAddReminder,
   onComplete,
   onAskFamily,
 }) {
@@ -1558,14 +1839,18 @@ function OverviewView({
       </section>
 
       <section className="today-hero-panel">
-        <div className="today-date-block">
-          <span>{todayLabel.headline}</span>
-          <strong>{todayLabel.date}</strong>
-        </div>
         <div className="today-count-block">
           <span>{todayTasks.length ? `今天有 ${todayTasks.length} 件事` : "今天沒有新的照護事項"}</span>
           <p>{todayTasks.length ? "照時間慢慢做就好。" : "可以查看未來行程，或新增一筆提醒。"}</p>
         </div>
+        <label className="search-box today-search-box">
+          <span>搜尋</span>
+          <input
+            value={searchQuery}
+            onChange={(event) => onSearchChange(event.target.value)}
+            placeholder="依醫院、診別、醫師篩選"
+          />
+        </label>
       </section>
 
       <section className="today-timeline-panel">
@@ -1597,11 +1882,10 @@ function OverviewView({
           </div>
         ) : hasCareData ? (
           <div className="today-empty-card">
-            <h3>今天沒有新的照護事項</h3>
-            <p>可以查看未來行程，或拍照新增一筆看診、檢查、領藥提醒。</p>
             <div className="empty-guide-actions">
               <button type="button" className="primary-action" onClick={onOpenCalendar}>查看未來行程</button>
-              <button type="button" className="secondary-action" onClick={onUpload}>新增提醒</button>
+              <button type="button" className="secondary-action" onClick={onUpload}>拍照上傳</button>
+              <button type="button" className="secondary-action" onClick={onAddReminder}>新增提醒</button>
             </div>
           </div>
         ) : (
@@ -1610,7 +1894,8 @@ function OverviewView({
             description="可以先拍一張看診單或藥袋，Care WEDO 會幫你整理成今天要做的事。"
             primaryLabel="拍照上傳"
             onPrimary={onUpload}
-            secondaryLabel="我看不懂，問家人"
+            secondaryLabel="新增提醒"
+            onSecondary={onAddReminder}
           />
         )}
       </section>
@@ -1656,12 +1941,22 @@ function OverviewView({
         <article className="summary-panel">
           <p className="panel-eyebrow">需要多留意</p>
           <div className="attention-list">
-            {urgentItems.length ? urgentItems.map((item) => (
+            {urgentItems.length || familyNotes.length ? (
+              <>
+                {urgentItems.map((item) => (
               <article key={item.id} className="attention-item">
                 <strong>{typeLabel(item.type)}：{item.department}</strong>
                 <span>{item.fasting_required ? `前 ${item.fasting_hours || 8} 小時先不要吃東西` : item.reminder_text || "照提醒做就好"}</span>
               </article>
-            )) : <p className="empty-state">目前沒有特別要擔心的提醒。</p>}
+                ))}
+                {familyNotes.map((note, index) => (
+                  <article key={`family-note-${index}`} className="attention-item family-note-item">
+                    <strong>家庭提醒</strong>
+                    <span>{note}</span>
+                  </article>
+                ))}
+              </>
+            ) : <p className="empty-state">目前沒有特別要擔心的提醒。</p>}
           </div>
         </article>
 
@@ -1669,15 +1964,22 @@ function OverviewView({
           <p className="panel-eyebrow">新增照護資料</p>
           <h3>拍下看診單、檢查單或領藥單</h3>
           <p className="empty-state">Care WEDO 會整理成今日或未來照護提醒。</p>
-          <button type="button" className="inline-action" onClick={onUpload}>拍照上傳</button>
+          <div className="inline-action-row">
+            <button type="button" className="inline-action" onClick={onUpload}>拍照上傳</button>
+            <button type="button" className="inline-action secondary-inline" onClick={onAddReminder}>新增提醒</button>
+          </div>
         </article>
       </section>
     </div>
   );
 }
 
-function CalendarView({ appointments, onUpload }) {
+function CalendarView({ appointments, onUpload, onAddReminder }) {
   const [currentDate, setCurrentDate] = useState(new Date());
+  const futureAppointments = useMemo(
+    () => appointments.filter((apt) => apt.status !== "completed" && isDateTodayOrFuture(apt.date)),
+    [appointments],
+  );
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -1726,7 +2028,7 @@ function CalendarView({ appointments, onUpload }) {
             if (!day) return <div key={`empty-${index}`} className="calendar-day empty" />;
             
             const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-            const hasEvent = appointments.some((apt) => apt.date === dateStr);
+            const hasEvent = futureAppointments.some((apt) => apt.date === dateStr);
             const isToday = new Date().toDateString() === new Date(year, month, day).toDateString();
             
             return (
@@ -1744,7 +2046,11 @@ function CalendarView({ appointments, onUpload }) {
       </section>
 
       <section className="event-list" aria-label="看診和領藥清單">
-        {appointments.length ? appointments.map((apt) => (
+        <div className="inline-action-row event-list-actions">
+          <button type="button" className="secondary-action" onClick={onUpload}>拍照上傳</button>
+          <button type="button" className="primary-action" onClick={onAddReminder}>新增提醒</button>
+        </div>
+        {futureAppointments.length ? futureAppointments.map((apt) => (
           <article key={apt.id} id={`event-${apt.date}`} className="event-row">
             <div className="event-type">{typeIcon(apt.type)}</div>
             <div>
@@ -1762,6 +2068,7 @@ function CalendarView({ appointments, onUpload }) {
             primaryLabel="上傳看診單"
             onPrimary={onUpload}
             secondaryLabel="新增看診提醒"
+            onSecondary={onAddReminder}
           />
         )}
       </section>
@@ -1793,11 +2100,11 @@ function MedicationView({ medications, onUpload, onTaken }) {
               <h3>{group.label}</h3>
             </div>
             <div className="medicine-slot-actions">
-              <span className="medicine-slot-status">
-                {group.medications.every((med) => med.taken_status === "taken") ? "已吃" : "尚未記錄"}
-              </span>
+              {!group.medications.every((med) => med.taken_status === "taken") && (
+                <span className="medicine-slot-status">尚未記錄</span>
+              )}
               <button type="button" className="primary-action compact-action" onClick={() => handleSlotStatus(group, "taken")} disabled={savingSlot === `${group.slot}-taken` || group.medications.every((med) => med.taken_status === "taken")}>
-                {savingSlot === `${group.slot}-taken` ? "記錄中…" : "吃了"}
+                {savingSlot === `${group.slot}-taken` ? "記錄中…" : group.medications.every((med) => med.taken_status === "taken") ? "已吃" : "吃了"}
               </button>
             </div>
           </div>
@@ -1892,7 +2199,19 @@ function RecordsView({ records, onUpload }) {
   );
 }
 
-function SettingsView({ patient, identity, isPersonalMode, careProfiles, selectedProfile, onGroupChange, onLogout }) {
+function SettingsView({
+  patient,
+  identity,
+  isPersonalMode,
+  careProfiles,
+  selectedProfile,
+  activeProfileId,
+  onProfileChange,
+  onGroupChange,
+  familyNotes,
+  onFamilyNotesChange,
+  onLogout,
+}) {
   return (
     <div className="settings-grid">
       <section className="summary-panel">
@@ -1909,13 +2228,17 @@ function SettingsView({ patient, identity, isPersonalMode, careProfiles, selecte
       </section>
 
       <section className="summary-panel">
-        <p className="panel-eyebrow">家裡有哪些資料</p>
+        <p className="panel-eyebrow">家庭群組成員</p>
         <div className="care-profile-list">
           {careProfiles.length ? careProfiles.map((profile) => (
-            <article key={profile.id} className="care-profile-item">
+            <button
+              key={profile.id}
+              type="button"
+              className={(profile.id === activeProfileId || (!activeProfileId && profile.id === selectedProfile?.id)) ? "care-profile-item active" : "care-profile-item"}
+              onClick={() => onProfileChange(profile.id)}
+            >
               <strong>{profile.display_name}</strong>
-              <span>{profile.is_default ? "主要照護對象" : "共同管理"}</span>
-            </article>
+            </button>
           )) : (
             <EmptyGuide
               title="目前還沒有加入其他家人。"
@@ -1937,11 +2260,7 @@ function SettingsView({ patient, identity, isPersonalMode, careProfiles, selecte
 
       <section className="summary-panel">
         <p className="panel-eyebrow">家人要記得的事</p>
-        <ul className="check-list">
-          <li>哪些藥不能吃、以前有沒有過敏</li>
-          <li>看診前要不要量血壓、空腹、帶健保卡</li>
-          <li>緊急時要打給誰、常去哪家醫院</li>
-        </ul>
+        <FamilyNotesEditor notes={familyNotes} onChange={onFamilyNotesChange} />
       </section>
 
       <section className="summary-panel wide-panel">
@@ -1972,6 +2291,35 @@ function SettingsView({ patient, identity, isPersonalMode, careProfiles, selecte
           </div>
         </section>
       )}
+    </div>
+  );
+}
+
+function FamilyNotesEditor({ notes, onChange }) {
+  const [draft, setDraft] = useState(notes.join("\n"));
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    setDraft(notes.join("\n"));
+  }, [notes]);
+
+  function handleSave() {
+    onChange(draft.split("\n"));
+    setSaved(true);
+    setTimeout(() => setSaved(false), 1800);
+  }
+
+  return (
+    <div className="family-notes-editor">
+      <textarea
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        rows={5}
+        aria-label="家庭群組提醒"
+      />
+      <button type="button" className="inline-action" onClick={handleSave}>
+        {saved ? "已儲存" : "儲存提醒"}
+      </button>
     </div>
   );
 }

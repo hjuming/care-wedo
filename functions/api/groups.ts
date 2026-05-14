@@ -57,7 +57,7 @@ type GroupMember = {
 async function getGroupMembers(env: Env, groupId: number): Promise<GroupMember[]> {
   return supabaseFetch<GroupMember[]>(
     env,
-    `user_family_groups?group_id=eq.${groupId}&select=user_id,role,can_manage,receive_daily_brief,receive_evening_alert,receive_upload_summary,users(name,line_user_id)`,
+    `user_family_groups?group_id=eq.${groupId}&select=user_id,role,can_manage,receive_daily_brief,receive_evening_alert,receive_upload_summary,users(name,line_user_id,picture_url,email)`,
   );
 }
 

@@ -108,6 +108,8 @@ export type CareProfileRow = {
   avatar_url: string | null;
   birth_year: number | null;
   birth_date?: string | null;
+  emergency_phone?: string | null;
+  email?: string | null;
   gender?: string | null;
   main_hospital: string | null;
   main_department: string | null;
@@ -526,6 +528,9 @@ export function serializeCareProfile(row: CareProfileRow) {
     relationship: row.relationship || "family",
     avatar_url: row.avatar_url,
     birth_year: row.birth_year,
+    birth_date: row.birth_date || null,
+    emergency_phone: row.emergency_phone || null,
+    email: row.email || null,
     main_hospital: row.main_hospital,
     main_department: row.main_department,
     notes: row.notes,

@@ -72,7 +72,7 @@ test("buildTodayTasks keeps undated appointment cards visible for family follow-
 test("formatTaipeiTodayLabel returns a large-date friendly label", () => {
   assert.deepEqual(formatTaipeiTodayLabel("2026-05-06"), {
     headline: "今天",
-    date: "5 月 6 日（三）",
+    date: "2026年05月06日（三）",
   });
 });
 
@@ -107,8 +107,8 @@ test("groupMedicationsBySchedule groups active medicines by elder-friendly time 
     names: group.medications.map((med) => med.name),
     mealTiming: group.medications.map((med) => med.schedule.mealTimingLabel),
   })), [
-    { label: "早上", names: ["降血壓藥"], mealTiming: ["飯後"] },
-    { label: "晚上", names: ["胃藥"], mealTiming: ["飯前"] },
+    { label: "早", names: ["降血壓藥"], mealTiming: ["飯後"] },
+    { label: "晚", names: ["胃藥"], mealTiming: ["飯前"] },
   ]);
 });
 

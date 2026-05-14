@@ -283,6 +283,22 @@ export async function patchAppointment(id, updates, { idToken }) {
   return response.json();
 }
 
+export async function createAppointment(payload, { idToken }) {
+  const headers = { "Content-Type": "application/json" };
+  if (idToken) headers.Authorization = `Bearer ${idToken}`;
+
+  const response = await fetch(`${API_BASE}/appointments`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(async () => ({ error: await response.text() }));
+    throw new Error(error.error || "無法新增提醒");
+  }
+  return response.json();
+}
+
 /**
  * 更新藥物資訊（例如停用藥物）
  */
