@@ -282,7 +282,7 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
               <input
                 value={displayName}
                 onChange={(event) => setDisplayName(event.target.value)}
-                placeholder="例如：媽媽、阿公、哥哥"
+                placeholder="例：家中長輩、主要照護對象"
               />
             </label>
             <label>

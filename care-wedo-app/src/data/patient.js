@@ -1,18 +1,15 @@
 export const patientData = {
-  name: "洪永吉",
-  age: 75,
-  dept: "腫瘤醫學部",
-  doctor: "廖斌志醫師",
-  diagnoses: ["C13.9 下咽癌", "E11.9 第二型糖尿病"],
+  name: "示範長輩",
+  age: "",
+  dept: "家醫科",
+  doctor: "示範醫師",
+  diagnoses: ["慢性病追蹤"],
 };
 
 export const medicines = [
-  { name: "UFUR (Tegafur)", use: "化療口服藥", freq: "每日2次", qty: "56粒", days: 28, color: "#e74c3c" },
-  { name: "Mopride 5mg", use: "腸胃蠕動", freq: "每日3次", qty: "84粒", days: 28, color: "#e67e22" },
-  { name: "Imovane 7.5mg", use: "安眠藥（管4）", freq: "睡前", qty: "28粒", days: 28, color: "#9b59b6" },
-  { name: "Fudecough 15mg", use: "止咳", freq: "飯後每日3次", qty: "84粒", days: 28, color: "#3498db" },
-  { name: "Musco 30mg", use: "化痰", freq: "飯後每日3次", qty: "84粒", days: 28, color: "#1abc9c" },
-  { name: "Megest 40mg/ml", use: "食慾促進劑", freq: "每日2次 4ml", qty: "2瓶", days: 28, color: "#27ae60" },
+  { name: "血壓藥 A", use: "血壓控制", freq: "每日1次", qty: "28粒", days: 28, color: "#2f80c0" },
+  { name: "腸胃藥 B", use: "腸胃保護", freq: "每日3次", qty: "84粒", days: 28, color: "#2c8c5a" },
+  { name: "睡前藥 C", use: "睡前服用", freq: "睡前", qty: "28粒", days: 28, color: "#7b55d9" },
 ];
 
 export const timeline = [
@@ -28,10 +25,10 @@ export const timeline = [
   {
     date: "4/09–4/15",
     label: "第2次領藥",
-    desc: "領藥號 D-444，總院一樓藥局D窗口，帶健保卡+處方箋",
+    desc: "領藥號 A-001，一樓藥局窗口，帶健保卡與處方箋",
     icon: "💊",
     urgent: true,
-    location: "台大總院一樓藥局D窗口",
+    location: "一樓藥局窗口",
     done: false,
   },
   {
@@ -54,11 +51,11 @@ export const timeline = [
   },
   {
     date: "5/14 (四) 08:00",
-    label: "腫瘤科門診",
-    desc: "廖斌志醫師，診30號，預計來診 11:00–12:00",
+    label: "家醫科門診",
+    desc: "示範醫師，診30號，預計來診 11:00-12:00",
     icon: "🏥",
     urgent: false,
-    location: "西址1樓腫瘤醫學部",
+    location: "門診一樓",
     done: false,
   },
   {
@@ -72,18 +69,18 @@ export const timeline = [
   },
   {
     date: "9/14 (一) 07:50",
-    label: "頭頸部MRI",
-    desc: "含/不含顯影劑，提前10分鐘報到，帶健保IC卡+預約單",
+    label: "影像檢查",
+    desc: "提前10分鐘報到，帶健保卡與預約單",
     icon: "🧲",
     urgent: false,
-    location: "西址舊大樓一樓磁振造影掃描室(二)",
+    location: "影像檢查室",
     done: false,
   },
 ];
 
 export const checklist = [
-  "3日內領第1次藥（D-444，D窗口）",
-  "胸部X光：先結帳繳費再至影醫部報到",
+  "3日內領第1次藥（A-001，一樓窗口）",
+  "影像檢查：先結帳繳費再至檢查室報到",
   "確認抽血日期（回診前7天）",
-  "確認手機號碼 093564**** 是否正確（MRI簡訊通知用）",
+  "確認聯絡電話是否正確（簡訊通知用）",
 ];

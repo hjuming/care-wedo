@@ -1,7 +1,7 @@
 import { supabaseFetch, Env as SupabaseEnv } from "../../_shared/supabase";
 import { logError, logEvent } from "../../_shared/logger";
 
-const DEFAULT_RECIPIENT = "親愛的爸爸 / 媽媽";
+const DEFAULT_RECIPIENT = "親愛的家人";
 
 type Env = SupabaseEnv & {
   CRON_SECRET?: string;
@@ -94,6 +94,18 @@ function profileLabel(profile: CareProfile | undefined | null) {
 function itemPrefix(profile: CareProfile | undefined | null) {
   const label = profileLabel(profile);
   return label === DEFAULT_RECIPIENT ? "" : `【${label}】 `;
+}
+
+function appointmentTypeLabel(type?: string | null) {
+  if (type === "inspection") return "檢查";
+  if (type === "refill_reminder") return "領藥";
+  if (type === "medication") return "用藥";
+  if (type === "measurement") return "量測";
+  if (type === "document") return "文件";
+  if (type === "rehab") return "復健";
+  if (type === "exercise") return "運動";
+  if (type === "other" || type === "reminder") return "提醒";
+  return "看診";
 }
 
 async function fetchCareProfiles(env: Env, profileIds: number[]) {
@@ -271,7 +283,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
             if (apt.fasting_required) msgText += `  記得：前 ${apt.fasting_hours || 8} 小時先不要吃東西。\n`;
             if (apt.notes) msgText += `  ${apt.notes}\n`;
           } else {
-            msgText += `• ${prefix}${apt.time || ""} ${apt.hospital || ""} ${apt.department || "要去看診"}\n`;
+            const typeLabel = appointmentTypeLabel(apt.type);
+            msgText += `• ${prefix}${apt.time || ""} ${apt.hospital || ""} ${apt.department || `要處理${typeLabel}`}\n`;
             if (apt.fasting_required) msgText += `  記得：前 ${apt.fasting_hours || 8} 小時先不要吃東西。\n`;
             if (apt.notes) msgText += `  ${apt.notes}\n`;
           }

@@ -70,13 +70,61 @@ const MOBILE_SECTIONS = [
 function typeLabel(type) {
   if (type === "inspection") return "檢查";
   if (type === "refill_reminder") return "領藥";
+  if (type === "medication") return "用藥";
+  if (type === "measurement") return "量測";
+  if (type === "document") return "文件";
+  if (type === "rehab") return "復健";
+  if (type === "exercise") return "運動";
+  if (type === "other") return "其他";
+  if (type === "reminder") return "提醒";
   return "回診";
 }
 
 function typeIcon(type) {
   if (type === "inspection") return "驗";
   if (type === "refill_reminder") return "藥";
+  if (type === "medication") return "服";
+  if (type === "measurement") return "量";
+  if (type === "document") return "文";
+  if (type === "rehab") return "復";
+  if (type === "exercise") return "動";
+  if (type === "other") return "他";
+  if (type === "reminder") return "醒";
   return "診";
+}
+
+const REMINDER_TYPE_OPTIONS = [
+  { value: "reminder", label: "提醒" },
+  { value: "clinic_visit", label: "門診" },
+  { value: "inspection", label: "檢查" },
+  { value: "refill_reminder", label: "領藥" },
+  { value: "medication", label: "用藥" },
+  { value: "measurement", label: "量測" },
+  { value: "document", label: "文件" },
+  { value: "rehab", label: "復健" },
+  { value: "exercise", label: "運動" },
+  { value: "other", label: "其他" },
+];
+
+function addDaysInTaipei(days) {
+  const date = new Date(`${todayInTaipei()}T00:00:00+08:00`);
+  date.setDate(date.getDate() + days);
+  return date.toLocaleDateString("en-CA", { timeZone: "Asia/Taipei" });
+}
+
+function addMonthsInTaipei(months) {
+  const date = new Date(`${todayInTaipei()}T00:00:00+08:00`);
+  date.setMonth(date.getMonth() + months);
+  return date.toLocaleDateString("en-CA", { timeZone: "Asia/Taipei" });
+}
+
+function normalizeDateInput(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  const match = text.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/);
+  if (!match) return text;
+  const [, year, month, day] = match;
+  return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
 }
 
 function formatDateLabel(value, time = "") {
@@ -1082,7 +1130,7 @@ function DashboardApp() {
             <img src={selectedProfile?.avatar_url || identity.profile?.pictureUrl || aiAvatar} alt="個人頭像" className="profile-avatar" />
             <div className="profile-info-main">
               <div className="profile-name-row">
-                <p className="profile-name">{selectedProfile?.display_name || patient.name || "洪爸爸"}</p>
+                <p className="profile-name">{selectedProfile?.display_name || patient.name || "照護對象"}</p>
                 <button type="button" className="btn-edit-inline" onClick={() => setShowEditProfile(true)}>✎</button>
               </div>
               <p className="profile-note">{patient.dept || "常看科別待補"}・{patient.age || "年齡待補"}</p>
@@ -1126,7 +1174,7 @@ function DashboardApp() {
                 <input
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder="找醫院、科別、藥名..."
+                  placeholder="找醫院、科別、藥名"
                 />
               </label>
             </div>
@@ -1319,11 +1367,11 @@ function ProfileEditModal({ profile, onClose, onSave, canPersist }) {
           {error && <p className="error-msg">{error}</p>}
 
           <div className="form-group">
-            <label>顯示名稱 (如：洪爸爸)</label>
+            <label>顯示名稱</label>
             <input 
               value={formData.display_name} 
               onChange={(e) => setFormData({ ...formData, display_name: e.target.value })} 
-              placeholder="請輸入稱呼"
+              placeholder="例：家中長輩、主要照護對象"
             />
           </div>
 
@@ -1353,7 +1401,7 @@ function ProfileEditModal({ profile, onClose, onSave, canPersist }) {
                 type="tel"
                 value={formData.emergency_phone}
                 onChange={(e) => setFormData({ ...formData, emergency_phone: e.target.value })}
-                placeholder="例如：0912-345-678"
+                placeholder="例：09xx-xxx-xxx"
               />
             </div>
           </div>
@@ -1364,7 +1412,7 @@ function ProfileEditModal({ profile, onClose, onSave, canPersist }) {
               type="email"
               value={formData.email}
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              placeholder="example@email.com"
+              placeholder="例：care@example.com"
             />
           </div>
 
@@ -1373,7 +1421,7 @@ function ProfileEditModal({ profile, onClose, onSave, canPersist }) {
             <textarea 
               value={formData.notes} 
               onChange={(e) => setFormData({ ...formData, notes: e.target.value })} 
-              placeholder="例如：過敏史、緊急聯絡電話、常拿的藥物..."
+              placeholder="例：過敏史、緊急聯絡方式、常用藥物"
               rows={4}
             />
           </div>
@@ -1395,8 +1443,8 @@ function ProfileSwitcher({ profiles, activeProfileId, onChange }) {
     return (
       <div className="profile-switcher empty">
         <p className="panel-eyebrow">正在看的資料</p>
-        <strong>洪爸爸</strong>
-        <span>之後可加入爸爸、媽媽、阿公、阿嬤或自己的資料。</span>
+        <strong>照護對象</strong>
+        <span>之後可加入家人、自己或其他需要照護的人。</span>
       </div>
     );
   }
@@ -1726,6 +1774,7 @@ function ManualReminderModal({ mode = "create", initialAppointment = null, onClo
     try {
       await onSave({
         ...formData,
+        date: normalizeDateInput(formData.date),
         title: formData.title || formData.department || formData.hospital,
         department: formData.department || formData.title,
         fasting_hours: formData.fasting_required ? formData.fasting_hours : null,
@@ -1747,82 +1796,100 @@ function ManualReminderModal({ mode = "create", initialAppointment = null, onClo
         <form onSubmit={handleSubmit}>
           <div className="modal-body">
             {error && <p className="error-msg">{error}</p>}
-            <div className="form-row-two">
-              <div className="form-group">
-                <label>提醒類型</label>
-                <select
-                  value={formData.type}
-                  onChange={(event) => setFormData({ ...formData, type: event.target.value })}
-                >
-                  <option value="reminder">提醒</option>
-                  <option value="clinic_visit">門診</option>
-                  <option value="inspection">檢查</option>
-                  <option value="refill_reminder">領藥</option>
-                </select>
+            <div className="form-group">
+              <label>提醒類型</label>
+              <div className="segmented-choice-grid" role="group" aria-label="提醒類型">
+                {REMINDER_TYPE_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={formData.type === option.value ? "choice-pill active" : "choice-pill"}
+                    onClick={() => setFormData({ ...formData, type: option.value })}
+                  >
+                    {option.label}
+                  </button>
+                ))}
               </div>
+            </div>
+            <div className="form-row-two">
               <div className="form-group">
                 <label>提醒名稱</label>
                 <input
                   value={formData.title}
                   onChange={(event) => setFormData({ ...formData, title: event.target.value })}
-                  placeholder="例如：腫瘤醫學部回診"
+                  placeholder="例：下次回診、領藥提醒"
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>日期</label>
+                <div className="quick-choice-row">
+                  <button type="button" onClick={() => setFormData({ ...formData, date: todayInTaipei() })}>今天</button>
+                  <button type="button" onClick={() => setFormData({ ...formData, date: addDaysInTaipei(1) })}>明天</button>
+                  <button type="button" onClick={() => setFormData({ ...formData, date: addDaysInTaipei(7) })}>下週</button>
+                  <button type="button" onClick={() => setFormData({ ...formData, date: addMonthsInTaipei(1) })}>下月</button>
+                </div>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={formData.date}
+                  onChange={(event) => setFormData({ ...formData, date: event.target.value })}
+                  placeholder="例：2026/05/15 或 2026-05-15"
                   required
                 />
               </div>
             </div>
             <div className="form-row-two">
               <div className="form-group">
-                <label>日期</label>
-                <input
-                  type="date"
-                  value={formData.date}
-                  onChange={(event) => setFormData({ ...formData, date: event.target.value })}
-                  required
-                />
-              </div>
-              <div className="form-group">
                 <label>時間</label>
+                <div className="quick-choice-row">
+                  {["上午", "下午", "晚上", "睡前", "全天"].map((timeLabel) => (
+                    <button key={timeLabel} type="button" onClick={() => setFormData({ ...formData, time: timeLabel })}>
+                      {timeLabel}
+                    </button>
+                  ))}
+                </div>
                 <input
                   type="text"
                   value={formData.time}
                   onChange={(event) => setFormData({ ...formData, time: event.target.value })}
-                  placeholder="例如：07:45 或 7:45-19:00"
+                  placeholder="例：07:45、上午、7:45-19:00"
                 />
               </div>
-            </div>
-            <div className="form-row-two">
               <div className="form-group">
                 <label>醫院 / 地點</label>
                 <input
                   value={formData.hospital}
                   onChange={(event) => setFormData({ ...formData, hospital: event.target.value })}
-                  placeholder="例如：臺大醫院"
-                />
-              </div>
-              <div className="form-group">
-                <label>診別 / 科別</label>
-                <input
-                  value={formData.department}
-                  onChange={(event) => setFormData({ ...formData, department: event.target.value })}
-                  placeholder="例如：藥局、腫瘤醫學部"
+                  placeholder="例：常去的醫院、診所或藥局"
                 />
               </div>
             </div>
             <div className="form-row-two">
               <div className="form-group">
+                <label>診別 / 科別</label>
+                <input
+                  value={formData.department}
+                  onChange={(event) => setFormData({ ...formData, department: event.target.value })}
+                  placeholder="例：家醫科、藥局、檢查室"
+                />
+              </div>
+              <div className="form-group">
                 <label>醫師</label>
                 <input
                   value={formData.doctor}
                   onChange={(event) => setFormData({ ...formData, doctor: event.target.value })}
-                  placeholder="醫師姓名"
+                  placeholder="例：醫師或藥師姓名"
                 />
               </div>
+            </div>
+            <div className="form-row-two">
               <div className="form-group">
                 <label>詳細地點</label>
                 <input
                   value={formData.location}
                   onChange={(event) => setFormData({ ...formData, location: event.target.value })}
-                  placeholder="例如：總院西址門診藥局"
+                  placeholder="例：門診區、檢查室、領藥窗口"
                 />
               </div>
             </div>
@@ -1851,7 +1918,7 @@ function ManualReminderModal({ mode = "create", initialAppointment = null, onClo
               <textarea
                 value={formData.notes}
                 onChange={(event) => setFormData({ ...formData, notes: event.target.value })}
-                placeholder="例如：帶健保卡、處方箋正本"
+                placeholder="例：要帶的資料、注意事項、家人分工"
                 rows={4}
               />
             </div>
@@ -2308,7 +2375,7 @@ function SettingsView({
           <img src={identity.profile?.pictureUrl || aiAvatar} alt="個人頭像" />
           <div>
             <label>稱呼</label>
-            <strong>{selectedProfile?.display_name || patient.name || "洪爸爸"}</strong>
+            <strong>{selectedProfile?.display_name || patient.name || "照護對象"}</strong>
             <label>LINE 狀態</label>
             <strong>{isPersonalMode ? "已用 LINE 登入" : IS_PROD ? "請重新登入 LINE" : "目前是範例畫面"}</strong>
           </div>

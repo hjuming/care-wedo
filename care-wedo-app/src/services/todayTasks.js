@@ -38,12 +38,20 @@ function timeRank(value = "") {
 function appointmentActionLabel(type) {
   if (type === "refill_reminder") return "我已領藥";
   if (type === "inspection") return "我已完成";
+  if (["reminder", "medication", "measurement", "document", "rehab", "exercise", "other"].includes(type)) return "我知道了";
   return "我已看診";
 }
 
 function appointmentKindLabel(type) {
   if (type === "refill_reminder") return "領藥";
   if (type === "inspection") return "檢查";
+  if (type === "medication") return "用藥";
+  if (type === "measurement") return "量測";
+  if (type === "document") return "文件";
+  if (type === "rehab") return "復健";
+  if (type === "exercise") return "運動";
+  if (type === "other") return "其他";
+  if (type === "reminder") return "提醒";
   return "看診";
 }
 

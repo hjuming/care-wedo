@@ -26,7 +26,7 @@ type LineWebhookBody = {
 };
 
 const encoder = new TextEncoder();
-const DEFAULT_RECIPIENT = "親愛的爸爸 / 媽媽";
+const DEFAULT_RECIPIENT = "親愛的家人";
 
 function timingSafeEqual(a: string, b: string) {
   if (a.length !== b.length) return false;

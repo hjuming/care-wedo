@@ -82,7 +82,7 @@ export default function GroupManager({ identity, onGroupChange }) {
           </div>
           <input
             type="text"
-            placeholder={action === "join" ? "輸入家人給您的 6 位邀請碼" : "幫這個家取個名字，例如：媽媽的照護小組"}
+            placeholder={action === "join" ? "輸入家人給您的 6 位邀請碼" : "例：我的家庭照護群組"}
             value={inputVal}
             onChange={(e) => setInputVal(e.target.value)}
             required

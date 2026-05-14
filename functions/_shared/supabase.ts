@@ -305,7 +305,7 @@ export async function ensureGroupDefaultProfile(
   env: Env,
   groupId: number,
   userId: number,
-  displayName = "親愛的爸爸 / 媽媽",
+  displayName = "親愛的家人",
 ): Promise<CareProfileRow> {
   const existing = await supabaseFetch<CareProfileRow[]>(
     env,

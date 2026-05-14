@@ -1,7 +1,7 @@
 import { supabaseFetch, Env as SupabaseEnv } from "../../_shared/supabase";
 import { logError, logEvent } from "../../_shared/logger";
 
-const DEFAULT_RECIPIENT = "親愛的爸爸 / 媽媽";
+const DEFAULT_RECIPIENT = "親愛的家人";
 
 type Env = SupabaseEnv & {
   CRON_SECRET?: string;
@@ -230,7 +230,16 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
       for (const apt of appointments) {
         const prefix = itemPrefix(apt.profile_id ? profileMap.get(apt.profile_id) : undefined);
-        const typeLabel = apt.type === "inspection" ? "檢查" : "看診";
+        const typeLabel =
+          apt.type === "inspection" ? "檢查" :
+          apt.type === "refill_reminder" ? "領藥" :
+          apt.type === "medication" ? "用藥" :
+          apt.type === "measurement" ? "量測" :
+          apt.type === "document" ? "文件" :
+          apt.type === "rehab" ? "復健" :
+          apt.type === "exercise" ? "運動" :
+          apt.type === "other" || apt.type === "reminder" ? "提醒" :
+          "看診";
         msgText += `• ${prefix}${apt.time || ""} 要去 ${apt.hospital || "醫院"} ${typeLabel}。\n`;
         const hours = apt.fasting_hours || 8;
         const startTimeText = calculateFastingStart(apt.time, hours);

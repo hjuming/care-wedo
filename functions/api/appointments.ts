@@ -8,7 +8,18 @@ import {
   verifyLineIdToken,
 } from "../_shared/supabase";
 
-const ALLOWED_TYPES = new Set(["clinic_visit", "inspection", "refill_reminder", "reminder"]);
+const ALLOWED_TYPES = new Set([
+  "reminder",
+  "clinic_visit",
+  "inspection",
+  "refill_reminder",
+  "medication",
+  "measurement",
+  "document",
+  "rehab",
+  "exercise",
+  "other",
+]);
 
 function cleanString(value: unknown, fallback = "") {
   return typeof value === "string" ? value.trim().slice(0, 500) : fallback;

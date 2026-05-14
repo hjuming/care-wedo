@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 export default function LoginSetup({ identity, onSetupComplete }) {
   const [step, setStep] = useState("check"); // check, setup, success
   const [familyName, setFamilyName] = useState("");
-  const [careName, setCareName] = useState("洪爸爸");
+  const [careName, setCareName] = useState("家中長輩");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -120,7 +120,7 @@ export default function LoginSetup({ identity, onSetupComplete }) {
               type="text"
               value={careName}
               onChange={(e) => setCareName(e.target.value)}
-              placeholder="例如：洪爸爸、媽媽"
+              placeholder="例：家中長輩、主要照護對象"
               required
             />
           </label>
@@ -131,13 +131,13 @@ export default function LoginSetup({ identity, onSetupComplete }) {
               type="text"
               value={familyName}
               onChange={(e) => setFamilyName(e.target.value)}
-              placeholder="例如：洪爸爸的家庭"
+              placeholder="例：我的家庭群組"
             />
           </label>
 
           <div className="setup-info">
             <p>
-              ✓ 建立後您可邀請家人（父親、兄弟姐妹）加入<br/>
+              ✓ 建立後您可邀請家人加入<br/>
               ✓ 所有家人都能查看照護資訊與接收提醒<br/>
               ✓ 支持多人共同上傳看診單據
             </p>

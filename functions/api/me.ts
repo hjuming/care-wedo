@@ -62,8 +62,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
     if (body.action === "init_family") {
       // Create the primary family group and default care profile
-      const familyName = body.family_name || `${body.primary_care_name || "親愛的爸爸"} 的家庭`;
-      const primaryCareName = body.primary_care_name || "親愛的爸爸 / 媽媽";
+      const familyName = body.family_name || `${body.primary_care_name || "主要照護對象"} 的家庭`;
+      const primaryCareName = body.primary_care_name || "親愛的家人";
 
       const group = await createGroup(env, userId, familyName);
       const profile = await ensureGroupDefaultProfile(env, group.id, userId, primaryCareName);

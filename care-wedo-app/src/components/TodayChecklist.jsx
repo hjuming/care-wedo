@@ -50,13 +50,13 @@ export default function TodayChecklist({ items, checkDone, onToggle }) {
         padding: "14px",
       }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: "var(--primary)", marginBottom: 8 }}>
-          📞 台大醫院總機
+          醫院聯絡電話
         </div>
         <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: 2, color: "#fff" }}>
           02-2312-3456
         </div>
         <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
-          磁振造影室: 轉 262636
+          檢查室分機請依單據填寫
         </div>
       </div>
 
