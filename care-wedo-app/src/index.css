@@ -2398,6 +2398,12 @@ input:focus-visible {
   padding: 12px 14px 14px;
 }
 
+.medicine-card-detail {
+  display: grid;
+  gap: 12px;
+  padding-bottom: 14px;
+}
+
 .medicine-card dl div {
   display: grid;
   grid-template-columns: 72px minmax(0, 1fr);
@@ -2407,6 +2413,60 @@ input:focus-visible {
 .medicine-card dt {
   color: var(--accent);
   font-weight: 800;
+}
+
+.medicine-manage-panel {
+  display: grid;
+  gap: 10px;
+  margin: 0 14px;
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(221, 235, 237, 0.42);
+  border: 1px solid rgba(94, 143, 154, 0.2);
+}
+
+.medicine-manage-panel p {
+  margin: 0;
+  color: var(--primary-dark);
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.medicine-slot-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.medicine-slot-picker button {
+  min-height: 44px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: white;
+  color: var(--primary-dark);
+  cursor: pointer;
+  padding: 8px 14px;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.medicine-slot-picker button.is-active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: white;
+}
+
+.medicine-delete-action {
+  justify-self: start;
+  min-height: 44px;
+  border: 1px solid rgba(166, 73, 56, 0.28);
+  border-radius: 999px;
+  background: rgba(166, 73, 56, 0.08);
+  color: #8a3d31;
+  cursor: pointer;
+  padding: 8px 16px;
+  font-size: 15px;
+  font-weight: 900;
 }
 
 .records-table {

@@ -197,6 +197,8 @@ function normalizeMedication(med, index) {
     meal_timing: med.meal_timing || "",
     scheduled_time: med.scheduled_time || "",
     taken_status: med.taken_status || "",
+    taken_date: med.taken_date || "",
+    taken_slots: Array.isArray(med.taken_slots) ? med.taken_slots : [],
     active: med.active !== false,
     color: med.color || ["#b7791f", "#2f855a", "#2b6cb0", "#805ad5"][index % 4],
   };
@@ -1157,7 +1159,14 @@ function DashboardApp() {
     updateActiveDashboard((prev) => ({
       ...prev,
       medications: (prev.medications || []).map((medication) => (
-        group.medicationIds.includes(medication.id) ? { ...medication, taken_status: status } : medication
+        group.medicationIds.includes(medication.id)
+          ? {
+              ...medication,
+              taken_status: status,
+              taken_date: todayInTaipei(),
+              taken_slots: Array.from(new Set([...(medication.taken_slots || []), group.slot])),
+            }
+          : medication
       )),
     }));
     try {
@@ -1167,6 +1176,50 @@ function DashboardApp() {
         idToken: identity.idToken,
         timeSlot: group.slot,
       });
+      await loadDashboard(identity, activeProfileId, activeGroupId);
+    } catch (err) {
+      if (err.code === "AUTH_REQUIRED") {
+        await resetCareWedoSessionAndReturnHome();
+        return;
+      }
+      await loadDashboard(identity, activeProfileId, activeGroupId);
+      throw err;
+    }
+  }
+
+  async function handleMedicationDelete(medication) {
+    if (!medication?.id || String(medication.id).startsWith("demo-med-")) return;
+
+    updateActiveDashboard((prev) => ({
+      ...prev,
+      medications: (prev.medications || []).filter((item) => String(item.id) !== String(medication.id)),
+    }));
+
+    try {
+      await patchMedication(medication.id, { active: false }, { idToken: identity.idToken });
+      await loadDashboard(identity, activeProfileId, activeGroupId);
+    } catch (err) {
+      if (err.code === "AUTH_REQUIRED") {
+        await resetCareWedoSessionAndReturnHome();
+        return;
+      }
+      await loadDashboard(identity, activeProfileId, activeGroupId);
+      throw err;
+    }
+  }
+
+  async function handleMedicationUpdate(medication, updates) {
+    if (!medication?.id || String(medication.id).startsWith("demo-med-")) return;
+
+    updateActiveDashboard((prev) => ({
+      ...prev,
+      medications: (prev.medications || []).map((item) => (
+        String(item.id) === String(medication.id) ? { ...item, ...updates } : item
+      )),
+    }));
+
+    try {
+      await patchMedication(medication.id, updates, { idToken: identity.idToken });
       await loadDashboard(identity, activeProfileId, activeGroupId);
     } catch (err) {
       if (err.code === "AUTH_REQUIRED") {
@@ -1442,6 +1495,8 @@ function DashboardApp() {
               medications={medications}
               onUpload={handleUploadClick}
               onTaken={handleMedicationTaken}
+              onDeleteMedication={handleMedicationDelete}
+              onUpdateMedication={handleMedicationUpdate}
             />
           )}
 
@@ -2796,15 +2851,43 @@ function CalendarView({ appointments, onUpload, onAddReminder, onEditAppointment
   );
 }
 
-function MedicationView({ medications, onUpload, onTaken }) {
+const MEDICATION_SLOT_OPTIONS = [
+  { value: "morning", label: "早" },
+  { value: "noon", label: "中" },
+  { value: "evening", label: "晚" },
+  { value: "bedtime", label: "睡前" },
+  { value: "other", label: "其他" },
+];
+
+function getMedicationSlotValues(medication = {}) {
+  const text = [medication.time_slot, medication.scheduled_time, medication.frequency, medication.reminder_text]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  const values = new Set();
+  if (/morning|breakfast|早/.test(text)) values.add("morning");
+  if (/noon|lunch|中/.test(text)) values.add("noon");
+  if (/evening|night|dinner|晚/.test(text)) values.add("evening");
+  if (/bedtime|睡前/.test(text)) values.add("bedtime");
+  if (values.size === 0) values.add("other");
+  return values;
+}
+
+function MedicationView({ medications, onUpload, onTaken, onDeleteMedication, onUpdateMedication }) {
   const [savingSlot, setSavingSlot] = useState(null);
+  const [savingMedicationId, setSavingMedicationId] = useState(null);
   const [expandedMedicationId, setExpandedMedicationId] = useState(null);
   const [locallyTakenSlots, setLocallyTakenSlots] = useState(() => new Set());
   const medicationGroups = useMemo(() => groupMedicationsBySchedule(medications), [medications]);
   const hasAnyMedication = medicationGroups.some((group) => group.medications.length > 0);
+  const todayDate = todayInTaipei();
 
   function isSlotDone(group) {
-    return locallyTakenSlots.has(group.slot) || group.medications.every((med) => med.taken_status === "taken");
+    return locallyTakenSlots.has(`${todayDate}:${group.slot}`)
+      || group.medications.every((med) => (
+        med.taken_slots?.includes(group.slot)
+        || (med.taken_status === "taken" && med.taken_date === todayDate)
+      ));
   }
 
   async function handleSlotStatus(group, status) {
@@ -2813,10 +2896,44 @@ function MedicationView({ medications, onUpload, onTaken }) {
     try {
       await onTaken?.(group, status);
       if (status === "taken") {
-        setLocallyTakenSlots((prev) => new Set(prev).add(group.slot));
+        setLocallyTakenSlots((prev) => new Set(prev).add(`${todayDate}:${group.slot}`));
       }
     } finally {
       setSavingSlot(null);
+    }
+  }
+
+  async function handleSlotToggle(medication, slotValue) {
+    const current = getMedicationSlotValues(medication);
+    if (current.has(slotValue) && current.size > 1) {
+      current.delete(slotValue);
+    } else {
+      current.add(slotValue);
+      if (slotValue !== "other") current.delete("other");
+      if (slotValue === "other") {
+        current.clear();
+        current.add("other");
+      }
+    }
+    const nextSlots = MEDICATION_SLOT_OPTIONS
+      .map((option) => option.value)
+      .filter((value) => current.has(value));
+    setSavingMedicationId(medication.id);
+    try {
+      await onUpdateMedication?.(medication, { time_slot: nextSlots.join(",") });
+    } finally {
+      setSavingMedicationId(null);
+    }
+  }
+
+  async function handleDeleteMedication(medication) {
+    const confirmed = window.confirm(`確定要刪除「${medication.name || "這顆藥"}」嗎？刪除後不會再出現在吃藥提醒。`);
+    if (!confirmed) return;
+    setSavingMedicationId(medication.id);
+    try {
+      await onDeleteMedication?.(medication);
+    } finally {
+      setSavingMedicationId(null);
     }
   }
 
@@ -2831,7 +2948,7 @@ function MedicationView({ medications, onUpload, onTaken }) {
             </div>
             <div className="medicine-slot-actions">
               {group.medications.length > 0 && isSlotDone(group) && (
-                <span className="medicine-slot-status is-done">這個時段已記錄</span>
+                <span className="medicine-slot-status is-done">{formatDateLabel(todayDate)} 已記錄</span>
               )}
               {group.medications.length > 0 && !isSlotDone(group) && (
                 <button type="button" className="primary-action compact-action" onClick={() => handleSlotStatus(group, "taken")} disabled={savingSlot === `${group.slot}-taken`}>
@@ -2858,15 +2975,44 @@ function MedicationView({ medications, onUpload, onTaken }) {
                     <span>{getMedicationShortName(med.name)}</span>
                   </button>
                   {isExpanded && (
-                    <dl>
-                      <div><dt>全名</dt><dd>{med.name || "藥名待確認"}</dd></div>
-                      <div><dt>份量</dt><dd>{med.dosage || "待確認"}</dd></div>
-                      {[med.schedule.timeLabel, med.schedule.mealTimingLabel].filter(Boolean).length > 0 && (
-                        <div><dt>時間</dt><dd>{[med.schedule.timeLabel, med.schedule.mealTimingLabel].filter(Boolean).join(" ｜ ")}</dd></div>
-                      )}
-                      {med.purpose && <div><dt>用途</dt><dd>{med.purpose}</dd></div>}
-                      {med.warnings && <div><dt>注意</dt><dd>{med.warnings}</dd></div>}
-                    </dl>
+                    <div className="medicine-card-detail">
+                      <dl>
+                        <div><dt>全名</dt><dd>{med.name || "藥名待確認"}</dd></div>
+                        <div><dt>份量</dt><dd>{med.dosage || "待確認"}</dd></div>
+                        {[med.schedule.timeLabel, med.schedule.mealTimingLabel].filter(Boolean).length > 0 && (
+                          <div><dt>時間</dt><dd>{[med.schedule.timeLabel, med.schedule.mealTimingLabel].filter(Boolean).join(" ｜ ")}</dd></div>
+                        )}
+                        {med.purpose && <div><dt>用途</dt><dd>{med.purpose}</dd></div>}
+                        {med.warnings && <div><dt>注意</dt><dd>{med.warnings}</dd></div>}
+                      </dl>
+                      <div className="medicine-manage-panel">
+                        <p>這顆藥要在哪些時段提醒？</p>
+                        <div className="medicine-slot-picker" role="group" aria-label={`${med.name || "藥物"}提醒時段`}>
+                          {MEDICATION_SLOT_OPTIONS.map((option) => {
+                            const selected = getMedicationSlotValues(med).has(option.value);
+                            return (
+                              <button
+                                key={option.value}
+                                type="button"
+                                className={selected ? "is-active" : ""}
+                                onClick={() => handleSlotToggle(med, option.value)}
+                                disabled={savingMedicationId === med.id}
+                              >
+                                {option.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <button
+                          type="button"
+                          className="medicine-delete-action"
+                          onClick={() => handleDeleteMedication(med)}
+                          disabled={savingMedicationId === med.id}
+                        >
+                          刪除這顆藥
+                        </button>
+                      </div>
+                    </div>
                   )}
                 </article>
               );

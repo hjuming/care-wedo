@@ -91,16 +91,6 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       },
     );
 
-    await supabaseFetch(
-      env,
-      `medications?id=in.(${medicationIds.join(",")})`,
-      {
-        method: "PATCH",
-        headers: { Prefer: "return=minimal" },
-        body: JSON.stringify({ taken_status: status }),
-      },
-    );
-
     return Response.json({
       success: true,
       log_ids: logs.map((log) => log.id),

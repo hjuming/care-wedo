@@ -206,6 +206,34 @@ async function fetchMedications(env: Env, groupId: number | null, profileId: num
   return supabaseFetch<MedicationRow[]>(env, path);
 }
 
+function todayInTaipei() {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Taipei" });
+}
+
+type MedicationLogRow = {
+  medication_id: number;
+  status: string | null;
+  taken_date: string | null;
+  time_slot: string | null;
+};
+
+async function fetchTodayMedicationLogs(env: Env, medications: MedicationRow[]): Promise<Map<number, MedicationLogRow[]>> {
+  const medicationIds = medications.map((medication) => medication.id).filter(Boolean);
+  if (medicationIds.length === 0) return new Map();
+
+  const rows = await supabaseFetch<MedicationLogRow[]>(
+    env,
+    `medication_logs?medication_id=in.(${medicationIds.join(",")})&taken_date=eq.${todayInTaipei()}&select=medication_id,status,taken_date,time_slot&order=created_at.desc`,
+  );
+
+  return rows.reduce((map, row) => {
+    const current = map.get(row.medication_id) || [];
+    current.push(row);
+    map.set(row.medication_id, current);
+    return map;
+  }, new Map<number, MedicationLogRow[]>());
+}
+
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   try {
     // ── Unauthenticated: return static demo, zero DB queries ──────────────────
@@ -297,6 +325,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       fetchMedications(env, activeGroupId, activeProfileId),
       fetchDashboardMembers(env, activeGroupId, userId),
     ]);
+    const todayMedicationLogs = await fetchTodayMedicationLogs(env, medications);
     const familyNotes = appointments
       .filter((appointment) => appointment.type === "family_note" && !appointment.profile_id)
       .map((appointment) => appointment.reminder_text || appointment.notes || appointment.department || "")
@@ -330,7 +359,16 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       active_profile_id: activeProfileId,
       care_profiles: profiles.map(serializeCareProfile),
       appointments: appointments.map(serializeAppointment),
-      medications: medications.map(serializeMedication),
+      medications: medications.map((medication) => {
+        const logs = todayMedicationLogs.get(medication.id) || [];
+        const takenLog = logs.find((log) => log.status === "taken");
+        return {
+          ...serializeMedication(medication),
+          taken_status: takenLog?.status || "",
+          taken_date: takenLog?.taken_date || null,
+          taken_slots: logs.filter((log) => log.status === "taken").map((log) => log.time_slot).filter(Boolean),
+        };
+      }),
       members,
       collaborators: members,
       checklist,

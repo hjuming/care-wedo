@@ -102,16 +102,25 @@ test("Global care contact sheets support keyboard close and focus return", () =>
 
 test("Medication view groups medicines by time and keeps one calm taken action", () => {
   const source = readProjectFile("care-wedo-app/src/App.jsx");
+  const css = readProjectFile("care-wedo-app/src/index.css");
   const medicationView = source.slice(source.indexOf("function MedicationView"));
   assert.match(medicationView, /groupMedicationsBySchedule/);
   assert.match(medicationView, /medicine-time-group/);
   assert.match(medicationView, /medicine-slot-actions/);
   assert.match(medicationView, /medicine-chip-button/);
+  assert.match(medicationView, /medicine-slot-picker/);
+  assert.match(medicationView, /刪除這顆藥/);
+  assert.match(medicationView, /onUpdateMedication/);
+  assert.match(medicationView, /onDeleteMedication/);
   assert.match(medicationView, /getMedicationShortName/);
   assert.match(medicationView, /"我已吃完"/);
+  assert.match(medicationView, /formatDateLabel\(todayDate\).*已記錄/);
   assert.doesNotMatch(medicationView, />\s*忘了\s*</);
   assert.doesNotMatch(medicationView, /我忘記有沒有吃/);
   assert.match(source, /markMedicationSlotStatus/);
+  assert.match(source, /taken_slots/);
+  assert.match(css, /\.medicine-manage-panel/);
+  assert.match(css, /\.medicine-delete-action/);
   assert.doesNotMatch(medicationView, /尚未記錄/);
 });
 
@@ -195,6 +204,7 @@ test("Medication records expose schedule fields for elder-friendly medicine inst
 test("Medication slot status API records dated logs with ownership checks", () => {
   const schema = readProjectFile("supabase/schema.sql");
   const api = readProjectFile("functions/api/medications/taken.ts");
+  const dashboard = readProjectFile("functions/api/dashboard.ts");
   assert.match(schema, /create table if not exists public\.medication_logs/);
   assert.match(schema, /taken_date date not null/);
   assert.match(schema, /confirmed_by_user_id bigint/);
@@ -204,6 +214,10 @@ test("Medication slot status API records dated logs with ownership checks", () =
   assert.match(api, /medications\?id=in\.\(\$\{medicationIds\.join\(","\)\}\)/);
   assert.match(api, /medication_logs\?select=/);
   assert.match(api, /status:\s*status/);
+  assert.doesNotMatch(api, /body:\s*JSON\.stringify\(\{\s*taken_status:\s*status\s*\}\)/);
+  assert.match(dashboard, /fetchTodayMedicationLogs/);
+  assert.match(dashboard, /taken_date=eq\.\$\{todayInTaipei\(\)\}/);
+  assert.match(dashboard, /taken_slots/);
 });
 
 test("Global care contact dock uses a circular icon-only app avatar on mobile", () => {

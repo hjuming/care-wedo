@@ -80,16 +80,6 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
       },
     );
 
-    await supabaseFetch(
-      env,
-      `medications?id=eq.${id}`,
-      {
-        method: "PATCH",
-        headers: { Prefer: "return=minimal" },
-        body: JSON.stringify({ taken_status: "taken" }),
-      },
-    );
-
     return Response.json({
       success: true,
       log_id: logs[0]?.id,
