@@ -69,11 +69,11 @@ test("Medication view groups medicines by time and keeps one calm taken action",
   assert.match(medicationView, /medicine-slot-actions/);
   assert.match(medicationView, /medicine-chip-button/);
   assert.match(medicationView, /getMedicationShortName/);
-  assert.match(medicationView, /"吃了"/);
+  assert.match(medicationView, /"我已吃完"/);
   assert.doesNotMatch(medicationView, />\s*忘了\s*</);
   assert.doesNotMatch(medicationView, /我忘記有沒有吃/);
   assert.match(source, /markMedicationSlotStatus/);
-  assert.match(medicationView, /尚未記錄/);
+  assert.doesNotMatch(medicationView, /尚未記錄/);
 });
 
 test("Medication records expose schedule fields for elder-friendly medicine instructions", () => {

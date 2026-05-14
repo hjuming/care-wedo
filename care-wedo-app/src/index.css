@@ -2271,6 +2271,18 @@ input:focus-visible {
   font-weight: 900;
 }
 
+.medicine-slot-status.is-done {
+  background: rgba(79, 125, 90, 0.14);
+  color: #3f7148;
+}
+
+.medicine-slot-empty {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 16px;
+  font-weight: 800;
+}
+
 .medicine-chip-list {
   display: flex;
   flex-wrap: wrap;

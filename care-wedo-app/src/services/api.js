@@ -344,7 +344,7 @@ export async function markMedicationSlotStatus({ medicationIds, status, idToken,
   });
   if (!response.ok) {
     const error = await response.json().catch(async () => ({ error: await response.text() }));
-    throw new Error(error.error || "無法記錄吃藥狀態");
+    throw createApiError(error.error || "無法記錄吃藥狀態", response.status);
   }
   return response.json();
 }

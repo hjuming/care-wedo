@@ -139,7 +139,10 @@ test("groupMedicationsBySchedule groups active medicines by elder-friendly time 
     mealTiming: group.medications.map((med) => med.schedule.mealTimingLabel),
   })), [
     { label: "早", names: ["降血壓藥"], mealTiming: ["飯後"] },
+    { label: "中", names: [], mealTiming: [] },
     { label: "晚", names: ["胃藥"], mealTiming: ["飯前"] },
+    { label: "睡前", names: [], mealTiming: [] },
+    { label: "其他", names: [], mealTiming: [] },
   ]);
 });
 
@@ -155,6 +158,23 @@ test("groupMedicationsBySchedule exposes slot-level ids for one-tap confirmation
     medicationIds: group.medicationIds,
   })), [
     { slot: "morning", medicationIds: [1, 2] },
+    { slot: "noon", medicationIds: [] },
+    { slot: "evening", medicationIds: [] },
     { slot: "bedtime", medicationIds: [3] },
+    { slot: "other", medicationIds: [] },
   ]);
+});
+
+test("groupMedicationsBySchedule supports shorthand and clock-time slots", () => {
+  const groups = groupMedicationsBySchedule([
+    { id: 1, name: "早中晚藥", frequency: "早、中、晚", active: true },
+    { id: 2, name: "八點半藥", scheduled_time: "08:37", active: true },
+    { id: 3, name: "睡前藥", reminder_text: "睡前服用", active: true },
+  ]);
+
+  const bySlot = Object.fromEntries(groups.map((group) => [group.slot, group.medicationIds]));
+  assert.deepEqual(bySlot.morning, [1, 2]);
+  assert.deepEqual(bySlot.noon, [1]);
+  assert.deepEqual(bySlot.evening, [1]);
+  assert.deepEqual(bySlot.bedtime, [3]);
 });

@@ -1100,13 +1100,28 @@ function DashboardApp() {
   }
 
   async function handleMedicationTaken(group, status) {
-    await markMedicationSlotStatus({
-      medicationIds: group.medicationIds,
-      status,
-      idToken: identity.idToken,
-      timeSlot: group.slot,
-    });
-    await loadDashboard(identity, activeProfileId);
+    updateActiveDashboard((prev) => ({
+      ...prev,
+      medications: (prev.medications || []).map((medication) => (
+        group.medicationIds.includes(medication.id) ? { ...medication, taken_status: status } : medication
+      )),
+    }));
+    try {
+      await markMedicationSlotStatus({
+        medicationIds: group.medicationIds,
+        status,
+        idToken: identity.idToken,
+        timeSlot: group.slot,
+      });
+      await loadDashboard(identity, activeProfileId);
+    } catch (err) {
+      if (err.code === "AUTH_REQUIRED") {
+        await resetCareWedoSessionAndReturnHome();
+        return;
+      }
+      await loadDashboard(identity, activeProfileId);
+      throw err;
+    }
   }
 
   async function handleManualReminderSave(payload) {
@@ -2409,12 +2424,22 @@ function CalendarView({ appointments, onUpload, onAddReminder, onEditAppointment
 function MedicationView({ medications, onUpload, onTaken }) {
   const [savingSlot, setSavingSlot] = useState(null);
   const [expandedMedicationId, setExpandedMedicationId] = useState(null);
+  const [locallyTakenSlots, setLocallyTakenSlots] = useState(() => new Set());
   const medicationGroups = useMemo(() => groupMedicationsBySchedule(medications), [medications]);
+  const hasAnyMedication = medicationGroups.some((group) => group.medications.length > 0);
+
+  function isSlotDone(group) {
+    return locallyTakenSlots.has(group.slot) || group.medications.every((med) => med.taken_status === "taken");
+  }
 
   async function handleSlotStatus(group, status) {
+    if (!group.medicationIds.length) return;
     setSavingSlot(`${group.slot}-${status}`);
     try {
       await onTaken?.(group, status);
+      if (status === "taken") {
+        setLocallyTakenSlots((prev) => new Set(prev).add(group.slot));
+      }
     } finally {
       setSavingSlot(null);
     }
@@ -2422,23 +2447,25 @@ function MedicationView({ medications, onUpload, onTaken }) {
 
   return (
     <div className="medicine-grid">
-      {medicationGroups.length ? medicationGroups.map((group) => (
+      {hasAnyMedication ? medicationGroups.map((group) => (
         <section key={group.slot} className="medicine-time-group">
           <div className="medicine-slot-head">
             <div>
-              <p>{group.medications.length} 種藥</p>
+              <p>{group.medications.length ? `${group.medications.length} 種藥` : "沒有安排"}</p>
               <h3>{group.label}</h3>
             </div>
             <div className="medicine-slot-actions">
-              {!group.medications.every((med) => med.taken_status === "taken") && (
-                <span className="medicine-slot-status">尚未記錄</span>
+              {group.medications.length > 0 && isSlotDone(group) && (
+                <span className="medicine-slot-status is-done">這個時段已記錄</span>
               )}
-              <button type="button" className="primary-action compact-action" onClick={() => handleSlotStatus(group, "taken")} disabled={savingSlot === `${group.slot}-taken` || group.medications.every((med) => med.taken_status === "taken")}>
-                {savingSlot === `${group.slot}-taken` ? "記錄中…" : group.medications.every((med) => med.taken_status === "taken") ? "已吃" : "吃了"}
-              </button>
+              {group.medications.length > 0 && !isSlotDone(group) && (
+                <button type="button" className="primary-action compact-action" onClick={() => handleSlotStatus(group, "taken")} disabled={savingSlot === `${group.slot}-taken`}>
+                  {savingSlot === `${group.slot}-taken` ? "記錄中…" : "我已吃完"}
+                </button>
+              )}
             </div>
           </div>
-          <div className="medicine-chip-list">
+          {group.medications.length ? <div className="medicine-chip-list">
             {group.medications.map((med) => {
               const isExpanded = expandedMedicationId === med.id;
               return (
@@ -2469,7 +2496,9 @@ function MedicationView({ medications, onUpload, onTaken }) {
                 </article>
               );
             })}
-          </div>
+          </div> : (
+            <p className="medicine-slot-empty">這個時段目前沒有藥。</p>
+          )}
         </section>
       )) : (
         <EmptyGuide

@@ -17,6 +17,13 @@ const MEDICATION_SLOT_LABELS = {
   other: "其他",
 };
 
+const MEDICATION_SLOT_ORDER = ["morning", "noon", "evening", "bedtime", "other"];
+
+function hasChineseTimeToken(text, token) {
+  const tokenPattern = new RegExp(`(^|[、,，/／;；\\s])${token}($|[、,，/／;；\\s])`);
+  return tokenPattern.test(text);
+}
+
 function parseTaipeiDate(dateValue) {
   if (!dateValue) return null;
   const date = new Date(`${dateValue}T00:00:00+08:00`);
@@ -103,24 +110,66 @@ export function getMedicationSchedule(medication = {}) {
   };
 }
 
+function inferMedicationSlots(medication = {}) {
+  const text = [
+    medication.time_slot,
+    medication.scheduled_time,
+    medication.frequency,
+    medication.reminder_text,
+    medication.meal_timing,
+  ].filter(Boolean).join(" ");
+  const lowerText = text.toLowerCase();
+  const compactText = text.replace(/[、,，/／;；\s]+/g, "");
+  const slots = new Set();
+  const isShorthand = compactText === "早中晚" || compactText === "早晚";
+
+  if (/(bedtime|睡前|睡覺前|臨睡前)/i.test(text)) slots.add("bedtime");
+  if (/(evening|night|dinner|晚上|晚餐|晚間|傍晚|夜間)/i.test(text) || hasChineseTimeToken(text, "晚") || isShorthand) slots.add("evening");
+  if (/(noon|lunch|中午|午餐|午間)/i.test(text) || hasChineseTimeToken(text, "中") || compactText === "早中晚") slots.add("noon");
+  if (/(morning|breakfast|早上|早餐|上午|早晨)/i.test(text) || hasChineseTimeToken(text, "早") || isShorthand) slots.add("morning");
+
+  const timeMatches = lowerText.matchAll(/\b(\d{1,2})(?::?(\d{2}))?\b/g);
+  for (const match of timeMatches) {
+    const hour = Number(match[1]);
+    if (!Number.isFinite(hour) || hour > 24) continue;
+    if (hour >= 5 && hour < 11) slots.add("morning");
+    else if (hour >= 11 && hour < 15) slots.add("noon");
+    else if (hour >= 15 && hour < 21) slots.add("evening");
+    else slots.add("bedtime");
+  }
+
+  if (slots.size === 0) slots.add("other");
+  return Array.from(slots).sort((a, b) => MEDICATION_SLOT_ORDER.indexOf(a) - MEDICATION_SLOT_ORDER.indexOf(b));
+}
+
 export function groupMedicationsBySchedule(medications = []) {
-  const groups = new Map();
+  const groups = new Map(MEDICATION_SLOT_ORDER.map((slot) => [
+    slot,
+    {
+      slot,
+      label: MEDICATION_SLOT_LABELS[slot],
+      medications: [],
+      medicationIds: [],
+      rank: SLOT_ORDER[MEDICATION_SLOT_LABELS[slot]] || 5000,
+    },
+  ]));
+
   medications
     .filter(isActiveMedication)
     .forEach((medication) => {
-      const schedule = getMedicationSchedule(medication);
-      if (!groups.has(schedule.slot)) {
-        groups.set(schedule.slot, {
-          slot: schedule.slot,
-          label: schedule.slotLabel,
-          medications: [],
-          medicationIds: [],
-          rank: SLOT_ORDER[schedule.slotLabel] || 5000,
-        });
-      }
-      const group = groups.get(schedule.slot);
-      group.medications.push({ ...medication, schedule });
-      group.medicationIds.push(medication.id);
+      const baseSchedule = getMedicationSchedule(medication);
+      const slots = inferMedicationSlots(medication);
+      slots.forEach((slot) => {
+        const group = groups.get(slot);
+        const schedule = {
+          ...baseSchedule,
+          slot,
+          slotLabel: MEDICATION_SLOT_LABELS[slot],
+          timeLabel: baseSchedule.timeLabel || MEDICATION_SLOT_LABELS[slot],
+        };
+        group.medications.push({ ...medication, schedule });
+        group.medicationIds.push(medication.id);
+      });
     });
 
   return Array.from(groups.values())
