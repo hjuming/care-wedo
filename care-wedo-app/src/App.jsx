@@ -286,6 +286,42 @@ const LANDING_SOLUTIONS = [
   "登入後建立家庭群組，共享照護進度",
 ];
 
+const LANDING_WORKFLOW = [
+  {
+    step: "01",
+    title: "用 LINE 登入",
+    copy: "不用另外記帳號密碼，家人點一下就能開始建立照護空間。",
+  },
+  {
+    step: "02",
+    title: "拍照或手動新增",
+    copy: "看診單、處方箋、檢查提醒與家人交代事項都能整理成卡片。",
+  },
+  {
+    step: "03",
+    title: "家人一起照顧",
+    copy: "家庭群組同步今日照護、未來行程與每日提醒。",
+  },
+];
+
+const LANDING_PAGE_ENTRIES = [
+  {
+    title: "功能導覽",
+    copy: "了解 Care WEDO 如何整理門診、檢查、領藥與家庭提醒。",
+    href: "#features",
+  },
+  {
+    title: "方案比較",
+    copy: "先用 LINE 體驗，需要長期保存時再建立家庭照護空間。",
+    href: "#plans",
+  },
+  {
+    title: "隱私與條款",
+    copy: "查看資料使用方式、LINE 登入與照護紀錄保存原則。",
+    href: "/privacy",
+  },
+];
+
 const FREE_FEATURES = [
   ["LINE 對話使用", true, true],
   ["圖片 AI 解析", "每月有限次數", "較高額度"],
@@ -324,6 +360,20 @@ function FeatureValue({ value }) {
 }
 
 function LandingPage() {
+  const [loggingIn, setLoggingIn] = useState(false);
+  const [loginError, setLoginError] = useState(null);
+
+  async function handleLineLogin() {
+    setLoggingIn(true);
+    setLoginError(null);
+    try {
+      await loginWithLine();
+    } catch (err) {
+      setLoginError(err instanceof Error ? err.message : "登入失敗，請重試。");
+      setLoggingIn(false);
+    }
+  }
+
   return (
     <main className="landing-shell">
       <nav className="landing-nav" aria-label="Care WEDO 入口導覽">
@@ -332,23 +382,34 @@ function LandingPage() {
           <a href="#features">功能</a>
           <a href="#plans">方案</a>
           <a href="#faq">FAQ</a>
-          <a href="/login" className="nav-login-link">登入 / 註冊</a>
+          <a href="/privacy">隱私</a>
+          <button type="button" className="nav-login-link nav-login-button" onClick={handleLineLogin} disabled={loggingIn}>
+            {loggingIn ? "開啟 LINE..." : "用 LINE 登入"}
+          </button>
         </div>
       </nav>
 
       <section className="landing-hero" aria-label="Care WEDO 首頁">
         <div className="landing-hero-copy">
-          <span className="landing-version">V 1.0</span>
-          <h1>Care WEDO 陪你照顧最重要的人</h1>
+          <span className="landing-version">長輩友善健康管理平台</span>
+          <h1>
+            <span>Care WEDO</span>
+            <span>把家人的照護提醒</span>
+            <span>整理清楚。</span>
+          </h1>
           <p>
-            結合 AI 照護提醒、醫療紀錄整理與家庭共享，協助家人更有秩序地陪伴長輩面對看診、用藥與日常健康管理。
+            拍下看診單、處方箋或檢查單，Care WEDO 會協助整理成今日照護、未來行程、吃藥紀錄與家庭提醒，讓家人一起照顧不慌亂。
           </p>
           <div className="landing-cta-row">
-            <a className="primary-action" href="https://lin.ee/xzbyyvf" target="_blank" rel="noopener noreferrer">
-              免費使用 LINE 照護小管家
-            </a>
-            <a className="secondary-action" href="/login">建立家庭照護空間</a>
+            <button type="button" className="line-login-btn landing-line-login" onClick={handleLineLogin} disabled={loggingIn}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M19.365 9.863c.349 0 .63.285.63.631 0 .345-.281.63-.63.63H17.61v1.125h1.755c.349 0 .63.283.63.63 0 .344-.281.629-.63.629h-2.386c-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.63-.63h2.386c.346 0 .627.285.627.63 0 .349-.281.63-.63.63H17.61v1.125h1.755zm-3.855 3.016c0 .27-.174.51-.432.596-.064.021-.133.031-.199.031-.211 0-.391-.09-.51-.25l-2.443-3.317v2.94c0 .344-.279.629-.631.629-.346 0-.626-.285-.626-.629V8.108c0-.27.173-.51.43-.595.06-.023.136-.033.194-.033.195 0 .375.104.494.254l2.462 3.33V8.108c0-.345.282-.63.63-.63.345 0 .63.285.63.63v4.771zm-5.741 0c0 .344-.282.629-.631.629-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.63-.63.346 0 .628.285.628.63v4.771zm-2.466.629H4.917c-.345 0-.63-.285-.63-.629V8.108c0-.345.285-.63.63-.63.348 0 .63.285.63.63v4.141h1.756c.348 0 .629.283.629.63 0 .344-.281.629-.629.629M24 10.314C24 4.943 18.615.572 12 .572S0 4.943 0 10.314c0 4.811 4.27 8.842 10.035 9.608.391.082.923.258 1.058.59.12.301.079.766.038 1.08l-.164 1.02c-.045.301-.24 1.186 1.049.645 1.291-.539 6.916-4.078 9.436-6.975C23.176 14.393 24 12.458 24 10.314"/>
+              </svg>
+              {loggingIn ? "正在開啟 LINE..." : "用 LINE 登入開始"}
+            </button>
+            <a className="secondary-action" href="#features">先看功能導覽</a>
           </div>
+          {loginError && <p className="notice-danger landing-login-error">{loginError}</p>}
           <p className="landing-trust-copy">AI 協助整理，家人安心陪伴。不取代醫師，也不取代家人。</p>
         </div>
         <div className="landing-hero-panel" aria-label="照護重點預覽">
@@ -364,8 +425,21 @@ function LandingPage() {
           </div>
           <div className="family-sync-card">
             <strong>家人同步</strong>
-            <p>爸爸、媽媽、子女都看同一份照護紀錄。</p>
+            <p>主要照護者與家人都看同一份照護紀錄。</p>
           </div>
+        </div>
+      </section>
+
+      <section className="landing-section landing-entry-section" aria-label="快速入口">
+        <div className="section-kicker">網站入口</div>
+        <h2>第一次來，可以從這裡開始。</h2>
+        <div className="landing-entry-grid">
+          {LANDING_PAGE_ENTRIES.map((item) => (
+            <a key={item.title} href={item.href} className="landing-entry-card">
+              <strong>{item.title}</strong>
+              <span>{item.copy}</span>
+            </a>
+          ))}
         </div>
       </section>
 
@@ -395,6 +469,20 @@ function LandingPage() {
         </ul>
       </section>
 
+      <section className="landing-section workflow-section" aria-label="使用流程">
+        <div className="section-kicker">使用流程</div>
+        <h2>從登入到共同照護，盡量少步驟。</h2>
+        <div className="workflow-grid">
+          {LANDING_WORKFLOW.map((item) => (
+            <article key={item.step} className="workflow-card">
+              <span>{item.step}</span>
+              <h3>{item.title}</h3>
+              <p>{item.copy}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
       <section className="landing-section plan-section" id="plans">
         <div className="section-kicker">免費與收費</div>
         <h2>先用 LINE 試試，需要長期管理時再建立家庭照護空間。</h2>
@@ -403,13 +491,15 @@ function LandingPage() {
             <span>免費版</span>
             <h3>LINE 照護小管家</h3>
             <p>適合第一次體驗，透過 LINE 傳送看診單或藥袋照片，讓 AI 協助整理重點。</p>
-            <a href="https://lin.ee/xzbyyvf" target="_blank" rel="noopener noreferrer">免費開始</a>
+            <a href="https://lin.ee/xzbyyvf" target="_blank" rel="noopener noreferrer">加入 LINE 小管家</a>
           </article>
           <article className="plan-card featured-plan">
             <span>收費版</span>
             <h3>家庭照護空間</h3>
             <p>適合長期照顧父母、長輩或慢性病家人的家庭，登入後可保存、共享、追蹤照護紀錄。</p>
-            <a href="/login">建立照護空間</a>
+            <button type="button" onClick={handleLineLogin} disabled={loggingIn}>
+              {loggingIn ? "正在開啟 LINE..." : "用 LINE 登入建立"}
+            </button>
           </article>
         </div>
 

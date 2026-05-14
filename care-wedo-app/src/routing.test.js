@@ -2,8 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { isLineCallbackSearch, resolveCareWedoRoute, resolveInitialCareWedoRoute } from "./routing.js";
 
-test("resolveCareWedoRoute sends the root homepage to the care dashboard gate", () => {
-  assert.equal(resolveCareWedoRoute("/"), "app");
+test("resolveCareWedoRoute sends the root homepage to the public landing page", () => {
+  assert.equal(resolveCareWedoRoute("/"), "landing");
 });
 
 test("resolveCareWedoRoute sends the app path to the care dashboard", () => {
