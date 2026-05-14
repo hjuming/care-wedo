@@ -94,17 +94,17 @@ function typeIcon(type) {
 }
 
 const REMINDER_TYPE_OPTIONS = [
-  { value: "reminder", label: "提醒" },
   { value: "clinic_visit", label: "門診" },
   { value: "inspection", label: "檢查" },
   { value: "refill_reminder", label: "領藥" },
-  { value: "medication", label: "用藥" },
-  { value: "measurement", label: "量測" },
-  { value: "document", label: "文件" },
   { value: "rehab", label: "復健" },
   { value: "exercise", label: "運動" },
   { value: "other", label: "其他" },
 ];
+
+function normalizeManualReminderType(type) {
+  return REMINDER_TYPE_OPTIONS.some((option) => option.value === type) ? type : "other";
+}
 
 function addDaysInTaipei(days) {
   const date = new Date(`${todayInTaipei()}T00:00:00+08:00`);
@@ -1134,9 +1134,9 @@ function DashboardApp() {
     setEditingAppointment(null);
   }
 
-  async function handleDeleteAppointment(appointment) {
+  async function handleDeleteAppointment(appointment, options = {}) {
     if (!appointment?.id) return;
-    if (!window.confirm("確定要刪除這筆行程或提醒嗎？刪除後首頁與未來行程不會再顯示。")) return;
+    if (!options.skipConfirm && !window.confirm("確定要刪除這筆行程或提醒嗎？刪除後首頁與未來行程不會再顯示。")) return;
     await patchAppointment(appointment.id, { status: "deleted" }, { idToken: identity.idToken });
     updateActiveDashboard((prev) => ({
       ...prev,
@@ -1290,7 +1290,6 @@ function DashboardApp() {
               onUpload={handleUploadClick}
               onAddReminder={() => setShowManualReminder(true)}
               onEditAppointment={handleEditAppointment}
-              onDeleteAppointment={handleDeleteAppointment}
               onComplete={handleComplete}
               onAskFamily={handleAskFamily}
             />
@@ -1302,7 +1301,6 @@ function DashboardApp() {
               onUpload={handleUploadClick}
               onAddReminder={() => setShowManualReminder(true)}
               onEditAppointment={handleEditAppointment}
-              onDeleteAppointment={handleDeleteAppointment}
             />
           )}
 
@@ -1369,6 +1367,10 @@ function DashboardApp() {
           initialAppointment={editingAppointment}
           onClose={() => setEditingAppointment(null)}
           onSave={handleAppointmentUpdate}
+          onDelete={async () => {
+            await handleDeleteAppointment(editingAppointment, { skipConfirm: true });
+            setEditingAppointment(null);
+          }}
         />
       )}
 
@@ -1826,7 +1828,7 @@ function EmptyGuide({ title, description, primaryLabel, onPrimary, secondaryLabe
 
 function buildReminderFormData(appointment = null) {
   return {
-    type: appointment?.type || "reminder",
+    type: normalizeManualReminderType(appointment?.type || "clinic_visit"),
     title: appointment?.department || appointment?.hospital || "",
     date: appointment?.date || todayInTaipei(),
     time: appointment?.time || "",
@@ -1840,9 +1842,9 @@ function buildReminderFormData(appointment = null) {
   };
 }
 
-function ManualReminderModal({ mode = "create", initialAppointment = null, onClose, onSave }) {
+function ManualReminderModal({ mode = "create", initialAppointment = null, onClose, onSave, onDelete }) {
   const [formData, setFormData] = useState(() => initialAppointment ? buildReminderFormData(initialAppointment) : {
-    type: "reminder",
+    type: "clinic_visit",
     title: "",
     date: todayInTaipei(),
     time: "",
@@ -1855,6 +1857,8 @@ function ManualReminderModal({ mode = "create", initialAppointment = null, onClo
     fasting_hours: 8,
   });
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState("");
 
   async function handleSubmit(event) {
@@ -1876,6 +1880,21 @@ function ManualReminderModal({ mode = "create", initialAppointment = null, onClo
     }
   }
 
+  async function handleDelete() {
+    if (!confirmDelete) {
+      setConfirmDelete(true);
+      return;
+    }
+    setDeleting(true);
+    setError("");
+    try {
+      await onDelete?.();
+    } catch (err) {
+      setError(err.message || "刪除失敗，請再試一次");
+      setDeleting(false);
+    }
+  }
+
   return (
     <div className="modal-overlay">
       <div className="modal-content manual-reminder-modal">
@@ -1893,7 +1912,7 @@ function ManualReminderModal({ mode = "create", initialAppointment = null, onClo
                   <button
                     key={option.value}
                     type="button"
-                    className={formData.type === option.value ? "choice-pill active" : "choice-pill"}
+                    className={`choice-pill choice-pill-${option.value} ${formData.type === option.value ? "active" : ""}`}
                     onClick={() => setFormData({ ...formData, type: option.value })}
                   >
                     {option.label}
@@ -2012,6 +2031,24 @@ function ManualReminderModal({ mode = "create", initialAppointment = null, onClo
                 rows={4}
               />
             </div>
+            {mode === "edit" && onDelete && (
+              <div className="modal-danger-zone">
+                <div>
+                  <strong>刪除提醒</strong>
+                  <p>{confirmDelete ? "刪除後，首頁與未來行程不會再顯示這筆資料。請再次確認。" : "如果這筆資料不需要了，可以在這裡刪除。"}</p>
+                </div>
+                <div className="modal-danger-actions">
+                  {confirmDelete && (
+                    <button type="button" className="secondary-action subtle" onClick={() => setConfirmDelete(false)} disabled={deleting}>
+                      取消刪除
+                    </button>
+                  )}
+                  <button type="button" className="secondary-action subtle danger-subtle" onClick={handleDelete} disabled={saving || deleting}>
+                    {deleting ? "刪除中..." : confirmDelete ? "確認刪除" : "刪除這筆提醒"}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
           <div className="modal-footer">
             <button type="button" className="secondary-action" onClick={onClose} disabled={saving}>取消</button>
@@ -2042,7 +2079,6 @@ function OverviewView({
   onUpload,
   onAddReminder,
   onEditAppointment,
-  onDeleteAppointment,
   onComplete,
   onAskFamily,
 }) {
@@ -2091,6 +2127,11 @@ function OverviewView({
               const isDone = locallyDoneTaskIds.has(task.id) || task.status === "completed";
               return (
                 <article key={task.id} className={`elder-task-card ${isDone ? "is-done" : ""} ${task.needsReview ? "needs-review" : ""}`}>
+                  {task.kind === "appointment" && (
+                    <button type="button" className="card-corner-edit" onClick={() => onEditAppointment(task.sourceId)} aria-label={`編輯 ${task.title}`}>
+                      編輯
+                    </button>
+                  )}
                   <div className="elder-task-time">{task.time}</div>
                   <div className="elder-task-body">
                     <span className="elder-task-label">{task.label}</span>
@@ -2103,16 +2144,6 @@ function OverviewView({
                     <button type="button" className="primary-action elder-primary-action" onClick={() => handlePrimaryAction(task)} disabled={isDone}>
                       {isDone ? "已記好了" : task.primaryActionLabel}
                     </button>
-                    {task.kind === "appointment" && (
-                      <div className="card-inline-actions">
-                        <button type="button" className="secondary-action subtle" onClick={() => onEditAppointment(task.sourceId)}>
-                          編輯
-                        </button>
-                        <button type="button" className="secondary-action subtle danger-subtle" onClick={() => onDeleteAppointment({ id: task.sourceId })}>
-                          刪除
-                        </button>
-                      </div>
-                    )}
                     <button type="button" className="secondary-action elder-secondary-action subtle" onClick={() => onAskFamily(task)}>
                       問家人
                     </button>
@@ -2215,7 +2246,7 @@ function OverviewView({
   );
 }
 
-function CalendarView({ appointments, onUpload, onAddReminder, onEditAppointment, onDeleteAppointment }) {
+function CalendarView({ appointments, onUpload, onAddReminder, onEditAppointment }) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const futureAppointments = useMemo(
     () => appointments.filter((apt) => apt.status !== "completed" && isDateTodayOrFuture(apt.date)),
@@ -2293,6 +2324,9 @@ function CalendarView({ appointments, onUpload, onAddReminder, onEditAppointment
         </div>
         {futureAppointments.length ? futureAppointments.map((apt) => (
           <article key={apt.id} id={`event-${apt.date}`} className="event-row">
+            <button type="button" className="card-corner-edit" onClick={() => onEditAppointment(apt)} aria-label={`編輯 ${apt.department || "提醒"}`}>
+              編輯
+            </button>
             <div className="event-type">{typeIcon(apt.type)}</div>
             <div>
               <p className="event-date">{formatDateLabel(apt.date, apt.time)}</p>
@@ -2300,10 +2334,6 @@ function CalendarView({ appointments, onUpload, onAddReminder, onEditAppointment
               <p>{[apt.hospital, apt.doctor && `${apt.doctor}醫師`, apt.number && `${apt.number}號`].filter(Boolean).join(" ｜ ")}</p>
               {apt.location && <p className="location-line">地點：{apt.location}</p>}
               {apt.notes && <p className="soft-note">{apt.notes}</p>}
-              <div className="event-row-actions">
-                <button type="button" className="secondary-action subtle" onClick={() => onEditAppointment(apt)}>編輯</button>
-                <button type="button" className="secondary-action subtle danger-subtle" onClick={() => onDeleteAppointment(apt)}>刪除</button>
-              </div>
             </div>
           </article>
         )) : (

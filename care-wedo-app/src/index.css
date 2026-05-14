@@ -2133,26 +2133,32 @@ input:focus-visible {
 }
 
 .event-row {
+  position: relative;
   display: grid;
   grid-template-columns: 54px minmax(0, 1fr);
   gap: 14px;
-  padding: 16px;
+  padding: 16px 96px 16px 16px;
 }
 
-.event-row-actions,
-.card-inline-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 12px;
+.card-corner-edit {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  min-height: 42px;
+  border: 1px solid rgba(94, 143, 154, 0.32);
+  border-radius: 999px;
+  background: rgba(221, 235, 237, 0.72);
+  color: var(--primary-dark);
+  cursor: pointer;
+  padding: 8px 16px;
+  font-size: 15px;
+  font-weight: 900;
 }
 
-.card-inline-actions {
-  margin-top: 0;
-}
-
-.card-inline-actions .secondary-action {
-  flex: 1 1 0;
+.card-corner-edit:hover,
+.card-corner-edit:focus-visible {
+  background: var(--primary-soft);
+  border-color: var(--primary);
 }
 
 .event-type {
@@ -3284,13 +3290,75 @@ input:focus-visible {
 }
 
 .manual-reminder-modal {
-  width: min(720px, 100%);
+  width: min(640px, 100%);
 }
 
-.segmented-choice-grid {
+.manual-reminder-modal .modal-body {
+  gap: 18px;
+}
+
+.manual-reminder-modal .form-row-two {
+  grid-template-columns: 1fr;
+  gap: 18px;
+}
+
+.manual-reminder-modal .form-group,
+.manual-reminder-modal .settings-toggle {
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: rgba(255, 250, 242, 0.7);
+  padding: 18px;
+}
+
+.manual-reminder-modal .form-group label {
+  font-size: 18px;
+  color: var(--text-primary);
+}
+
+.manual-reminder-modal .form-group input,
+.manual-reminder-modal .form-group textarea {
+  min-height: 58px;
+  border-radius: 14px;
+  font-size: 18px;
+  line-height: 1.6;
+}
+
+.manual-reminder-modal .form-group textarea {
+  min-height: 132px;
+}
+
+.manual-reminder-modal .segmented-choice-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.modal-danger-zone {
+  display: grid;
+  gap: 14px;
+  border: 1px solid rgba(184, 74, 58, 0.24);
+  border-radius: 18px;
+  background: rgba(255, 240, 237, 0.5);
+  padding: 18px;
+}
+
+.modal-danger-zone strong {
+  color: var(--danger);
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.modal-danger-zone p {
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-size: 16px;
+}
+
+.modal-danger-actions {
+  display: flex;
+  flex-wrap: wrap;
   gap: 10px;
+  justify-content: flex-end;
 }
 
 .choice-pill,
@@ -3305,12 +3373,54 @@ input:focus-visible {
 }
 
 .choice-pill {
-  min-height: 52px;
-  padding: 10px 8px;
-  font-size: 17px;
+  min-height: 64px;
+  padding: 12px 8px;
+  font-size: 20px;
+  box-shadow: inset 0 0 0 2px transparent;
 }
 
-.choice-pill.active,
+.choice-pill-clinic_visit {
+  background: #fff4e5;
+  border-color: #dfc8a5;
+  color: #7a4c18;
+}
+
+.choice-pill-inspection {
+  background: #eaf4f1;
+  border-color: #b9d5cb;
+  color: #315f68;
+}
+
+.choice-pill-refill_reminder {
+  background: #f0f4e8;
+  border-color: #cbd7b8;
+  color: #4f6f3b;
+}
+
+.choice-pill-rehab {
+  background: #edf0f7;
+  border-color: #c1cadc;
+  color: #40577a;
+}
+
+.choice-pill-exercise {
+  background: #edf5ea;
+  border-color: #bdd5b5;
+  color: #3f7148;
+}
+
+.choice-pill-other {
+  background: #f6eeee;
+  border-color: #ddc7c2;
+  color: #7b4d43;
+}
+
+.choice-pill.active {
+  border-color: var(--primary-dark);
+  color: var(--text-primary);
+  box-shadow: inset 0 0 0 3px rgba(49, 95, 104, 0.24), 0 10px 24px rgba(72, 55, 33, 0.08);
+}
+
 .quick-choice-row button:hover,
 .quick-choice-row button:focus-visible {
   border-color: rgba(94, 143, 154, 0.42);
@@ -3322,13 +3432,14 @@ input:focus-visible {
 .quick-choice-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
+  margin-bottom: 10px;
 }
 
 .quick-choice-row button {
-  min-height: 44px;
-  padding: 8px 14px;
-  font-size: 15px;
+  min-height: 56px;
+  padding: 10px 18px;
+  font-size: 18px;
 }
 
 .compact-toggle {
@@ -4030,11 +4141,12 @@ button:disabled,
 }
 
 .elder-task-card {
+  position: relative;
   display: grid;
   grid-template-columns: 140px minmax(0, 1fr) minmax(180px, 220px);
   gap: 18px;
   align-items: center;
-  padding: 20px;
+  padding: 20px 104px 20px 20px;
   border: 1px solid var(--card-border);
   border-radius: 16px;
   background: var(--card-bg);
@@ -4228,7 +4340,19 @@ button:disabled,
   .elder-task-card {
     grid-template-columns: 1fr;
     gap: 12px;
-    padding: 18px;
+    padding: 72px 18px 18px;
+  }
+
+  .event-row {
+    padding: 72px 16px 16px;
+  }
+
+  .card-corner-edit {
+    top: 16px;
+    right: 16px;
+    min-height: 48px;
+    padding: 10px 18px;
+    font-size: 16px;
   }
 
   .elder-task-time {
