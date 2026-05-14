@@ -218,15 +218,21 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
                 </div>
 
                 <div className="group-invite-block">
-                  <label>邀請碼</label>
+                  <div className="invite-copy-head">
+                    <span>邀請碼</span>
+                    <strong>{group.invite_code}</strong>
+                  </div>
+                  <p className="helper-copy">給家人貼到 LINE。家人點網址登入後，會自動加入這個家庭群組。</p>
                   <div className="invite-code-row">
-                    <code className="invite-code">{group.invite_code}</code>
                     <button
                       type="button"
                       className="btn-copy"
                       onClick={() => copyInviteCode(group)}
                     >
-                      {copiedCode === group.invite_code ? "✓ 已複製邀請文案" : "複製邀請"}
+                      {copiedCode === group.invite_code ? "已複製邀請文案" : "複製完整邀請"}
+                    </button>
+                    <button type="button" className="btn-secondary-sm" onClick={() => copyInviteCodeOnly(group.invite_code)}>
+                      只複製邀請碼
                     </button>
                     {isAdmin && (
                       <button
@@ -238,10 +244,6 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
                       </button>
                     )}
                   </div>
-                  <button type="button" className="btn-secondary-sm" onClick={() => copyInviteCodeOnly(group.invite_code)}>
-                    只複製邀請碼
-                  </button>
-                  <p className="helper-copy">複製後可直接貼到 LINE 家庭群組。家人點網址登入後會自動帶入邀請碼。</p>
                 </div>
 
                 <div className="members-list">

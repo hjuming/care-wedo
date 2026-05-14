@@ -106,10 +106,14 @@ test("Mobile LINE login uses a real LIFF link instead of a script-only redirect"
   const loginAction = source.slice(source.indexOf("function LineLoginAction"), source.indexOf("function LandingPage"));
 
   assert.match(source, /buildLiffEntryUrl/);
+  assert.match(source, /buildLineAppLiffFallbackUrl/);
   assert.match(source, /shouldOpenLiffEntryUrl/);
   assert.match(loginAction, /href=\{buildLiffEntryUrl\(\)\}/);
+  assert.match(loginAction, /line-app-fallback-link/);
+  assert.match(loginAction, /href=\{buildLineAppLiffFallbackUrl\(\)\}/);
   assert.match(loginAction, /if \(!shouldOpenLiffEntryUrl\(\)\)/);
   assert.match(css, /\.line-login-btn\[aria-disabled="true"\]/);
+  assert.match(css, /\.line-app-fallback-link/);
 });
 
 test("Medication view groups medicines by time and keeps one calm taken action", () => {
@@ -127,6 +131,8 @@ test("Medication view groups medicines by time and keeps one calm taken action",
   assert.match(medicationView, /getMedicationShortName/);
   assert.match(medicationView, /"我已吃完"/);
   assert.match(medicationView, /formatDateLabel\(todayDate\).*已記錄/);
+  assert.match(medicationView, /顯示全部藥物/);
+  assert.match(medicationView, /totalMedicationCount/);
   assert.doesNotMatch(medicationView, />\s*忘了\s*</);
   assert.doesNotMatch(medicationView, /我忘記有沒有吃/);
   assert.match(source, /markMedicationSlotStatus/);
@@ -197,7 +203,24 @@ test("Records page defaults to future arrangements and loads history on demand",
   assert.match(recordsView, /isDateTodayOrFuture\(record\.date,\s*today\)/);
   assert.match(recordsView, /matchSearch\(record,\s*searchQuery\)/);
   assert.match(recordsView, /appointmentTimeValue\(a\)\.localeCompare\(appointmentTimeValue\(b\)\)/);
+  assert.match(recordsView, /record-summary-button/);
+  assert.match(recordsView, /onEditRecord\?\.\(record\)/);
+  assert.match(recordsView, /onDeleteRecord\?\.\(record\)/);
   assert.match(css, /\.record-mode-switch/);
+  assert.match(css, /\.record-summary-button/);
+  assert.match(css, /\.record-card-actions/);
+});
+
+test("Family invite card keeps copy actions elder-friendly on mobile", () => {
+  const component = readProjectFile("care-wedo-app/src/components/GroupSettings.jsx");
+  const css = readProjectFile("care-wedo-app/src/index.css");
+
+  assert.match(component, /invite-copy-head/);
+  assert.match(component, /複製完整邀請/);
+  assert.match(component, /只複製邀請碼/);
+  assert.match(css, /\.invite-copy-head strong/);
+  assert.match(css, /\.invite-code-row\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/s);
+  assert.match(css, /@media \(max-width:\s*760px\)[\s\S]*\.invite-code-row\s*\{[\s\S]*grid-template-columns:\s*1fr/);
 });
 
 test("Medication records expose schedule fields for elder-friendly medicine instructions", () => {

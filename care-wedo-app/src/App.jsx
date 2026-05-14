@@ -7,7 +7,7 @@ import MobileBottomNav from "./components/MobileBottomNav";
 import OcrResult from "./components/OcrResult";
 import { patientData, medicines, timeline as initialTimeline } from "./data/patient";
 import { confirmOcrDocument, createAppointment, fetchDashboard, joinGroup, markMedicationSlotStatus, ocrAnalyze, patchAppointment, patchMedication, updateActiveProfilePreference, updateFamilyNotes, updateProfile, updateProfileOrder } from "./services/api";
-import { buildLiffEntryUrl, initLineIdentity, loginWithLine, logoutLineIdentity, resetCareWedoSessionAndReturnHome, shouldOpenLiffEntryUrl } from "./services/liff";
+import { buildLiffEntryUrl, buildLineAppLiffFallbackUrl, initLineIdentity, loginWithLine, logoutLineIdentity, resetCareWedoSessionAndReturnHome, shouldOpenLiffEntryUrl } from "./services/liff";
 import { trackError, trackEvent } from "./services/telemetry";
 import { buildTodayTasks, formatTaipeiTodayLabel, groupMedicationsBySchedule, hasSameDayTasks } from "./services/todayTasks";
 import { buildSearchSuggestions, matchSearch } from "./services/search";
@@ -404,6 +404,8 @@ function LineIcon() {
 }
 
 function LineLoginAction({ className = "", loggingIn = false, label = "用 LINE 登入", loadingLabel = "正在開啟 LINE...", onLogin }) {
+  const showMobileFallback = shouldOpenLiffEntryUrl();
+
   function handleClick(event) {
     if (loggingIn) {
       event.preventDefault();
@@ -416,15 +418,22 @@ function LineLoginAction({ className = "", loggingIn = false, label = "用 LINE 
   }
 
   return (
-    <a
-      className={`line-login-btn ${className}`.trim()}
-      href={buildLiffEntryUrl()}
-      onClick={handleClick}
-      aria-disabled={loggingIn ? "true" : undefined}
-    >
-      <LineIcon />
-      {loggingIn ? loadingLabel : label}
-    </a>
+    <span className="line-login-action-stack">
+      <a
+        className={`line-login-btn ${className}`.trim()}
+        href={buildLiffEntryUrl()}
+        onClick={handleClick}
+        aria-disabled={loggingIn ? "true" : undefined}
+      >
+        <LineIcon />
+        {loggingIn ? loadingLabel : label}
+      </a>
+      {showMobileFallback && (
+        <a className="line-app-fallback-link" href={buildLineAppLiffFallbackUrl()}>
+          卡在 LINE 登入頁時，改用 LINE App 開啟
+        </a>
+      )}
+    </span>
   );
 }
 
@@ -1061,6 +1070,13 @@ function DashboardApp() {
       handleUploadClick();
       return;
     }
+    openSection(sectionId);
+  }
+
+  function openSection(sectionId) {
+    if (sectionId !== activeSection) {
+      setSearchQuery("");
+    }
     setActiveSection(sectionId);
   }
 
@@ -1428,7 +1444,7 @@ function DashboardApp() {
                 key={section.id}
                 type="button"
                 className={activeSection === section.id ? "nav-item active" : "nav-item"}
-                onClick={() => setActiveSection(section.id)}
+                onClick={() => openSection(section.id)}
                 style={activeSection === section.id ? { "--item-color": section.color } : {}}
               >
                 <span>{section.icon}</span>
@@ -1482,10 +1498,10 @@ function DashboardApp() {
               hasCareData={hasCareData}
               patient={patient}
               selectedProfile={selectedProfile}
-              onOpenCalendar={() => setActiveSection("calendar")}
-              onOpenRecords={() => setActiveSection("records")}
-              onOpenMeds={() => setActiveSection("meds")}
-              onOpenFamily={() => setActiveSection("settings")}
+              onOpenCalendar={() => openSection("calendar")}
+              onOpenRecords={() => openSection("records")}
+              onOpenMeds={() => openSection("meds")}
+              onOpenFamily={() => openSection("settings")}
               onOpenProfile={() => setShowEditProfile(true)}
               onGroupChange={handleGroupChange}
               onEditFamilyNotes={() => setShowFamilyNotesEditor(true)}
@@ -1509,6 +1525,9 @@ function DashboardApp() {
           {activeSection === "meds" && (
             <MedicationView
               medications={medications}
+              totalMedicationCount={allMedications.length}
+              searchQuery={searchQuery}
+              onClearSearch={() => setSearchQuery("")}
               onUpload={handleUploadClick}
               onTaken={handleMedicationTaken}
               onDeleteMedication={handleMedicationDelete}
@@ -1521,6 +1540,8 @@ function DashboardApp() {
               records={allAppointments}
               searchQuery={searchQuery}
               onUpload={handleUploadClick}
+              onEditRecord={handleEditAppointment}
+              onDeleteRecord={handleDeleteAppointment}
             />
           )}
 
@@ -2889,7 +2910,7 @@ function getMedicationSlotValues(medication = {}) {
   return values;
 }
 
-function MedicationView({ medications, onUpload, onTaken, onDeleteMedication, onUpdateMedication }) {
+function MedicationView({ medications, totalMedicationCount = 0, searchQuery = "", onClearSearch, onUpload, onTaken, onDeleteMedication, onUpdateMedication }) {
   const [savingSlot, setSavingSlot] = useState(null);
   const [savingMedicationId, setSavingMedicationId] = useState(null);
   const [expandedMedicationId, setExpandedMedicationId] = useState(null);
@@ -3039,11 +3060,12 @@ function MedicationView({ medications, onUpload, onTaken, onDeleteMedication, on
         </section>
       )) : (
         <EmptyGuide
-          title="目前還沒有吃藥說明。"
-          description="你可以拍下藥袋或處方資訊，讓 Care WEDO 幫你整理吃藥時間、份量與注意事項。"
-          primaryLabel="上傳藥袋照片"
-          onPrimary={onUpload}
-          secondaryLabel="新增吃藥說明"
+          title={searchQuery && totalMedicationCount > 0 ? "沒有符合搜尋的藥物。" : "目前還沒有吃藥說明。"}
+          description={searchQuery && totalMedicationCount > 0 ? "目前的關鍵字把藥物篩掉了，可以先顯示全部藥物再重新查看。" : "你可以拍下藥袋或處方資訊，讓 Care WEDO 幫你整理吃藥時間、份量與注意事項。"}
+          primaryLabel={searchQuery && totalMedicationCount > 0 ? "顯示全部藥物" : "上傳藥袋照片"}
+          onPrimary={searchQuery && totalMedicationCount > 0 ? onClearSearch : onUpload}
+          secondaryLabel={searchQuery && totalMedicationCount > 0 ? "上傳藥袋照片" : "新增吃藥說明"}
+          onSecondary={searchQuery && totalMedicationCount > 0 ? onUpload : undefined}
         />
       )}
     </div>
@@ -3056,7 +3078,7 @@ function appointmentTimeValue(record = {}) {
   return `${date}T${time}`;
 }
 
-function RecordsView({ records, searchQuery, onUpload }) {
+function RecordsView({ records, searchQuery, onUpload, onEditRecord, onDeleteRecord }) {
   const [mode, setMode] = useState("future");
   const modeLabel = mode === "history" ? "歷史紀錄" : "未來安排";
   const grouped = useMemo(() => {
@@ -3103,14 +3125,30 @@ function RecordsView({ records, searchQuery, onUpload }) {
           <h3 className="month-divider">{month.replace("-", " 年 ")} 月</h3>
           <div className="records-stack">
             {items.map(record => (
-              <article key={record.id} className="records-row record-completed">
-                <span className="record-date-col">{formatDateLabel(record.date)}</span>
-                <span className="record-tag">{typeLabel(record.type)}</span>
-                <div className="record-info">
-                  <strong>{record.title || record.department}</strong>
-                  <span>{record.hospital}</span>
+              <article key={record.id} className="records-row record-completed records-card">
+                <button
+                  type="button"
+                  className="record-summary-button"
+                  onClick={() => onEditRecord?.(record)}
+                  aria-label={`編輯 ${record.title || record.department || "照護紀錄"}`}
+                >
+                  <span className="record-date-col">{formatDateLabel(record.date, record.time)}</span>
+                  <span className="record-tag">{typeLabel(record.type)}</span>
+                  <div className="record-info">
+                    <strong>{record.title || record.department || typeLabel(record.type)}</strong>
+                    <span>{[record.hospital, record.department, record.doctor && `${record.doctor}醫師`].filter(Boolean).join(" ｜ ")}</span>
+                    {(record.notes || record.reminder_text) && <small>{record.notes || record.reminder_text}</small>}
+                  </div>
+                  <span className="record-status-tag">{record.status === "completed" ? "已完成" : "提醒"}</span>
+                </button>
+                <div className="record-card-actions">
+                  <button type="button" className="secondary-action subtle" onClick={() => onEditRecord?.(record)}>
+                    編輯
+                  </button>
+                  <button type="button" className="secondary-action subtle danger-subtle" onClick={() => onDeleteRecord?.(record)}>
+                    刪除
+                  </button>
                 </div>
-                <span className="record-status-tag">{record.status === "completed" ? "✓ 已完成" : "提醒"}</span>
               </article>
             ))}
           </div>

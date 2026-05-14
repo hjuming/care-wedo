@@ -14,6 +14,10 @@ export function buildLiffEntryUrl(liffId = LIFF_ID) {
   return `https://liff.line.me/${encodeURIComponent(liffId)}`;
 }
 
+export function buildLineAppLiffFallbackUrl(liffId = LIFF_ID) {
+  return `https://line.me/R/app/${encodeURIComponent(liffId)}`;
+}
+
 export function shouldOpenLiffEntryUrl(userAgent = window.navigator.userAgent) {
   return /Android|iPhone|iPad|iPod/i.test(userAgent);
 }

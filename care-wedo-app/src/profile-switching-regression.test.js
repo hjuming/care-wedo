@@ -83,6 +83,6 @@ test("Mobile care pages keep important Chinese text readable", () => {
   assert.match(css, /\.record-completed\s*\{[\s\S]*grid-template-columns: 1fr/);
   assert.match(css, /\.record-info strong,\n\s*\.record-info span\s*\{[\s\S]*writing-mode: horizontal-tb/);
   assert.match(css, /\.care-tips-grid\s*\{[\s\S]*grid-template-columns: 1fr/);
-  assert.match(css, /\.invite-code-row\s*\{[\s\S]*grid-template-columns: 1fr 1fr/);
-  assert.match(css, /\.invite-code\s*\{[\s\S]*grid-column: 1 \/ -1/);
+  assert.match(css, /\.invite-copy-head strong\s*\{[\s\S]*font-size: clamp\(28px, 7vw, 40px\)/);
+  assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.invite-code-row\s*\{[\s\S]*grid-template-columns: 1fr/);
 });

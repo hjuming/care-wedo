@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildLiffEntryUrl, clearCareWedoLocalSession, shouldOpenLiffEntryUrl } from "./liff.js";
+import { buildLiffEntryUrl, buildLineAppLiffFallbackUrl, clearCareWedoLocalSession, shouldOpenLiffEntryUrl } from "./liff.js";
 
 test("buildLiffEntryUrl creates the LINE LIFF universal link", () => {
   assert.equal(buildLiffEntryUrl("2009972224-fQcfBXw5"), "https://liff.line.me/2009972224-fQcfBXw5");
@@ -8,6 +8,10 @@ test("buildLiffEntryUrl creates the LINE LIFF universal link", () => {
 
 test("buildLiffEntryUrl uses the production LIFF ID fallback when build env is missing", () => {
   assert.equal(buildLiffEntryUrl(), "https://liff.line.me/2009972224-fQcfBXw5");
+});
+
+test("buildLineAppLiffFallbackUrl creates a LINE app fallback link", () => {
+  assert.equal(buildLineAppLiffFallbackUrl("2009972224-fQcfBXw5"), "https://line.me/R/app/2009972224-fQcfBXw5");
 });
 
 test("shouldOpenLiffEntryUrl detects browsers that should use the direct LIFF anchor", () => {
