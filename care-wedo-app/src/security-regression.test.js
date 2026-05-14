@@ -100,6 +100,18 @@ test("Global care contact sheets support keyboard close and focus return", () =>
   assert.match(dock, /\.focus\(\)/);
 });
 
+test("Mobile LINE login uses a real LIFF link instead of a script-only redirect", () => {
+  const source = readProjectFile("care-wedo-app/src/App.jsx");
+  const css = readProjectFile("care-wedo-app/src/index.css");
+  const loginAction = source.slice(source.indexOf("function LineLoginAction"), source.indexOf("function LandingPage"));
+
+  assert.match(source, /buildLiffEntryUrl/);
+  assert.match(source, /shouldOpenLiffEntryUrl/);
+  assert.match(loginAction, /href=\{buildLiffEntryUrl\(\)\}/);
+  assert.match(loginAction, /if \(!shouldOpenLiffEntryUrl\(\)\)/);
+  assert.match(css, /\.line-login-btn\[aria-disabled="true"\]/);
+});
+
 test("Medication view groups medicines by time and keeps one calm taken action", () => {
   const source = readProjectFile("care-wedo-app/src/App.jsx");
   const css = readProjectFile("care-wedo-app/src/index.css");

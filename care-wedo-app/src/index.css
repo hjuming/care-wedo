@@ -894,12 +894,13 @@ input:focus-visible {
   letter-spacing: 0.02em;
 }
 
-.line-login-btn:hover:not(:disabled) {
+.line-login-btn:hover:not(:disabled):not([aria-disabled="true"]) {
   background: #05b04e;
   transform: translateY(-1px);
 }
 
-.line-login-btn:disabled {
+.line-login-btn:disabled,
+.line-login-btn[aria-disabled="true"] {
   opacity: 0.65;
   cursor: not-allowed;
 }

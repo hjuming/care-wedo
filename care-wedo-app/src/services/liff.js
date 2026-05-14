@@ -131,13 +131,6 @@ export async function loginWithLine() {
     return;
   }
 
-  // 手機瀏覽器優先走 LIFF URL，讓 iOS Universal Link / Android App Link
-  // 有機會直接打開 LINE App 內的 LIFF Browser，而不是停在 Safari/Chrome 的 access-auto.line.me。
-  if (shouldOpenLiffEntryUrl()) {
-    window.location.assign(buildLiffEntryUrl());
-    return;
-  }
-
   try {
     const { default: liff } = await import("@line/liff");
     await liff.init({ liffId: LIFF_ID });

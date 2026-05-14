@@ -10,7 +10,7 @@ test("buildLiffEntryUrl uses the production LIFF ID fallback when build env is m
   assert.equal(buildLiffEntryUrl(), "https://liff.line.me/2009972224-fQcfBXw5");
 });
 
-test("shouldOpenLiffEntryUrl detects iOS and Android browsers", () => {
+test("shouldOpenLiffEntryUrl detects browsers that should use the direct LIFF anchor", () => {
   assert.equal(shouldOpenLiffEntryUrl("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)"), true);
   assert.equal(shouldOpenLiffEntryUrl("Mozilla/5.0 (Linux; Android 14; Pixel 8)"), true);
 });
