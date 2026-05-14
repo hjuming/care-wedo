@@ -670,6 +670,7 @@ export async function patchMedication(
 export function serializeAppointment(row: AppointmentRow) {
   return {
     id: row.id,
+    group_id: row.group_id || null,
     profile_id: row.profile_id || null,
     type: row.type || "clinic_visit",
     date: row.date,
@@ -691,6 +692,7 @@ export function serializeAppointment(row: AppointmentRow) {
 export function serializeMedication(row: MedicationRow) {
   return {
     id: row.id,
+    group_id: row.group_id || null,
     profile_id: row.profile_id || null,
     name: row.name,
     dosage: row.dosage,

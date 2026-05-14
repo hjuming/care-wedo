@@ -21,9 +21,14 @@ test("Dashboard profile switching keeps a per-profile cache for immediate restor
   assert.match(appSource, /dashboardCacheRef\.current\.get/);
 });
 
-test("Dashboard profile switching does not overwrite populated profile data with an empty response", () => {
+test("Dashboard profile switching does not reuse stale care records when a profile has no data", () => {
+  const shared = readProjectFile("functions/_shared/supabase.ts");
+
   assert.match(appSource, /dashboardHasCareData/);
-  assert.match(appSource, /cachedProfileData && dashboardHasCareData\(cachedProfileData\) && !dashboardHasCareData\(data\)/);
+  assert.doesNotMatch(appSource, /cachedProfileData && dashboardHasCareData\(cachedProfileData\) && !dashboardHasCareData\(data\)/);
+  assert.match(appSource, /belongsToActiveCareScope/);
+  assert.match(appSource, /profile_id/);
+  assert.match(shared, /group_id: row\.group_id \|\| null/);
 });
 
 test("Dashboard keeps profile shell data separate from profile record data", () => {
@@ -70,4 +75,14 @@ test("Profile switcher groups care profiles and persists drag order", () => {
   assert.match(appSource, /setTimeout\(\(\) => \{/);
   assert.match(css, /\.profile-group-title/);
   assert.match(css, /\.profile-option\.is-drop-target/);
+});
+
+test("Mobile care pages keep important Chinese text readable", () => {
+  const css = readProjectFile("care-wedo-app/src/index.css");
+
+  assert.match(css, /\.record-completed\s*\{[\s\S]*grid-template-columns: 1fr/);
+  assert.match(css, /\.record-info strong,\n\s*\.record-info span\s*\{[\s\S]*writing-mode: horizontal-tb/);
+  assert.match(css, /\.care-tips-grid\s*\{[\s\S]*grid-template-columns: 1fr/);
+  assert.match(css, /\.invite-code-row\s*\{[\s\S]*grid-template-columns: 1fr 1fr/);
+  assert.match(css, /\.invite-code\s*\{[\s\S]*grid-column: 1 \/ -1/);
 });

@@ -163,6 +163,8 @@ function formatDateLabel(value, time = "") {
 function normalizeAppointment(apt, index) {
   return {
     id: apt.id || `demo-${index}`,
+    group_id: apt.group_id || null,
+    profile_id: apt.profile_id || null,
     type: apt.type || (apt.label?.includes("領藥") ? "refill_reminder" : "clinic_visit"),
     date: apt.date || "",
     time: apt.time || "",
@@ -183,6 +185,8 @@ function normalizeAppointment(apt, index) {
 function normalizeMedication(med, index) {
   return {
     id: med.id || `demo-med-${index}`,
+    group_id: med.group_id || null,
+    profile_id: med.profile_id || null,
     name: med.name || "藥物名稱待確認",
     purpose: med.purpose || med.use || "這顆藥的用途待確認",
     frequency: med.frequency || med.freq || "照單子上的時間吃",
@@ -200,6 +204,21 @@ function normalizeMedication(med, index) {
 
 function dashboardHasCareData(data) {
   return Boolean((data?.appointments?.length || 0) + (data?.medications?.length || 0) + (data?.checklist?.length || 0));
+}
+
+function sameRecordId(left, right) {
+  return String(left || "") === String(right || "");
+}
+
+function belongsToActiveCareScope(record, profileId, groupId) {
+  if (!record) return false;
+  if (profileId) {
+    return sameRecordId(record.profile_id, profileId);
+  }
+  if (groupId) {
+    return sameRecordId(record.group_id, groupId);
+  }
+  return true;
 }
 
 function mergeDashboardShell(profileData, shellData) {
@@ -744,10 +763,7 @@ function DashboardApp() {
       const resolvedProfileId = data.active_profile_id || profileId || null;
       const resolvedGroupId = data.active_group_id || groupId || null;
       const resolvedCacheKey = `${resolvedGroupId || "default"}:${resolvedProfileId || "default"}`;
-      const cachedProfileData = dashboardCacheRef.current.get(resolvedCacheKey);
-      const nextData = cachedProfileData && dashboardHasCareData(cachedProfileData) && !dashboardHasCareData(data)
-        ? mergeDashboardShell(cachedProfileData, data)
-        : data;
+      const nextData = data;
 
       dashboardShellRef.current = {
         ...(dashboardShellRef.current || {}),
@@ -942,8 +958,10 @@ function DashboardApp() {
     } else {
       source = dashboard?.appointments?.length ? dashboard.appointments : initialTimeline;
     }
-    return source.map(normalizeAppointment);
-  }, [dashboard, isPersonalMode]);
+    return source
+      .filter((item) => !isPersonalMode || belongsToActiveCareScope(item, activeProfileId, activeGroupId))
+      .map(normalizeAppointment);
+  }, [dashboard, isPersonalMode, activeProfileId, activeGroupId]);
 
   const appointments = useMemo(() => {
     return allAppointments.filter((item) => matchSearch(item, searchQuery));
@@ -956,8 +974,10 @@ function DashboardApp() {
     } else {
       source = dashboard?.medications?.length ? dashboard.medications : medicines;
     }
-    return source.map(normalizeMedication);
-  }, [dashboard, isPersonalMode]);
+    return source
+      .filter((medication) => !isPersonalMode || belongsToActiveCareScope(medication, activeProfileId, activeGroupId))
+      .map(normalizeMedication);
+  }, [dashboard, isPersonalMode, activeProfileId, activeGroupId]);
 
   const medications = useMemo(() => {
     return allMedications.filter((item) => matchSearch(item, searchQuery));
