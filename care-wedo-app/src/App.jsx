@@ -23,6 +23,22 @@ function todayInTaipei() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Taipei" });
 }
 
+function buildAskFamilyMessage(task, careName) {
+  if (task?.kind === "medication") {
+    return `${careName} 忘記剛剛有沒有吃藥，請幫忙確認。先不要讓 ${careName} 重複吃藥。\n\n藥品：${task.title}\n時間：${task.time}\n內容：${[task.subtitle, task.detail].filter(Boolean).join("；") || "請協助查看這筆吃藥說明。"}`;
+  }
+
+  if (task?.kind === "appointment") {
+    return `${careName} 正在準備看診，請幫忙確認時間、醫院和要帶的東西。\n\n時間：${task.time}\n內容：${[task.title, task.subtitle, task.detail].filter(Boolean).join("；") || "請協助查看這筆看診提醒。"}`;
+  }
+
+  if (task) {
+    return `${careName} 正在看 Care WEDO 的「${task.title}」提醒，但看不太懂，需要家人協助確認。\n\n時間：${task.time}\n內容：${[task.subtitle, task.detail].filter(Boolean).join("；") || "請協助查看這筆照護提醒。"}`;
+  }
+
+  return `${careName} 正在看 Care WEDO 今日照護，但看不太懂，需要家人協助確認。`;
+}
+
 function isDateTodayOrFuture(dateValue, today = todayInTaipei()) {
   if (!dateValue) return false;
   const dateText = String(dateValue);
@@ -702,6 +718,7 @@ function DashboardApp() {
   const [showManualReminder, setShowManualReminder] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState(null);
   const [showFamilyNotesEditor, setShowFamilyNotesEditor] = useState(false);
+  const [familyHelpDraft, setFamilyHelpDraft] = useState(null);
   const [familyNotes, setFamilyNotes] = useState([]);
   const dashboardRequestSeqRef = useRef(0);
   const dashboardCacheRef = useRef(new Map());
@@ -968,27 +985,12 @@ function DashboardApp() {
     await loadDashboard(identity, activeProfileId, activeGroupId);
   }
 
-  async function handleAskFamily(task = null) {
+  function handleAskFamily(task = null) {
     const careName = selectedProfile?.display_name || patient.name || "家人";
-    let message = `${careName} 正在看 Care WEDO 今日照護，但看不太懂，需要家人協助確認。`;
-    if (task?.kind === "medication") {
-      message = `${careName} 忘記剛剛有沒有吃藥，請幫忙確認。先不要讓 ${careName} 重複吃藥。\n\n藥品：${task.title}\n時間：${task.time}\n內容：${[task.subtitle, task.detail].filter(Boolean).join("；") || "請協助查看這筆吃藥說明。"}`;
-    } else if (task?.kind === "appointment") {
-      message = `${careName} 正在準備看診，請幫忙確認時間、醫院和要帶的東西。\n\n時間：${task.time}\n內容：${[task.title, task.subtitle, task.detail].filter(Boolean).join("；") || "請協助查看這筆看診提醒。"}`;
-    } else if (task) {
-      message = `${careName} 正在看 Care WEDO 的「${task.title}」提醒，但看不太懂，需要家人協助確認。\n\n時間：${task.time}\n內容：${[task.subtitle, task.detail].filter(Boolean).join("；") || "請協助查看這筆照護提醒。"}`;
-    }
-
-    try {
-      if (navigator.share) {
-        await navigator.share({ text: message });
-        return;
-      }
-      await navigator.clipboard?.writeText(message);
-      window.alert("已幫你把求助文字複製好，可以貼到 LINE 給家人。");
-    } catch {
-      window.prompt("請把這段文字傳給家人：", message);
-    }
+    setFamilyHelpDraft({
+      title: task?.title ? `問家人：${task.title}` : "問家人",
+      message: buildAskFamilyMessage(task, careName),
+    });
   }
 
   function handleMobileNavChange(sectionId) {
@@ -1449,6 +1451,14 @@ function DashboardApp() {
           notes={familyNotes}
           onClose={() => setShowFamilyNotesEditor(false)}
           onSave={handleFamilyNotesChange}
+        />
+      )}
+
+      {familyHelpDraft && (
+        <AskFamilyModal
+          title={familyHelpDraft.title}
+          initialMessage={familyHelpDraft.message}
+          onClose={() => setFamilyHelpDraft(null)}
         />
       )}
 
@@ -1930,6 +1940,71 @@ function UploadGuide({ onConfirm, onClose }) {
         <div className="modal-footer">
           <button type="button" className="secondary-action" onClick={onClose}>取消</button>
           <button type="button" className="primary-action" onClick={onConfirm}>拍照或上傳照片</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AskFamilyModal({ title, initialMessage, onClose }) {
+  const [message, setMessage] = useState(initialMessage || "");
+  const [copyStatus, setCopyStatus] = useState("");
+
+  async function handleCopy() {
+    const text = message.trim();
+    if (!text) {
+      setCopyStatus("請先輸入要傳給家人的文字。");
+      return;
+    }
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = text;
+        textarea.setAttribute("readonly", "");
+        textarea.style.position = "fixed";
+        textarea.style.left = "-9999px";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+      }
+      setCopyStatus("已複製，可以貼到 LINE 給家人。");
+    } catch {
+      setCopyStatus("目前無法自動複製，請長按文字框選取後複製。");
+    }
+  }
+
+  return (
+    <div className="modal-overlay ask-family-overlay" onClick={onClose}>
+      <div className="modal-content ask-family-modal" role="dialog" aria-modal="true" aria-labelledby="ask-family-title" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-header ask-family-header">
+          <div>
+            <p className="modal-kicker">家人協助</p>
+            <h2 id="ask-family-title">{title || "問家人"}</h2>
+          </div>
+          <button type="button" onClick={onClose} className="btn-close" aria-label="關閉">✕</button>
+        </div>
+        <div className="modal-body ask-family-body">
+          <p className="ask-family-intro">可以先修改內容，再一鍵複製貼到 LINE 家庭群組。</p>
+          <label className="ask-family-label" htmlFor="ask-family-message">要傳給家人的文字</label>
+          <textarea
+            id="ask-family-message"
+            className="ask-family-textarea"
+            value={message}
+            onChange={(event) => {
+              setMessage(event.target.value);
+              setCopyStatus("");
+            }}
+            rows={10}
+          />
+          {copyStatus && <p className="ask-family-copy-status" aria-live="polite">{copyStatus}</p>}
+        </div>
+        <div className="modal-footer ask-family-actions">
+          <button type="button" className="secondary-action" onClick={onClose}>關閉</button>
+          <button type="button" className="primary-action" onClick={handleCopy}>一鍵複製</button>
         </div>
       </div>
     </div>

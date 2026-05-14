@@ -96,7 +96,7 @@ test("buildTodayTasks falls back to the nearest future appointment when today is
 
   assert.equal(tasks.length, 1);
   assert.equal(tasks[0].title, "藥局領藥");
-  assert.equal(tasks[0].dateLabel, "05/08（五）");
+  assert.equal(tasks[0].dateLabel, "2026/05/08（五）");
   assert.equal(tasks[0].isToday, false);
 });
 

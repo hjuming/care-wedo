@@ -105,6 +105,21 @@ test("Medication view groups medicines by time and keeps one calm taken action",
   assert.doesNotMatch(medicationView, /尚未記錄/);
 });
 
+test("Ask family opens an editable branded copy modal instead of a browser prompt", () => {
+  const source = readProjectFile("care-wedo-app/src/App.jsx");
+  const css = readProjectFile("care-wedo-app/src/index.css");
+  const askFamily = source.slice(source.indexOf("function AskFamilyModal"));
+  const handleAskFamily = source.slice(source.indexOf("function handleAskFamily"), source.indexOf("function handleMobileNavChange"));
+
+  assert.match(source, /familyHelpDraft/);
+  assert.match(askFamily, /textarea/);
+  assert.match(askFamily, /一鍵複製/);
+  assert.match(askFamily, /navigator\.clipboard\.writeText/);
+  assert.match(css, /\.ask-family-modal/);
+  assert.match(css, /\.ask-family-textarea/);
+  assert.doesNotMatch(handleAskFamily, /window\.prompt|window\.alert|navigator\.share/);
+});
+
 test("Medication records expose schedule fields for elder-friendly medicine instructions", () => {
   const schema = readProjectFile("supabase/schema.sql");
   const shared = readProjectFile("functions/_shared/supabase.ts");
