@@ -146,6 +146,13 @@ test("Manual reminders keep title separate from department", () => {
   assert.match(updateHandler, /department: payload\.department \|\| null/);
 });
 
+test("Care reminder detail text is highlighted on cards", () => {
+  const css = readProjectFile("care-wedo-app/src/index.css");
+  assert.match(css, /\.event-row \.soft-note,\s*\.elder-task-body \.elder-task-detail/);
+  assert.match(css, /rgba\(255,\s*224,\s*111,\s*0\.58\)/);
+  assert.match(css, /box-decoration-break:\s*clone/);
+});
+
 test("Medication records expose schedule fields for elder-friendly medicine instructions", () => {
   const schema = readProjectFile("supabase/schema.sql");
   const shared = readProjectFile("functions/_shared/supabase.ts");

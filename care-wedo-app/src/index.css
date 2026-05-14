@@ -2003,6 +2003,24 @@ input:focus-visible {
   color: var(--text-secondary);
 }
 
+.event-row .soft-note,
+.elder-task-body .elder-task-detail {
+  display: inline;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background:
+    linear-gradient(
+      transparent 18%,
+      rgba(255, 224, 111, 0.58) 18%,
+      rgba(255, 224, 111, 0.58) 88%,
+      transparent 88%
+    );
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  color: var(--text-primary);
+  font-weight: 900;
+}
+
 .quick-actions {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
@@ -4412,7 +4430,6 @@ button:disabled,
 
 .elder-task-body .elder-task-detail {
   margin-top: 6px;
-  color: var(--text-muted);
 }
 
 .elder-task-warning {
