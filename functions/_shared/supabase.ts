@@ -7,6 +7,7 @@ export type Env = {
 export type VerifiedLineIdentity = {
   lineUserId: string;
   name?: string;
+  pictureUrl?: string;
 };
 
 const DEFAULT_USER = {
@@ -213,19 +214,36 @@ export async function verifyLineIdToken(env: Env, token: string): Promise<Verifi
   return {
     lineUserId: result.sub,
     name: typeof result.name === "string" ? result.name : undefined,
+    pictureUrl: typeof result.picture === "string" ? result.picture : undefined,
   };
 }
 
-export async function getOrCreateDefaultUser(env: Env, lineUserId?: string): Promise<number> {
+export async function getOrCreateDefaultUser(
+  env: Env,
+  lineUserId?: string,
+  profile: Pick<VerifiedLineIdentity, "name" | "pictureUrl"> = {},
+): Promise<number> {
   const targetLineId = lineUserId || DEFAULT_USER.line_user_id;
-  const targetName = lineUserId ? `LINE User (${lineUserId.slice(-4)})` : DEFAULT_USER.name;
+  const targetName = profile.name || (lineUserId ? `LINE User (${lineUserId.slice(-4)})` : DEFAULT_USER.name);
+  const targetPictureUrl = profile.pictureUrl || null;
 
-  const existing = await supabaseFetch<Array<{ id: number }>>(
+  const existing = await supabaseFetch<Array<{ id: number; name: string | null; picture_url: string | null }>>(
     env,
-    `users?line_user_id=eq.${encodeURIComponent(targetLineId)}&select=id&limit=1`,
+    `users?line_user_id=eq.${encodeURIComponent(targetLineId)}&select=id,name,picture_url&limit=1`,
   );
 
-  if (existing[0]?.id) return existing[0].id;
+  if (existing[0]?.id) {
+    const updates: Record<string, string> = {};
+    if (profile.name && existing[0].name !== profile.name) updates.name = profile.name;
+    if (targetPictureUrl && existing[0].picture_url !== targetPictureUrl) updates.picture_url = targetPictureUrl;
+    if (Object.keys(updates).length) {
+      await supabaseFetch(env, `users?id=eq.${existing[0].id}`, {
+        method: "PATCH",
+        body: JSON.stringify(updates),
+      });
+    }
+    return existing[0].id;
+  }
 
   const created = await supabaseFetch<Array<{ id: number }>>(env, "users?select=id", {
     method: "POST",
@@ -233,6 +251,7 @@ export async function getOrCreateDefaultUser(env: Env, lineUserId?: string): Pro
     body: JSON.stringify({
       line_user_id: targetLineId,
       name: targetName,
+      picture_url: targetPictureUrl,
     }),
   });
 

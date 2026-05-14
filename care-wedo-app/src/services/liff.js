@@ -23,6 +23,13 @@ function openDashboardRoute() {
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
 
+function clearCareWedoLocalSession() {
+  Object.keys(window.localStorage)
+    .filter((key) => key.startsWith("care_wedo_"))
+    .forEach((key) => window.localStorage.removeItem(key));
+  window.sessionStorage?.clear();
+}
+
 /** 初始化 LIFF 並取得身分。在 DashboardApp boot() 中呼叫。 */
 export async function initLineIdentity() {
   if (!LIFF_ID) {
@@ -111,10 +118,11 @@ export async function loginWithLine() {
   }
 }
 
-/** 登出並導回 /login */
+/** 登出並導回未登入首頁 */
 export async function logoutLineIdentity() {
+  clearCareWedoLocalSession();
   if (!LIFF_ID) {
-    window.location.replace("/login");
+    window.location.replace("/");
     return;
   }
   try {
@@ -122,10 +130,9 @@ export async function logoutLineIdentity() {
     await liff.init({ liffId: LIFF_ID });
     if (liff.isLoggedIn()) {
       liff.logout();
-      return; // liff.logout() 會自動 reload
     }
   } catch {
     // ignore
   }
-  window.location.replace("/login");
+  window.location.replace("/");
 }

@@ -9,7 +9,8 @@ import { patientData, medicines, timeline as initialTimeline } from "./data/pati
 import { confirmOcrDocument, createAppointment, fetchDashboard, joinGroup, markMedicationSlotStatus, ocrAnalyze, patchAppointment, patchMedication, updateProfile } from "./services/api";
 import { initLineIdentity, loginWithLine, logoutLineIdentity } from "./services/liff";
 import { trackError, trackEvent } from "./services/telemetry";
-import { buildTodayTasks, formatTaipeiTodayLabel, groupMedicationsBySchedule } from "./services/todayTasks";
+import { buildTodayTasks, formatTaipeiTodayLabel, groupMedicationsBySchedule, hasSameDayTasks } from "./services/todayTasks";
+import { buildSearchSuggestions, matchSearch } from "./services/search";
 import PrivacyPage from "./components/PrivacyPage";
 import TermsPage from "./components/TermsPage";
 import aiAvatar from "./assets/ai-avatar.png";
@@ -176,11 +177,6 @@ function normalizeMedication(med, index) {
     active: med.active !== false,
     color: med.color || ["#b7791f", "#2f855a", "#2b6cb0", "#805ad5"][index % 4],
   };
-}
-
-function matchSearch(item, query) {
-  if (!query) return true;
-  return Object.values(item).join(" ").toLowerCase().includes(query.toLowerCase());
 }
 
 function dashboardHasCareData(data) {
@@ -875,25 +871,37 @@ function DashboardApp() {
   const patient = (isPersonalMode && dashboard) 
     ? { ...dashboard.patient, name: selectedProfile?.display_name || dashboard.patient.name, age: calculateAge(selectedProfile) } 
     : (dashboard?.patient?.name ? dashboard.patient : patientData);
-  const appointments = useMemo(() => {
+  const allAppointments = useMemo(() => {
     let source = [];
     if (isPersonalMode && dashboard) {
       source = dashboard.appointments || [];
     } else {
       source = dashboard?.appointments?.length ? dashboard.appointments : initialTimeline;
     }
-    return source.map(normalizeAppointment).filter((item) => matchSearch(item, searchQuery));
-  }, [dashboard, searchQuery, isPersonalMode]);
+    return source.map(normalizeAppointment);
+  }, [dashboard, isPersonalMode]);
 
-  const medications = useMemo(() => {
+  const appointments = useMemo(() => {
+    return allAppointments.filter((item) => matchSearch(item, searchQuery));
+  }, [allAppointments, searchQuery]);
+
+  const allMedications = useMemo(() => {
     let source = [];
     if (isPersonalMode && dashboard) {
       source = dashboard.medications || [];
     } else {
       source = dashboard?.medications?.length ? dashboard.medications : medicines;
     }
-    return source.map(normalizeMedication).filter((item) => matchSearch(item, searchQuery));
-  }, [dashboard, searchQuery, isPersonalMode]);
+    return source.map(normalizeMedication);
+  }, [dashboard, isPersonalMode]);
+
+  const medications = useMemo(() => {
+    return allMedications.filter((item) => matchSearch(item, searchQuery));
+  }, [allMedications, searchQuery]);
+
+  const searchSuggestions = useMemo(() => {
+    return buildSearchSuggestions([...allAppointments, ...allMedications]);
+  }, [allAppointments, allMedications]);
 
   const nextAppointment = useMemo(() => {
     return appointments
@@ -915,6 +923,10 @@ function DashboardApp() {
   const todayDate = todayInTaipei();
   const todayLabel = useMemo(() => formatTaipeiTodayLabel(todayDate), [todayDate]);
   const todayTasks = useMemo(() => buildTodayTasks({
+    today: todayDate,
+    appointments,
+  }), [appointments, todayDate]);
+  const hasTodayCareTasks = useMemo(() => hasSameDayTasks({
     today: todayDate,
     appointments,
   }), [appointments, todayDate]);
@@ -1253,20 +1265,26 @@ function DashboardApp() {
               </button>
             ))}
           </nav>
+
+          {identity.status === "authenticated" && (
+            <div className="side-rail-footer">
+              <button type="button" className="btn-logout side-logout" onClick={logoutLineIdentity}>
+                登出
+              </button>
+            </div>
+          )}
         </aside>
 
         <section className="content-area" data-active-section={activeSection}>
           {activeSection !== "overview" && (
             <div className="toolbar">
               <SectionHeading section={SECTIONS.find(s => s.id === activeSection)} />
-              <label className="search-box">
-                <span>搜尋</span>
-                <input
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder="找醫院、科別、藥名"
-                />
-              </label>
+              <SearchField
+                value={searchQuery}
+                onChange={setSearchQuery}
+                suggestions={searchSuggestions}
+                placeholder="找醫院、科別、藥名"
+              />
             </div>
           )}
 
@@ -1276,6 +1294,8 @@ function DashboardApp() {
               searchQuery={searchQuery}
               onSearchChange={setSearchQuery}
               todayTasks={todayTasks}
+              hasTodayCareTasks={hasTodayCareTasks}
+              searchSuggestions={searchSuggestions}
               nextAppointment={nextAppointment}
               urgentItems={urgentItems}
               familyNotes={familyNotes}
@@ -1826,6 +1846,28 @@ function EmptyGuide({ title, description, primaryLabel, onPrimary, secondaryLabe
   );
 }
 
+function SearchField({ value, onChange, suggestions = [], placeholder = "搜尋", className = "" }) {
+  return (
+    <div className={`search-box ${className}`.trim()}>
+      <span>搜尋</span>
+      <input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+      />
+      {suggestions.length > 0 && (
+        <div className="search-suggestions" aria-label="常用搜尋關鍵字">
+          {suggestions.map((keyword) => (
+            <button type="button" key={keyword} onClick={() => onChange(keyword)}>
+              {keyword}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function buildReminderFormData(appointment = null) {
   return {
     type: normalizeManualReminderType(appointment?.type || "clinic_visit"),
@@ -2065,6 +2107,8 @@ function OverviewView({
   searchQuery,
   onSearchChange,
   todayTasks,
+  hasTodayCareTasks,
+  searchSuggestions,
   nextAppointment,
   urgentItems,
   familyNotes,
@@ -2107,17 +2151,16 @@ function OverviewView({
 
       <section className="today-hero-panel">
         <div className="today-count-block">
-          <span>{todayTasks.length ? `今天有 ${todayTasks.length} 件事` : "今天沒有新的照護事項"}</span>
-          <p>{todayTasks.length ? "照時間慢慢做就好。" : "可以查看未來行程，或新增一筆提醒。"}</p>
+          <span>{todayTasks.length ? (hasTodayCareTasks ? `今天有 ${todayTasks.length} 件事` : "最近下一筆照護事項") : "今天沒有新的照護事項"}</span>
+          <p>{todayTasks.length ? (hasTodayCareTasks ? "照時間慢慢做就好。" : "今天沒有新事項，先幫你接上最近的下一筆。") : "可以查看未來行程，或新增一筆提醒。"}</p>
         </div>
-        <label className="search-box today-search-box">
-          <span>搜尋</span>
-          <input
-            value={searchQuery}
-            onChange={(event) => onSearchChange(event.target.value)}
-            placeholder="依醫院、診別、醫師篩選"
-          />
-        </label>
+        <SearchField
+          value={searchQuery}
+          onChange={onSearchChange}
+          suggestions={searchSuggestions}
+          placeholder="依醫院、診別、醫師篩選"
+          className="today-search-box"
+        />
       </section>
 
       <section className="today-timeline-panel">
@@ -2132,7 +2175,10 @@ function OverviewView({
                       編輯
                     </button>
                   )}
-                  <div className="elder-task-time">{task.time}</div>
+                  <div className="elder-task-time">
+                    {!task.isToday && task.dateLabel && <span className="elder-task-date">{task.dateLabel}</span>}
+                    {task.time}
+                  </div>
                   <div className="elder-task-body">
                     <span className="elder-task-label">{task.label}</span>
                     <h3>{task.title}</h3>

@@ -172,7 +172,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     }
 
     // ── Authenticated path ────────────────────────────────────────────────────
-    const userId = await getOrCreateDefaultUser(env, identity.lineUserId);
+    const userId = await getOrCreateDefaultUser(env, identity.lineUserId, identity);
     const requestedProfileId = parseProfileId(request);
 
     // Step 1: Resolve groups

@@ -30,7 +30,7 @@ async function getIdentity(request: Request, env: Env) {
     throw new Error("請先登入");
   }
   const identity = await verifyLineIdToken(env, token);
-  const userId = await getOrCreateDefaultUser(env, identity.lineUserId);
+  const userId = await getOrCreateDefaultUser(env, identity.lineUserId, identity);
   return userId;
 }
 
@@ -51,14 +51,27 @@ type GroupMember = {
   receive_daily_brief: boolean;
   receive_evening_alert: boolean;
   receive_upload_summary: boolean;
-  user: { name: string | null; line_user_id: string | null } | null;
+  user: { name: string | null; line_user_id: string | null; picture_url: string | null; email?: string | null } | null;
 };
 
 async function getGroupMembers(env: Env, groupId: number): Promise<GroupMember[]> {
-  return supabaseFetch<GroupMember[]>(
+  const rows = await supabaseFetch<Array<Omit<GroupMember, "user"> & {
+    users?: GroupMember["user"];
+    user?: GroupMember["user"];
+  }>>(
     env,
     `user_family_groups?group_id=eq.${groupId}&select=user_id,role,can_manage,receive_daily_brief,receive_evening_alert,receive_upload_summary,users(name,line_user_id,picture_url,email)`,
   );
+
+  return rows.map((row) => ({
+    user_id: row.user_id,
+    role: row.role,
+    can_manage: row.can_manage,
+    receive_daily_brief: row.receive_daily_brief,
+    receive_evening_alert: row.receive_evening_alert,
+    receive_upload_summary: row.receive_upload_summary,
+    user: row.user || row.users || null,
+  }));
 }
 
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {

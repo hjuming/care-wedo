@@ -19,7 +19,7 @@ async function getIdentity(request: Request, env: Env) {
     throw new Error("請先登入");
   }
   const identity = await verifyLineIdToken(env, token);
-  const userId = await getOrCreateDefaultUser(env, identity.lineUserId);
+  const userId = await getOrCreateDefaultUser(env, identity.lineUserId, identity);
   return { userId, identity };
 }
 
@@ -35,6 +35,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
         id: userId,
         line_user_id: identity?.lineUserId,
         name: identity?.name,
+        picture_url: identity?.pictureUrl,
       },
       groups,
       care_profiles: profiles.map(serializeCareProfile),
@@ -94,7 +95,7 @@ export const onRequestDelete: PagesFunction<Env> = async ({ request, env }) => {
     }
 
     const identity = await verifyLineIdToken(env, token);
-    const userId = await getOrCreateDefaultUser(env, identity.lineUserId);
+    const userId = await getOrCreateDefaultUser(env, identity.lineUserId, identity);
 
     // Delete in dependency order: appointments → medications → care_profiles → user_family_groups → users
     await supabaseFetch(env, `appointments?user_id=eq.${userId}`, { method: "DELETE" });

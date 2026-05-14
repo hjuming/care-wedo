@@ -1671,10 +1671,13 @@ input:focus-visible {
 }
 
 .side-rail {
+  display: flex;
+  flex-direction: column;
   padding: 18px;
   align-self: start;
   position: sticky;
   top: 20px;
+  min-height: calc(100vh - 40px);
 }
 
 .profile-info-main {
@@ -1778,6 +1781,17 @@ input:focus-visible {
   background: rgba(255, 255, 255, 0.25);
 }
 
+.side-rail-footer {
+  margin-top: auto;
+  padding-top: 18px;
+}
+
+.side-logout {
+  width: 100%;
+  min-height: 48px;
+  font-size: 16px;
+}
+
 .profile-switcher {
   display: grid;
   gap: 10px;
@@ -1873,6 +1887,30 @@ input:focus-visible {
   background: white;
   color: var(--text-primary);
   font-size: 17px;
+}
+
+.search-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.search-suggestions button {
+  min-height: 36px;
+  border: 1px solid rgba(94, 143, 154, 0.26);
+  border-radius: 999px;
+  background: rgba(221, 235, 237, 0.5);
+  color: var(--primary-dark);
+  cursor: pointer;
+  padding: 6px 12px;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.search-suggestions button:hover,
+.search-suggestions button:focus-visible {
+  background: var(--primary-soft);
+  border-color: var(--primary);
 }
 
 .overview-grid,
@@ -4163,10 +4201,17 @@ button:disabled,
 }
 
 .elder-task-time {
+  display: grid;
+  gap: 4px;
   color: var(--primary-dark);
   font-size: 28px;
   font-weight: 900;
   line-height: 1.15;
+}
+
+.elder-task-date {
+  color: var(--accent);
+  font-size: 18px;
 }
 
 .elder-task-body {

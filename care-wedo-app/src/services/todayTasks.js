@@ -181,3 +181,9 @@ export function buildTodayTasks({ today, appointments = [] }) {
       return publicTask;
     });
 }
+
+export function hasSameDayTasks({ today, appointments = [] }) {
+  return appointments
+    .filter(isActiveAppointment)
+    .some((appointment) => !appointment.date || isSameDate(appointment.date, today));
+}

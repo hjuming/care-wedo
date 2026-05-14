@@ -53,12 +53,28 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
     window.open(lineUrl, "_blank", "noopener,noreferrer");
   }
 
-  function getMemberDisplayName(member, index) {
-    return member.user?.name || (member.user?.line_user_id ? `LINE 用戶 …${member.user.line_user_id.slice(-4)}` : `成員 ${index + 1}`);
+  function getMemberUser(member) {
+    return member.user || member.users || null;
   }
 
-  function getMemberAvatar(member, name) {
-    return member.user?.picture_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=E6F0F1&color=315F68&bold=true`;
+  function isCurrentUserMember(member, currentMembership) {
+    return Boolean(currentMembership?.user_id && member.user_id === currentMembership.user_id);
+  }
+
+  function getMemberDisplayName(member, index, currentMembership) {
+    const user = getMemberUser(member);
+    if (isCurrentUserMember(member, currentMembership)) {
+      return identity.profile?.displayName || user?.name || "目前使用者";
+    }
+    return user?.name || (user?.line_user_id ? `LINE 用戶 …${user.line_user_id.slice(-4)}` : `成員 ${index + 1}`);
+  }
+
+  function getMemberAvatar(member, name, currentMembership) {
+    const user = getMemberUser(member);
+    const pictureUrl = isCurrentUserMember(member, currentMembership)
+      ? identity.profile?.pictureUrl || user?.picture_url
+      : user?.picture_url;
+    return pictureUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=E6F0F1&color=315F68&bold=true`;
   }
 
   function copyInviteCodeOnly(code) {
@@ -211,15 +227,16 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
                   <label>群組成員</label>
                   <div className="members-grid">
                     {members.map((m, idx) => {
-                      const displayName = getMemberDisplayName(m, idx);
-                      const avatarUrl = getMemberAvatar(m, displayName);
+                      const memberUser = getMemberUser(m);
+                      const displayName = getMemberDisplayName(m, idx, membership);
+                      const avatarUrl = getMemberAvatar(m, displayName, membership);
                       return (
                         <div key={m.user_id ?? idx} className="member-item member-avatar-item">
                           <button
                             type="button"
                             className="member-avatar-button"
-                            onClick={() => openLineProfile(m.user?.line_user_id)}
-                            title={m.user?.line_user_id ? "開啟 LINE" : "尚未提供 LINE 連結"}
+                            onClick={() => openLineProfile(memberUser?.line_user_id)}
+                            title={memberUser?.line_user_id ? "開啟 LINE" : "尚未提供 LINE 連結"}
                           >
                             <img src={avatarUrl} alt={`${displayName} 頭像`} />
                           </button>
