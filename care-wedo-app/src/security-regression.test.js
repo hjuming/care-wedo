@@ -203,9 +203,11 @@ test("Medication records expose schedule fields for elder-friendly medicine inst
 
 test("Medication slot status API records dated logs with ownership checks", () => {
   const schema = readProjectFile("supabase/schema.sql");
+  const migration = readProjectFile("supabase/migration_phase50_medication_logs.sql");
   const api = readProjectFile("functions/api/medications/taken.ts");
   const dashboard = readProjectFile("functions/api/dashboard.ts");
   assert.match(schema, /create table if not exists public\.medication_logs/);
+  assert.match(migration, /create table if not exists public\.medication_logs/);
   assert.match(schema, /taken_date date not null/);
   assert.match(schema, /confirmed_by_user_id bigint/);
   assert.match(api, /getBearerToken/);
@@ -214,10 +216,12 @@ test("Medication slot status API records dated logs with ownership checks", () =
   assert.match(api, /medications\?id=in\.\(\$\{medicationIds\.join\(","\)\}\)/);
   assert.match(api, /medication_logs\?select=/);
   assert.match(api, /status:\s*status/);
+  assert.match(api, /medications\.taken_logs_missing/);
   assert.doesNotMatch(api, /body:\s*JSON\.stringify\(\{\s*taken_status:\s*status\s*\}\)/);
   assert.match(dashboard, /fetchTodayMedicationLogs/);
   assert.match(dashboard, /taken_date=eq\.\$\{todayInTaipei\(\)\}/);
   assert.match(dashboard, /taken_slots/);
+  assert.match(dashboard, /dashboard\.medication_logs_missing/);
 });
 
 test("Global care contact dock uses a circular icon-only app avatar on mobile", () => {

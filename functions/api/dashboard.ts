@@ -221,10 +221,23 @@ async function fetchTodayMedicationLogs(env: Env, medications: MedicationRow[]):
   const medicationIds = medications.map((medication) => medication.id).filter(Boolean);
   if (medicationIds.length === 0) return new Map();
 
-  const rows = await supabaseFetch<MedicationLogRow[]>(
-    env,
-    `medication_logs?medication_id=in.(${medicationIds.join(",")})&taken_date=eq.${todayInTaipei()}&select=medication_id,status,taken_date,time_slot&order=created_at.desc`,
-  );
+  let rows: MedicationLogRow[] = [];
+  try {
+    rows = await supabaseFetch<MedicationLogRow[]>(
+      env,
+      `medication_logs?medication_id=in.(${medicationIds.join(",")})&taken_date=eq.${todayInTaipei()}&select=medication_id,status,taken_date,time_slot&order=created_at.desc`,
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (/medication_logs|PGRST205|Could not find the table/i.test(message)) {
+      console.warn(JSON.stringify({
+        event: "dashboard.medication_logs_missing",
+        message: "medication_logs table is not available; continuing without daily medication status.",
+      }));
+      return new Map();
+    }
+    throw error;
+  }
 
   return rows.reduce((map, row) => {
     const current = map.get(row.medication_id) || [];

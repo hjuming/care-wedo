@@ -62,23 +62,35 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
       : todayInTaipei();
     const timeSlot = inferTimeSlot(medication, body.time_slot);
 
-    const logs = await supabaseFetch<Array<{ id: number }>>(
-      env,
-      "medication_logs?select=id",
-      {
-        method: "POST",
-        headers: { Prefer: "return=representation" },
-        body: JSON.stringify({
-          medication_id: medication.id,
-          group_id: medication.group_id,
-          profile_id: medication.profile_id,
-          taken_date: takenDate,
-          time_slot: timeSlot,
-          status: "taken",
-          confirmed_by_user_id: userId,
-        }),
-      },
-    );
+    let logs: Array<{ id: number }> = [];
+    try {
+      logs = await supabaseFetch<Array<{ id: number }>>(
+        env,
+        "medication_logs?select=id",
+        {
+          method: "POST",
+          headers: { Prefer: "return=representation" },
+          body: JSON.stringify({
+            medication_id: medication.id,
+            group_id: medication.group_id,
+            profile_id: medication.profile_id,
+            taken_date: takenDate,
+            time_slot: timeSlot,
+            status: "taken",
+            confirmed_by_user_id: userId,
+          }),
+        },
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      if (!/medication_logs|PGRST205|Could not find the table/i.test(message)) {
+        throw error;
+      }
+      console.warn(JSON.stringify({
+        event: "medications.single_taken_logs_missing",
+        medication_id: medication.id,
+      }));
+    }
 
     return Response.json({
       success: true,

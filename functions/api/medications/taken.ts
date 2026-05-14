@@ -73,23 +73,35 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       return Response.json({ error: "找不到藥物或沒有確認權限" }, { status: 403 });
     }
 
-    const logs = await supabaseFetch<Array<{ id: number }>>(
-      env,
-      "medication_logs?select=id",
-      {
-        method: "POST",
-        headers: { Prefer: "return=representation" },
-        body: JSON.stringify(medications.map((medication) => ({
-          medication_id: medication.id,
-          group_id: medication.group_id,
-          profile_id: medication.profile_id,
-          taken_date: takenDate,
-          time_slot: inferTimeSlot(medication, body.time_slot),
-          status: status,
-          confirmed_by_user_id: userId,
-        }))),
-      },
-    );
+    let logs: Array<{ id: number }> = [];
+    try {
+      logs = await supabaseFetch<Array<{ id: number }>>(
+        env,
+        "medication_logs?select=id",
+        {
+          method: "POST",
+          headers: { Prefer: "return=representation" },
+          body: JSON.stringify(medications.map((medication) => ({
+            medication_id: medication.id,
+            group_id: medication.group_id,
+            profile_id: medication.profile_id,
+            taken_date: takenDate,
+            time_slot: inferTimeSlot(medication, body.time_slot),
+            status: status,
+            confirmed_by_user_id: userId,
+          }))),
+        },
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      if (!/medication_logs|PGRST205|Could not find the table/i.test(message)) {
+        throw error;
+      }
+      console.warn(JSON.stringify({
+        event: "medications.taken_logs_missing",
+        medication_count: medicationIds.length,
+      }));
+    }
 
     return Response.json({
       success: true,
