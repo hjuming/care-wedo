@@ -56,6 +56,7 @@ test("Family notes are stored as group-scoped reminders", () => {
   const dashboard = readProjectFile("functions/api/dashboard.ts");
   const groupsApi = readProjectFile("functions/api/groups.ts");
   const app = readProjectFile("care-wedo-app/src/App.jsx");
+  const css = readProjectFile("care-wedo-app/src/index.css");
   assert.match(groupsApi, /update_family_notes/);
   assert.match(groupsApi, /group_id:\s*body\.group_id/);
   assert.match(groupsApi, /type:\s*"family_note"/);
@@ -65,6 +66,13 @@ test("Family notes are stored as group-scoped reminders", () => {
   assert.match(dashboard, /family_notes/);
   assert.match(app, /GroupBadge/);
   assert.match(app, /onEditFamilyNotes/);
+  assert.match(app, /family-note-draft-card/);
+  assert.match(app, /removeDraft/);
+  assert.match(app, /新增一則/);
+  assert.match(app, /刪除這則/);
+  assert.match(css, /\.family-note-draft-card/);
+  assert.match(css, /\.nav-login-link/);
+  assert.match(css, /text-decoration:\s*none/);
 });
 
 test("Dashboard fetches group-level reminders with the active profile", () => {

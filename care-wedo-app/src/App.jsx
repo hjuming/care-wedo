@@ -3043,20 +3043,35 @@ function SettingsView({
 }
 
 function FamilyNotesEditor({ notes, onChange }) {
-  const [draft, setDraft] = useState(notes.join("\n"));
+  const [drafts, setDrafts] = useState(notes.length ? notes : [""]);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    setDraft(notes.join("\n"));
+    setDrafts(notes.length ? notes : [""]);
   }, [notes]);
+
+  function updateDraft(index, value) {
+    setDrafts((current) => current.map((item, itemIndex) => (itemIndex === index ? value : item)));
+  }
+
+  function addDraft() {
+    setDrafts((current) => [...current, ""]);
+  }
+
+  function removeDraft(index) {
+    setDrafts((current) => {
+      const next = current.filter((_, itemIndex) => itemIndex !== index);
+      return next.length ? next : [""];
+    });
+  }
 
   async function handleSave() {
     setSaving(true);
     setError("");
     try {
-      await onChange(draft.split("\n"));
+      await onChange(drafts);
       setSaved(true);
       setTimeout(() => setSaved(false), 1800);
     } catch (err) {
@@ -3068,16 +3083,33 @@ function FamilyNotesEditor({ notes, onChange }) {
 
   return (
     <div className="family-notes-editor">
-      <textarea
-        value={draft}
-        onChange={(event) => setDraft(event.target.value)}
-        rows={5}
-        aria-label="家庭群組提醒"
-      />
+      <div className="family-note-draft-list">
+        {drafts.map((draft, index) => (
+          <article className="family-note-draft-card" key={`family-note-draft-${index}`}>
+            <label htmlFor={`family-note-draft-${index}`}>提醒 {index + 1}</label>
+            <textarea
+              id={`family-note-draft-${index}`}
+              value={draft}
+              onChange={(event) => updateDraft(index, event.target.value)}
+              rows={3}
+              aria-label={`家庭群組提醒 ${index + 1}`}
+              placeholder="例如：回診前 8 小時不要吃東西、記得帶健保卡"
+            />
+            <button type="button" className="secondary-action note-delete-action" onClick={() => removeDraft(index)}>
+              刪除這則
+            </button>
+          </article>
+        ))}
+      </div>
       {error && <p className="error-msg">{error}</p>}
-      <button type="button" className="inline-action" onClick={handleSave} disabled={saving}>
-        {saving ? "儲存中..." : saved ? "已儲存" : "儲存提醒"}
-      </button>
+      <div className="family-notes-actions">
+        <button type="button" className="secondary-action" onClick={addDraft}>
+          新增一則
+        </button>
+        <button type="button" className="inline-action" onClick={handleSave} disabled={saving}>
+          {saving ? "儲存中..." : saved ? "已儲存" : "儲存提醒"}
+        </button>
+      </div>
     </div>
   );
 }
@@ -3094,7 +3126,7 @@ function FamilyNotesModal({ groupName, notes, onClose, onSave }) {
           <button type="button" onClick={onClose} className="btn-close">✕</button>
         </div>
         <div className="modal-body">
-          <p className="helper-copy">每一行會成為一張家庭提醒卡，儲存在目前家庭群組，切換群組後會顯示各自的提醒。</p>
+          <p className="helper-copy">每一則會成為一張家庭提醒卡，儲存在目前家庭群組，切換群組後會顯示各自的提醒。</p>
           <FamilyNotesEditor notes={notes} onChange={onSave} />
         </div>
       </div>

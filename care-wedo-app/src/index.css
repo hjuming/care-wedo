@@ -124,7 +124,10 @@ input:focus-visible {
   border: 1px solid var(--border);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.72);
+  color: var(--primary-dark);
   padding: 9px 14px;
+  font-weight: 800;
+  text-decoration: none;
 }
 
 .nav-login-button {
@@ -2578,6 +2581,26 @@ input:focus-visible {
   gap: 12px;
 }
 
+.family-note-draft-list {
+  display: grid;
+  gap: 14px;
+}
+
+.family-note-draft-card {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.64);
+  padding: 14px;
+}
+
+.family-note-draft-card label {
+  color: var(--text-primary);
+  font-size: 17px;
+  font-weight: 900;
+}
+
 .family-notes-editor textarea {
   width: 100%;
   border: 1px solid var(--border);
@@ -2588,6 +2611,26 @@ input:focus-visible {
   font-size: 16px;
   line-height: 1.65;
   resize: vertical;
+}
+
+.family-notes-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.family-notes-actions .secondary-action,
+.family-notes-actions .inline-action,
+.note-delete-action {
+  width: auto;
+}
+
+.note-delete-action {
+  justify-self: end;
+  min-height: 40px;
+  padding: 8px 16px;
+  color: #8a3d32;
 }
 
 @media (max-width: 1080px) {
@@ -4447,10 +4490,10 @@ button:disabled,
 .elder-task-card {
   position: relative;
   display: grid;
-  grid-template-columns: 140px minmax(0, 1fr) auto;
+  grid-template-columns: minmax(190px, 220px) minmax(0, 1fr);
   gap: 18px;
-  align-items: center;
-  padding: 20px 104px 20px 20px;
+  align-items: start;
+  padding: 28px 112px 26px 28px;
   border: 1px solid var(--card-border);
   border-radius: 16px;
   background: var(--card-bg);
@@ -4510,6 +4553,8 @@ button:disabled,
 
 .elder-task-actions {
   display: flex;
+  grid-column: 2;
+  justify-self: end;
   flex-direction: row;
   flex-wrap: wrap;
   align-items: center;
@@ -4709,6 +4754,8 @@ button:disabled,
   }
 
   .elder-task-actions {
+    grid-column: auto;
+    justify-self: start;
     justify-content: flex-start;
     gap: 12px;
   }
