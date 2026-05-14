@@ -148,26 +148,6 @@ function buildAppointmentTask(appointment, today) {
   };
 }
 
-function buildMedicationTask(medication) {
-  const time = medication.scheduled_time || medication.time_slot || medication.frequency || "時間待確認";
-  return {
-    id: `medication-${medication.id}`,
-    sourceId: medication.id,
-    kind: "medication",
-    type: "medication",
-    label: "吃藥",
-    title: medication.name || "藥名待確認",
-    subtitle: [medication.dosage, medication.purpose].filter(Boolean).join(" ｜ "),
-    detail: medication.warnings || medication.reminder_text || "",
-    time,
-    primaryActionLabel: "我吃了",
-    status: medication.taken_status || "upcoming",
-    needsReview: !medication.frequency && !medication.scheduled_time && !medication.time_slot,
-    rank: timeRank(time),
-    isToday: true,
-  };
-}
-
 export function formatTaipeiTodayLabel(today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Taipei" })) {
   const date = parseTaipeiDate(today);
   if (!date) return { headline: "今天", date: today };
@@ -177,17 +157,13 @@ export function formatTaipeiTodayLabel(today = new Date().toLocaleDateString("en
   };
 }
 
-export function buildTodayTasks({ today, appointments = [], medications = [] }) {
+export function buildTodayTasks({ today, appointments = [] }) {
   const appointmentTasks = appointments
     .filter(isActiveAppointment)
     .filter((appointment) => !appointment.date || isSameDate(appointment.date, today))
     .map((appointment) => buildAppointmentTask(appointment, today));
 
-  const medicationTasks = medications
-    .filter(isActiveMedication)
-    .map(buildMedicationTask);
-
-  return [...appointmentTasks, ...medicationTasks]
+  return appointmentTasks
     .sort((a, b) => a.rank - b.rank || a.title.localeCompare(b.title, "zh-Hant"))
     .map((task) => {
       const publicTask = { ...task };

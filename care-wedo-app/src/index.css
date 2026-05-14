@@ -1,27 +1,34 @@
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700;800&display=swap');
 
 :root {
-  --bg-color: #f7f1e8;
-  --surface: #fffaf2;
+  --bg-color: #F7F3EC;
+  --surface: #FFFFFF;
   --surface-strong: #ffffff;
-  --text-primary: #263128;
-  --text-secondary: #667066;
-  --text-muted: #8c938a;
-  --primary: #256f5b;
-  --primary-dark: #154d40;
-  --primary-soft: #e7f3ee;
-  --accent: #c57b37;
+  --text-primary: #1F2A2C;
+  --text-secondary: #4B5B5F;
+  --text-muted: #8A9699;
+  --primary: #5E8F9A;
+  --primary-dark: #315F68;
+  --primary-soft: #DDEBED;
+  --accent: #B97832;
   --accent-soft: #fff0dd;
-  --danger: #bd4a3a;
+  --danger: #B84A3A;
   --danger-bg: #fff0ed;
   --line-green: #06c755;
-  --border: #e2d8c8;
+  --border: #D8D2C8;
+  --card-bg: #FFFFFF;
+  --card-border: #D8D2C8;
+  --card-bg-done: #ECF5EE;
+  --success: #4F7D5A;
+  --success-transparent: rgba(79, 125, 90, 0.12);
   --shadow: 0 18px 50px rgba(72, 55, 33, 0.12);
   --shadow-soft: 0 14px 38px rgba(72, 55, 33, 0.1);
   --shadow-float: 0 18px 50px rgba(72, 55, 33, 0.14);
+  --shadow-strong: 0 26px 70px rgba(49, 95, 104, 0.18);
   --radius-sm: 10px;
   --radius-md: 16px;
   --radius-lg: 24px;
+  --radius-card: 20px;
   --tap-min: 52px;
 }
 
@@ -695,6 +702,9 @@ input:focus-visible {
 }
 
 .login-route-card {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   min-height: calc(100vh - 120px);
   display: grid;
   grid-template-columns: minmax(0, 0.95fr) minmax(320px, 0.72fr);
@@ -709,11 +719,20 @@ input:focus-visible {
   padding: clamp(30px, 5vw, 58px);
 }
 
+.login-route-card > * {
+  min-width: 0;
+}
+
+.login-route-card-simple {
+  grid-template-columns: minmax(0, 0.92fr) minmax(280px, 0.58fr);
+}
+
 .login-route-copy h1 {
   max-width: 680px;
   margin: 22px 0 18px;
   font-size: clamp(38px, 5vw, 64px);
   line-height: 1.1;
+  overflow-wrap: anywhere;
 }
 
 .login-route-copy p {
@@ -721,6 +740,7 @@ input:focus-visible {
   color: var(--text-secondary);
   font-size: 20px;
   line-height: 1.8;
+  overflow-wrap: anywhere;
 }
 
 .login-route-actions {
@@ -728,6 +748,9 @@ input:focus-visible {
   flex-direction: column;
   gap: 14px;
   margin-top: 30px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .login-route-actions a {
@@ -748,6 +771,8 @@ input:focus-visible {
   padding: 16px 28px;
   cursor: pointer;
   min-height: 56px;
+  min-width: 0;
+  max-width: 100%;
   transition: background 0.15s, transform 0.1s;
   letter-spacing: 0.02em;
 }
@@ -806,6 +831,48 @@ input:focus-visible {
 .login-route-steps p {
   color: var(--text-secondary);
   font-size: 16px;
+}
+
+.login-route-quick-note {
+  display: grid;
+  gap: 10px;
+  align-self: center;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.82);
+  padding: 22px;
+}
+
+.login-route-quick-note strong {
+  color: var(--primary-dark);
+  font-size: 24px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.login-route-quick-note p {
+  color: var(--text-secondary);
+  font-size: 18px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.login-route-footer {
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  flex-wrap: wrap;
+  padding: 18px 0 4px;
+}
+
+.login-route-footer a {
+  color: var(--text-secondary);
+  font-size: 15px;
+  font-weight: 800;
+  text-decoration: none;
 }
 
 .care-hero {
@@ -1426,7 +1493,7 @@ input:focus-visible {
   width: min(320px, calc(100vw - 24px));
   max-width: calc(100vw - 24px);
   transform: none;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 4px;
   padding: 8px;
   border: 1px solid var(--border);
@@ -2006,6 +2073,18 @@ input:focus-visible {
   gap: 8px;
 }
 
+.medicine-slot-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: var(--primary-dark);
+  padding: 6px 12px;
+  font-size: 15px;
+  font-weight: 900;
+}
+
 .medicine-chip-list {
   display: flex;
   flex-wrap: wrap;
@@ -2307,9 +2386,24 @@ input:focus-visible {
   }
 
   .login-route-card {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    align-items: flex-start;
     min-height: auto;
     grid-template-columns: 1fr;
+    max-width: calc(100vw - 24px);
+    overflow: hidden;
     padding: 24px;
+  }
+
+  .login-route-copy,
+  .login-route-actions,
+  .login-route-quick-note {
+    width: 100%;
+    max-width: min(100%, 300px);
+    align-self: flex-start;
+    justify-self: stretch;
   }
 
   .login-route-copy h1 {
@@ -2328,6 +2422,12 @@ input:focus-visible {
 
   .login-route-actions {
     display: grid;
+  }
+
+  .line-login-btn {
+    width: 100%;
+    padding-inline: 16px;
+    white-space: normal;
   }
 
   .login-route-actions .primary-action,
@@ -2558,6 +2658,11 @@ input:focus-visible {
     width: auto;
     max-width: none;
     bottom: calc(10px + env(safe-area-inset-bottom));
+  }
+
+  .mobile-bottom-nav button {
+    min-height: 56px;
+    font-size: 11px;
   }
 
   .nav-item {
@@ -3700,14 +3805,54 @@ button:disabled,
   font-size: 20px;
 }
 
+.today-action-grid,
 .today-support-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
+}
+
+.today-action-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.today-action-tile {
+  display: grid;
+  gap: 12px;
+  min-height: 132px;
+  border: 1px solid var(--card-border);
+  border-radius: 18px;
+  background: var(--card-bg);
+  color: var(--text-primary);
+  padding: 20px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.today-action-tile span {
+  color: var(--accent);
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.today-action-tile strong {
+  color: var(--primary-dark);
+  font-size: 24px;
+  line-height: 1.25;
+}
+
+.today-action-tile small {
+  color: var(--text-secondary);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.today-support-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 @media (max-width: 900px) {
   .today-hero-panel,
+  .today-action-grid,
   .today-support-grid {
     grid-template-columns: 1fr;
   }

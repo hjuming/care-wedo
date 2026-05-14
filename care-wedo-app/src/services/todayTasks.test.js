@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { buildTodayTasks, formatTaipeiTodayLabel, groupMedicationsBySchedule } from "./todayTasks.js";
 
-test("buildTodayTasks turns same-day appointments and medications into elder-friendly tasks", () => {
+test("buildTodayTasks turns same-day care events into elder-friendly tasks without medicine detail", () => {
   const tasks = buildTodayTasks({
     today: "2026-05-06",
     appointments: [
@@ -44,7 +44,6 @@ test("buildTodayTasks turns same-day appointments and medications into elder-fri
     primaryActionLabel: task.primaryActionLabel,
   })), [
     { kind: "appointment", title: "心臟內科", time: "09:30", primaryActionLabel: "我已看診" },
-    { kind: "medication", title: "降血壓藥", time: "中午飯後", primaryActionLabel: "我吃了" },
   ]);
 });
 

@@ -61,7 +61,7 @@ test("Global care contact sheets support keyboard close and focus return", () =>
   assert.match(dock, /\.focus\(\)/);
 });
 
-test("Medication view groups medicines by time and keeps forgotten-dose safety action", () => {
+test("Medication view groups medicines by time and keeps one calm taken action", () => {
   const source = readProjectFile("care-wedo-app/src/App.jsx");
   const medicationView = source.slice(source.indexOf("function MedicationView"));
   assert.match(medicationView, /groupMedicationsBySchedule/);
@@ -70,10 +70,10 @@ test("Medication view groups medicines by time and keeps forgotten-dose safety a
   assert.match(medicationView, /medicine-chip-button/);
   assert.match(medicationView, /getMedicationShortName/);
   assert.match(medicationView, /"吃了"/);
-  assert.match(medicationView, />\s*忘了\s*</);
+  assert.doesNotMatch(medicationView, />\s*忘了\s*</);
   assert.doesNotMatch(medicationView, /我忘記有沒有吃/);
   assert.match(source, /markMedicationSlotStatus/);
-  assert.match(medicationView, /請先不要重複吃藥/);
+  assert.match(medicationView, /尚未記錄/);
 });
 
 test("Medication records expose schedule fields for elder-friendly medicine instructions", () => {

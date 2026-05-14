@@ -5,7 +5,7 @@ import GroupSettings from "./components/GroupSettings";
 import LoginSetup from "./components/LoginSetup";
 import MobileBottomNav from "./components/MobileBottomNav";
 import OcrResult from "./components/OcrResult";
-import { patientData, medicines, timeline as initialTimeline, checklist as initialChecklist } from "./data/patient";
+import { patientData, medicines, timeline as initialTimeline } from "./data/patient";
 import { confirmOcrDocument, fetchDashboard, markMedicationSlotStatus, ocrAnalyze, patchAppointment, patchMedication, updateProfile } from "./services/api";
 import { initLineIdentity, loginWithLine, logoutLineIdentity } from "./services/liff";
 import { trackError, trackEvent } from "./services/telemetry";
@@ -23,18 +23,19 @@ function todayInTaipei() {
 }
 
 const SECTIONS = [
-  { id: "overview", label: "今日照護", mobileLabel: "今天", icon: "⌂", color: "#256f5b" },
-  { id: "calendar", label: "看診排程", mobileLabel: "看診", icon: "□", color: "#2b6cb0" },
-  { id: "meds", label: "吃藥說明", mobileLabel: "吃藥", icon: "○", color: "#c57b37" },
-  { id: "records", label: "就醫紀錄", mobileLabel: "紀錄", icon: "≡", color: "#6b46c1" },
-  { id: "settings", label: "家人", mobileLabel: "家人", icon: "⚙", color: "#744210" },
+  { id: "overview", label: "今日照護", mobileLabel: "今天", icon: "⌂", color: "#315F68" },
+  { id: "calendar", label: "未來行程", mobileLabel: "未來", icon: "□", color: "#5E8F9A" },
+  { id: "records", label: "查詢紀錄", mobileLabel: "查詢", icon: "≡", color: "#B97832" },
+  { id: "meds", label: "吃藥紀錄", mobileLabel: "吃藥", icon: "○", color: "#4F7D5A" },
+  { id: "settings", label: "家人協作", mobileLabel: "家人", icon: "⚙", color: "#315F68" },
 ];
 
 const MOBILE_SECTIONS = [
   { id: "overview", label: "今日照護", mobileLabel: "今天", icon: "⌂" },
-  { id: "upload", label: "拍照上傳", mobileLabel: "拍照", icon: "+" },
-  { id: "meds", label: "吃藥說明", mobileLabel: "吃藥", icon: "○" },
-  { id: "settings", label: "照護圈", mobileLabel: "家人", icon: "⚙" },
+  { id: "calendar", label: "未來行程", mobileLabel: "未來", icon: "□" },
+  { id: "records", label: "查詢紀錄", mobileLabel: "查詢", icon: "≡" },
+  { id: "meds", label: "吃藥紀錄", mobileLabel: "吃藥", icon: "○" },
+  { id: "settings", label: "家人協作", mobileLabel: "家人", icon: "⚙" },
 ];
 
 function typeLabel(type) {
@@ -406,15 +407,15 @@ function LoginPage() {
     <main className="login-route-shell">
       <nav className="landing-nav login-route-nav" aria-label="Care WEDO 登入導覽">
         <a href="/" className="brand-home">Care WEDO</a>
-        <a href="/" className="nav-login-link">回首頁</a>
+        <a href="/features" className="nav-login-link">功能說明</a>
       </nav>
 
-      <section className="login-route-card" aria-label="登入 Care WEDO">
+      <section className="login-route-card login-route-card-simple" aria-label="登入 Care WEDO">
         <div className="login-route-copy">
-          <span className="landing-version">V 1.0</span>
-          <h1>用 LINE 帳號登入<br />Care WEDO</h1>
+          <span className="landing-version">Care WEDO</span>
+          <h1>幫家人記住看診、檢查、領藥與照護提醒。</h1>
           <p>
-            點擊下方按鈕，用您的 LINE 帳號登入。登入後即可建立照護對象、保存就診紀錄，並邀請家人共同管理。
+            使用 LINE 登入後，就可以查看今日照護事項。
           </p>
 
           {loginError && (
@@ -433,7 +434,7 @@ function LoginPage() {
               <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                 <path d="M19.365 9.863c.349 0 .63.285.63.631 0 .345-.281.63-.63.63H17.61v1.125h1.755c.349 0 .63.283.63.63 0 .344-.281.629-.63.629h-2.386c-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.63-.63h2.386c.346 0 .627.285.627.63 0 .349-.281.63-.63.63H17.61v1.125h1.755zm-3.855 3.016c0 .27-.174.51-.432.596-.064.021-.133.031-.199.031-.211 0-.391-.09-.51-.25l-2.443-3.317v2.94c0 .344-.279.629-.631.629-.346 0-.626-.285-.626-.629V8.108c0-.27.173-.51.43-.595.06-.023.136-.033.194-.033.195 0 .375.104.494.254l2.462 3.33V8.108c0-.345.282-.63.63-.63.345 0 .63.285.63.63v4.771zm-5.741 0c0 .344-.282.629-.631.629-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.63-.63.346 0 .628.285.628.63v4.771zm-2.466.629H4.917c-.345 0-.63-.285-.63-.629V8.108c0-.345.285-.63.63-.63.348 0 .63.285.63.63v4.141h1.756c.348 0 .629.283.629.63 0 .344-.281.629-.629.629M24 10.314C24 4.943 18.615.572 12 .572S0 4.943 0 10.314c0 4.811 4.27 8.842 10.035 9.608.391.082.923.258 1.058.59.12.301.079.766.038 1.08l-.164 1.02c-.045.301-.24 1.186 1.049.645 1.291-.539 6.916-4.078 9.436-6.975C23.176 14.393 24 12.458 24 10.314"/>
               </svg>
-              {loggingIn ? "正在開啟 LINE 登入..." : "用 LINE 帳號登入"}
+              {loggingIn ? "正在開啟 LINE..." : "用 LINE 登入"}
             </button>
             <a
               className="login-alt-link"
@@ -446,24 +447,17 @@ function LoginPage() {
           </div>
         </div>
 
-        <div className="login-route-steps">
-          <article>
-            <span>1</span>
-            <strong>點擊登入按鈕</strong>
-            <p>系統會開啟 LINE 授權畫面，用您的 LINE 帳號確認登入。</p>
-          </article>
-          <article>
-            <span>2</span>
-            <strong>建立主要照護對象</strong>
-            <p>輸入爸爸、媽媽或長輩稱呼，建立第一份照護紀錄。</p>
-          </article>
-          <article>
-            <span>3</span>
-            <strong>邀請家人一起管理</strong>
-            <p>建立家庭群組，共享提醒、照片摘要與健康時間線。</p>
-          </article>
+        <div className="login-route-quick-note" aria-label="登入後可以做的事">
+          <strong>登入後看今日照護</strong>
+          <p>門診、檢查、領藥或提醒，一打開就看得到。</p>
         </div>
       </section>
+
+      <footer className="login-route-footer">
+        <a href="/about">關於我們</a>
+        <a href="/features">功能說明</a>
+        <a href="/privacy">隱私權政策</a>
+      </footer>
     </main>
   );
 }
@@ -703,7 +697,6 @@ function DashboardApp() {
     return source.map(normalizeMedication).filter((item) => matchSearch(item, searchQuery));
   }, [dashboard, searchQuery, isPersonalMode]);
 
-  const checklistItems = (isPersonalMode && dashboard) ? (dashboard.checklist || []) : (dashboard?.checklist?.length ? dashboard.checklist : initialChecklist);
   const nextAppointment = useMemo(() => {
     return appointments
       .filter(apt => apt.status !== "completed" && apt.date)
@@ -726,8 +719,7 @@ function DashboardApp() {
   const todayTasks = useMemo(() => buildTodayTasks({
     today: todayDate,
     appointments,
-    medications,
-  }), [appointments, medications, todayDate]);
+  }), [appointments, todayDate]);
   const showContactDock = !IS_PROD || isPersonalMode;
 
   async function handleAskFamily(task = null) {
@@ -1008,12 +1000,13 @@ function DashboardApp() {
               todayTasks={todayTasks}
               nextAppointment={nextAppointment}
               urgentItems={urgentItems}
-              medications={medications}
-              checklistItems={checklistItems}
               hasCareData={hasCareData}
               patient={patient}
               selectedProfile={selectedProfile}
               onOpenCalendar={() => setActiveSection("calendar")}
+              onOpenRecords={() => setActiveSection("records")}
+              onOpenMeds={() => setActiveSection("meds")}
+              onOpenFamily={() => setActiveSection("settings")}
               onOpenProfile={() => setShowEditProfile(true)}
               onUpload={handleUploadClick}
               onComplete={handleComplete}
@@ -1529,12 +1522,13 @@ function OverviewView({
   todayTasks,
   nextAppointment,
   urgentItems,
-  medications,
-  checklistItems,
   hasCareData,
   patient,
   selectedProfile,
   onOpenCalendar,
+  onOpenRecords,
+  onOpenMeds,
+  onOpenFamily,
   onOpenProfile,
   onUpload,
   onComplete,
@@ -1549,11 +1543,6 @@ function OverviewView({
     if (task.kind === "appointment") {
       onComplete(task.sourceId);
     }
-  }
-
-  function handleForgotMedication(task) {
-    window.alert("請先不要重複吃藥。建議查看藥盒，或請家人協助確認。");
-    onAskFamily(task);
   }
 
   return (
@@ -1574,8 +1563,8 @@ function OverviewView({
           <strong>{todayLabel.date}</strong>
         </div>
         <div className="today-count-block">
-          <span>{todayTasks.length ? `今天有 ${todayTasks.length} 件事` : "今天沒有看診"}</span>
-          <p>{todayTasks.length ? "照時間慢慢做就好。" : medications.length ? "記得按時吃藥。" : "目前沒有需要處理的照護事項。"}</p>
+          <span>{todayTasks.length ? `今天有 ${todayTasks.length} 件事` : "今天沒有新的照護事項"}</span>
+          <p>{todayTasks.length ? "照時間慢慢做就好。" : "可以查看未來行程，或新增一筆提醒。"}</p>
         </div>
       </section>
 
@@ -1598,11 +1587,6 @@ function OverviewView({
                     <button type="button" className="primary-action elder-primary-action" onClick={() => handlePrimaryAction(task)} disabled={isDone}>
                       {isDone ? "已記好了" : task.primaryActionLabel}
                     </button>
-                    {task.kind === "medication" && !isDone && (
-                      <button type="button" className="secondary-action elder-secondary-action" onClick={() => handleForgotMedication(task)}>
-                        我忘記有沒有吃
-                      </button>
-                    )}
                     <button type="button" className="secondary-action elder-secondary-action subtle" onClick={() => onAskFamily(task)}>
                       問家人
                     </button>
@@ -1613,11 +1597,12 @@ function OverviewView({
           </div>
         ) : hasCareData ? (
           <div className="today-empty-card">
-            <h3>今天沒有看診</h3>
-            <p>{medications.length ? "記得照吃藥說明按時吃藥。" : "目前沒有需要處理的照護事項。"}</p>
-            <button type="button" className="secondary-action elder-secondary-action" onClick={() => onAskFamily(null)}>
-              我看不懂，問家人
-            </button>
+            <h3>今天沒有新的照護事項</h3>
+            <p>可以查看未來行程，或拍照新增一筆看診、檢查、領藥提醒。</p>
+            <div className="empty-guide-actions">
+              <button type="button" className="primary-action" onClick={onOpenCalendar}>查看未來行程</button>
+              <button type="button" className="secondary-action" onClick={onUpload}>新增提醒</button>
+            </div>
           </div>
         ) : (
           <EmptyGuide
@@ -1628,6 +1613,29 @@ function OverviewView({
             secondaryLabel="我看不懂，問家人"
           />
         )}
+      </section>
+
+      <section className="today-action-grid" aria-label="照護功能入口">
+        <button type="button" className="today-action-tile" onClick={onOpenCalendar}>
+          <span>未來</span>
+          <strong>看未來行程</strong>
+          <small>本週、下週、本月</small>
+        </button>
+        <button type="button" className="today-action-tile" onClick={onOpenRecords}>
+          <span>查詢</span>
+          <strong>找照護紀錄</strong>
+          <small>醫院、診別、醫師</small>
+        </button>
+        <button type="button" className="today-action-tile" onClick={onOpenMeds}>
+          <span>吃藥</span>
+          <strong>看吃藥紀錄</strong>
+          <small>早、中、晚、睡前</small>
+        </button>
+        <button type="button" className="today-action-tile" onClick={onOpenFamily}>
+          <span>家人</span>
+          <strong>照護圈設定</strong>
+          <small>邀請與切換資料</small>
+        </button>
       </section>
 
       <section className="today-support-grid">
@@ -1658,12 +1666,10 @@ function OverviewView({
         </article>
 
         <article className="summary-panel wide-panel">
-          <p className="panel-eyebrow">今天先看這幾件</p>
-          <ul className="check-list">
-            {checklistItems.slice(0, 3).map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
+          <p className="panel-eyebrow">新增照護資料</p>
+          <h3>拍下看診單、檢查單或領藥單</h3>
+          <p className="empty-state">Care WEDO 會整理成今日或未來照護提醒。</p>
+          <button type="button" className="inline-action" onClick={onUpload}>拍照上傳</button>
         </article>
       </section>
     </div>
@@ -1777,10 +1783,6 @@ function MedicationView({ medications, onUpload, onTaken }) {
     }
   }
 
-  function handleForgotMedication() {
-    window.alert("請先不要重複吃藥。建議查看藥盒，或請家人協助確認。");
-  }
-
   return (
     <div className="medicine-grid">
       {medicationGroups.length ? medicationGroups.map((group) => (
@@ -1791,11 +1793,11 @@ function MedicationView({ medications, onUpload, onTaken }) {
               <h3>{group.label}</h3>
             </div>
             <div className="medicine-slot-actions">
+              <span className="medicine-slot-status">
+                {group.medications.every((med) => med.taken_status === "taken") ? "已吃" : "尚未記錄"}
+              </span>
               <button type="button" className="primary-action compact-action" onClick={() => handleSlotStatus(group, "taken")} disabled={savingSlot === `${group.slot}-taken` || group.medications.every((med) => med.taken_status === "taken")}>
                 {savingSlot === `${group.slot}-taken` ? "記錄中…" : "吃了"}
-              </button>
-              <button type="button" className="secondary-action compact-action" onClick={() => { handleForgotMedication(); handleSlotStatus(group, "forgotten"); }} disabled={savingSlot === `${group.slot}-forgotten`}>
-                忘了
               </button>
             </div>
           </div>
