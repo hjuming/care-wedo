@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { fetchGroups, createGroup, joinGroup } from "../services/api";
+import { resetCareWedoSessionAndReturnHome } from "../services/liff";
 import "./GroupManager.css";
 
 export default function GroupManager({ identity, onGroupChange }) {
@@ -17,6 +18,10 @@ export default function GroupManager({ identity, onGroupChange }) {
       setGroups(data.groups || []);
       setError(null);
     } catch (err) {
+      if (err.code === "AUTH_REQUIRED") {
+        await resetCareWedoSessionAndReturnHome();
+        return;
+      }
       setError(err.message);
     } finally {
       setLoading(false);
@@ -43,6 +48,10 @@ export default function GroupManager({ identity, onGroupChange }) {
       await loadGroups();
       if (onGroupChange) onGroupChange();
     } catch (err) {
+      if (err.code === "AUTH_REQUIRED") {
+        await resetCareWedoSessionAndReturnHome();
+        return;
+      }
       setError(err.message);
     } finally {
       setLoading(false);

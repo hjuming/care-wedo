@@ -38,4 +38,5 @@ test("buildSearchSuggestions extracts useful uploaded-data keywords first", () =
   assert.equal(suggestions.includes("復健科"), true);
   assert.equal(suggestions.includes("陳安心"), true);
   assert.equal(suggestions.includes("領藥"), true);
+  assert.equal(suggestions.includes("記得領藥"), false);
 });

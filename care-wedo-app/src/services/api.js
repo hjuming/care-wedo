@@ -25,6 +25,12 @@ export function isAuthFailureMessage(message = "") {
   return /請先登入|登入失敗|unauthorized|auth_required|id[ _-]?token|token|oauth|line/i.test(String(message || ""));
 }
 
+function createApiError(message, status) {
+  const error = new Error(message);
+  if (status === 401 || isAuthFailureMessage(message)) error.code = "AUTH_REQUIRED";
+  return error;
+}
+
 /**
  * 上傳圖片進行 OCR 解析
  * @param {File[]} files - 圖片檔案陣列
@@ -93,7 +99,7 @@ export async function fetchGroups(identity) {
   });
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
-    throw new Error(err.error || "無法取得群組資料");
+    throw createApiError(err.error || "無法取得群組資料", resp.status);
   }
   return resp.json();
 }
@@ -112,7 +118,7 @@ export async function createGroup({ idToken, name }) {
   });
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
-    throw new Error(err.error || "建立群組失敗");
+    throw createApiError(err.error || "建立群組失敗", resp.status);
   }
   return resp.json();
 }
@@ -131,7 +137,7 @@ export async function joinGroup({ idToken, code }) {
   });
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
-    throw new Error(err.error || "加入群組失敗");
+    throw createApiError(err.error || "加入群組失敗", resp.status);
   }
   return resp.json();
 }
@@ -155,7 +161,7 @@ export async function createCareProfile({ idToken, groupId, displayName, relatio
   });
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
-    throw new Error(err.error || "新增照護對象失敗");
+    throw createApiError(err.error || "新增照護對象失敗", resp.status);
   }
   return resp.json();
 }
@@ -174,7 +180,7 @@ export async function getGroupMembers({ idToken, groupId }) {
   });
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
-    throw new Error(err.error || "無法取得成員清單");
+    throw createApiError(err.error || "無法取得成員清單", resp.status);
   }
   return resp.json();
 }
@@ -193,7 +199,7 @@ export async function removeMember({ idToken, groupId, targetUserId }) {
   });
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
-    throw new Error(err.error || "移除成員失敗");
+    throw createApiError(err.error || "移除成員失敗", resp.status);
   }
   return resp.json();
 }
@@ -212,7 +218,7 @@ export async function regenerateInvite({ idToken, groupId }) {
   });
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
-    throw new Error(err.error || "重新產生邀請碼失敗");
+    throw createApiError(err.error || "重新產生邀請碼失敗", resp.status);
   }
   return resp.json();
 }
@@ -232,7 +238,7 @@ export async function updateMembership({ idToken, groupId, updates }) {
   });
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
-    throw new Error(err.error || "更新群組通知設定失敗");
+    throw createApiError(err.error || "更新群組通知設定失敗", resp.status);
   }
   return resp.json();
 }
@@ -243,7 +249,7 @@ export async function fetchCurrentUser({ idToken }) {
   });
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
-    throw new Error(err.error || "無法取得用戶資訊");
+    throw createApiError(err.error || "無法取得用戶資訊", resp.status);
   }
   return resp.json();
 }

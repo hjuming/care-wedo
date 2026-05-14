@@ -920,6 +920,7 @@ function DashboardApp() {
 
   const urgentItems = appointments.filter((item) => (item.fasting_required || item.type === "refill_reminder") && item.status !== "completed" && isDateTodayOrFuture(item.date, todayInTaipei())).slice(0, 3);
   const records = appointments.filter((item) => item.status === "completed");
+  const searchableRecords = searchQuery ? appointments : records;
   const hasCareData = dashboardHasCareData(dashboard);
   const todayDate = todayInTaipei();
   const todayLabel = useMemo(() => formatTaipeiTodayLabel(todayDate), [todayDate]);
@@ -1277,7 +1278,7 @@ function DashboardApp() {
         </aside>
 
         <section className="content-area" data-active-section={activeSection}>
-          {activeSection !== "overview" && (
+          {activeSection !== "overview" && activeSection !== "settings" && (
             <div className="toolbar">
               <SectionHeading section={SECTIONS.find(s => s.id === activeSection)} />
               <SearchField
@@ -1286,6 +1287,12 @@ function DashboardApp() {
                 suggestions={searchSuggestions}
                 placeholder="找醫院、科別、藥名"
               />
+            </div>
+          )}
+
+          {activeSection === "settings" && (
+            <div className="toolbar">
+              <SectionHeading section={SECTIONS.find(s => s.id === activeSection)} />
             </div>
           )}
 
@@ -1335,7 +1342,8 @@ function DashboardApp() {
 
           {activeSection === "records" && (
             <RecordsView
-              records={records}
+              records={searchableRecords}
+              searchQuery={searchQuery}
               onUpload={handleUploadClick}
             />
           )}
@@ -2476,7 +2484,7 @@ function MedicationView({ medications, onUpload, onTaken }) {
   );
 }
 
-function RecordsView({ records, onUpload }) {
+function RecordsView({ records, searchQuery, onUpload }) {
   const grouped = useMemo(() => {
     const groups = {};
     records.forEach(record => {
@@ -2503,7 +2511,7 @@ function RecordsView({ records, onUpload }) {
                   <strong>{record.department}</strong>
                   <span>{record.hospital}</span>
                 </div>
-                <span className="record-status-tag">✓ 已完成</span>
+                <span className="record-status-tag">{record.status === "completed" ? "✓ 已完成" : "提醒"}</span>
               </article>
             ))}
           </div>
@@ -2511,7 +2519,7 @@ function RecordsView({ records, onUpload }) {
       )) : (
         <EmptyGuide
           title="目前還沒有照護紀錄。"
-          description="每一次看診、用藥調整、症狀觀察，都可以慢慢整理成家人看得懂的健康時間線。"
+          description={searchQuery ? "換一個醫院、科別、醫師或提醒類型試試看。" : "每一次看診、用藥調整、症狀觀察，都可以慢慢整理成家人看得懂的健康時間線。"}
           primaryLabel="上傳看診單"
           onPrimary={onUpload}
           secondaryLabel="新增照護紀錄"

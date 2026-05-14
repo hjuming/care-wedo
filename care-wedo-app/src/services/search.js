@@ -15,11 +15,6 @@ const SUGGESTION_FIELDS = [
   "hospital",
   "department",
   "doctor",
-  "location",
-  "name",
-  "purpose",
-  "reminder_text",
-  "notes",
 ];
 
 function normalizeSearchText(value) {
@@ -71,10 +66,9 @@ export function matchSearch(item, query) {
 }
 
 function splitSuggestionText(value) {
-  return String(value || "")
-    .split(/[\s\u3000,，。;；、/\\|()（）[\]【】"'「」『』]+/)
-    .map((item) => item.trim())
-    .filter((item) => item.length >= 2 && !/^\d+$/.test(item));
+  const text = String(value || "").trim();
+  if (!text || /^\d+$/.test(text)) return [];
+  return [text];
 }
 
 export function buildSearchSuggestions(items = [], limit = 12) {
@@ -88,7 +82,7 @@ export function buildSearchSuggestions(items = [], limit = 12) {
 
     SUGGESTION_FIELDS.forEach((field) => {
       splitSuggestionText(item?.[field]).forEach((keyword) => {
-        const score = ["hospital", "department", "doctor", "name"].includes(field) ? 4 : 1;
+        const score = field === "hospital" ? 5 : field === "department" ? 4 : 3;
         scores.set(keyword, (scores.get(keyword) || 0) + score);
       });
     });

@@ -69,6 +69,37 @@ test("buildTodayTasks keeps undated appointment cards visible for family follow-
   assert.equal(tasks[0].needsReview, true);
 });
 
+test("buildTodayTasks falls back to the nearest future appointment when today is empty", () => {
+  const tasks = buildTodayTasks({
+    today: "2026-05-06",
+    appointments: [
+      {
+        id: 1,
+        type: "clinic_visit",
+        date: "2026-05-10",
+        time: "15:00",
+        hospital: "示範醫院",
+        department: "眼科",
+        status: "upcoming",
+      },
+      {
+        id: 2,
+        type: "refill_reminder",
+        date: "2026-05-08",
+        time: "09:00",
+        hospital: "台大醫院",
+        department: "藥局領藥",
+        status: "upcoming",
+      },
+    ],
+  });
+
+  assert.equal(tasks.length, 1);
+  assert.equal(tasks[0].title, "藥局領藥");
+  assert.equal(tasks[0].dateLabel, "05/08（五）");
+  assert.equal(tasks[0].isToday, false);
+});
+
 test("formatTaipeiTodayLabel returns a large-date friendly label", () => {
   assert.deepEqual(formatTaipeiTodayLabel("2026-05-06"), {
     headline: "今天",

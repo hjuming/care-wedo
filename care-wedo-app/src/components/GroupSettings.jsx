@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { createCareProfile, fetchGroups, regenerateInvite, removeMember, updateMembership } from "../services/api";
+import { resetCareWedoSessionAndReturnHome } from "../services/liff";
 
 export default function GroupSettings({ identity, onGroupChange, onProfileCreated }) {
   const [data, setData] = useState({ groups: [], care_profiles: [], user_memberships: [] });
@@ -22,6 +23,10 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
         setSelectedGroupId(payload.groups[0].id);
       }
     } catch (err) {
+      if (err.code === "AUTH_REQUIRED") {
+        await resetCareWedoSessionAndReturnHome();
+        return;
+      }
       setError(err.message || "無法載入群組設定");
     }
   }, [identity, selectedGroupId]);
@@ -111,6 +116,10 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
       if (onProfileCreated) onProfileCreated();
       await loadGroups();
     } catch (err) {
+      if (err.code === "AUTH_REQUIRED") {
+        await resetCareWedoSessionAndReturnHome();
+        return;
+      }
       setError(err.message || "建立照護對象失敗");
     } finally {
       setLoading(false);
@@ -131,6 +140,10 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
       if (onGroupChange) onGroupChange();
       await loadGroups();
     } catch (err) {
+      if (err.code === "AUTH_REQUIRED") {
+        await resetCareWedoSessionAndReturnHome();
+        return;
+      }
       setError(err.message || "更新通知設定失敗");
     } finally {
       setUpdatingGroupId(null);
@@ -146,6 +159,10 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
       setSuccess("成員已移除。");
       await loadGroups();
     } catch (err) {
+      if (err.code === "AUTH_REQUIRED") {
+        await resetCareWedoSessionAndReturnHome();
+        return;
+      }
       setError(err.message || "移除成員失敗");
     }
   }
@@ -159,6 +176,10 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
       setSuccess("邀請碼已更新。");
       await loadGroups();
     } catch (err) {
+      if (err.code === "AUTH_REQUIRED") {
+        await resetCareWedoSessionAndReturnHome();
+        return;
+      }
       setError(err.message || "重新產生邀請碼失敗");
     }
   }

@@ -148,12 +148,27 @@ function buildAppointmentTask(appointment, today) {
     subtitle: [appointment.time, appointment.hospital, appointment.doctor && `${appointment.doctor}醫師`].filter(Boolean).join(" ｜ "),
     detail: appointment.reminder_text || appointment.notes || appointment.location || "",
     time: needsReview ? "日期待確認" : (appointment.time || "時間待確認"),
+    date: appointment.date || "",
+    dateLabel: appointment.date ? formatShortDateLabel(appointment.date) : "",
     primaryActionLabel: appointmentActionLabel(appointment.type),
     status: appointment.status || "upcoming",
     needsReview,
-    rank: needsReview ? SLOT_ORDER["日期待確認"] : timeRank(appointment.time),
+    rank: needsReview ? SLOT_ORDER["日期待確認"] * 10000 : appointmentRank(appointment),
     isToday: isSameDate(appointment.date, today),
   };
+}
+
+function formatShortDateLabel(dateValue) {
+  const date = parseTaipeiDate(dateValue);
+  if (!date) return dateValue;
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${month}/${day}（${WEEKDAYS[date.getDay()]}）`;
+}
+
+function appointmentRank(appointment = {}) {
+  const dateRank = appointment.date ? Number(String(appointment.date).replaceAll("-", "")) * 10000 : SLOT_ORDER["日期待確認"] * 10000;
+  return dateRank + timeRank(appointment.time);
 }
 
 export function formatTaipeiTodayLabel(today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Taipei" })) {
@@ -168,9 +183,15 @@ export function formatTaipeiTodayLabel(today = new Date().toLocaleDateString("en
 }
 
 export function buildTodayTasks({ today, appointments = [] }) {
-  const appointmentTasks = appointments
-    .filter(isActiveAppointment)
+  const activeAppointments = appointments.filter(isActiveAppointment);
+  const sameDayTasks = activeAppointments
     .filter((appointment) => !appointment.date || isSameDate(appointment.date, today))
+    .map((appointment) => buildAppointmentTask(appointment, today));
+
+  const appointmentTasks = sameDayTasks.length ? sameDayTasks : activeAppointments
+    .filter((appointment) => appointment.date && appointment.date > today)
+    .sort((a, b) => appointmentRank(a) - appointmentRank(b))
+    .slice(0, 1)
     .map((appointment) => buildAppointmentTask(appointment, today));
 
   return appointmentTasks
