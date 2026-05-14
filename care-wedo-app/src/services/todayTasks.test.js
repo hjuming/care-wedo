@@ -100,6 +100,28 @@ test("buildTodayTasks falls back to the nearest future appointment when today is
   assert.equal(tasks[0].isToday, false);
 });
 
+test("buildTodayTasks uses reminder title without overwriting department", () => {
+  const tasks = buildTodayTasks({
+    today: "2026-05-27",
+    appointments: [
+      {
+        id: 3,
+        type: "clinic_visit",
+        title: "牙醫回診",
+        department: "回診",
+        hospital: "九大牙醫",
+        doctor: "林昀蓉",
+        date: "2026-05-27",
+        time: "13:30",
+        status: "upcoming",
+      },
+    ],
+  });
+
+  assert.equal(tasks[0].title, "牙醫回診");
+  assert.match(tasks[0].subtitle, /九大牙醫/);
+});
+
 test("buildTodayTasks shows group family notes on the today page", () => {
   const tasks = buildTodayTasks({
     today: "2026-05-06",

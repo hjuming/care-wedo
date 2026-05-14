@@ -25,6 +25,7 @@ export type AppointmentRow = {
   type?: string | null; // e.g. clinic_visit, inspection, refill_reminder
   date: string | null;
   time: string | null;
+  title?: string | null;
   hospital: string | null;
   department: string | null;
   doctor: string | null;
@@ -435,7 +436,7 @@ export async function updateUserFamilyGroupMembership(
 }
 
 export type AppointmentUpdateFields = Partial<Pick<AppointmentRow,
-  "status" | "type" | "date" | "time" | "hospital" | "department" |
+  "status" | "type" | "date" | "time" | "title" | "hospital" | "department" |
   "doctor" | "number" | "location" | "fasting_required" | "fasting_hours" | "notes" | "reminder_text"
 >>;
 
@@ -459,15 +460,36 @@ export async function patchAppointment(
   );
   if (owned.length === 0) throw new Error("找不到該預約或您沒有修改權限");
 
-  const rows = await supabaseFetch<AppointmentRow[]>(
-    env,
-    `appointments?id=eq.${id}&select=*`,
-    {
-      method: "PATCH",
-      headers: { Prefer: "return=representation" },
-      body: JSON.stringify(updates),
-    },
-  );
+  let rows: AppointmentRow[];
+  try {
+    rows = await supabaseFetch<AppointmentRow[]>(
+      env,
+      `appointments?id=eq.${id}&select=*`,
+      {
+        method: "PATCH",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify(updates),
+      },
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (!updates.title || !/appointments\.title|title.*column|Could not find.*title/i.test(message)) {
+      throw error;
+    }
+    const { title, ...legacyUpdates } = updates;
+    rows = await supabaseFetch<AppointmentRow[]>(
+      env,
+      `appointments?id=eq.${id}&select=*`,
+      {
+        method: "PATCH",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify({
+          ...legacyUpdates,
+          department: title,
+        }),
+      },
+    );
+  }
   if (!rows || rows.length === 0) throw new Error("更新預約失敗");
   return rows[0];
 }
@@ -508,6 +530,7 @@ export function serializeAppointment(row: AppointmentRow) {
     type: row.type || "clinic_visit",
     date: row.date,
     time: row.time,
+    title: row.title || null,
     hospital: row.hospital,
     department: row.department,
     doctor: row.doctor,

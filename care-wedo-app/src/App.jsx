@@ -166,6 +166,7 @@ function normalizeAppointment(apt, index) {
     type: apt.type || (apt.label?.includes("領藥") ? "refill_reminder" : "clinic_visit"),
     date: apt.date || "",
     time: apt.time || "",
+    title: apt.title || "",
     hospital: apt.hospital || "",
     department: apt.department || apt.label || "看診安排",
     doctor: apt.doctor || "",
@@ -1158,8 +1159,9 @@ function DashboardApp() {
       type: payload.type,
       date: payload.date || null,
       time: payload.time || null,
+      title: payload.title || payload.department || payload.hospital || null,
       hospital: payload.hospital || null,
-      department: payload.department || payload.title || null,
+      department: payload.department || null,
       doctor: payload.doctor || null,
       location: payload.location || null,
       fasting_required: Boolean(payload.fasting_required),
@@ -2057,7 +2059,7 @@ function SearchField({ value, onChange, suggestions = [], placeholder = "搜尋"
 function buildReminderFormData(appointment = null) {
   return {
     type: normalizeManualReminderType(appointment?.type || "clinic_visit"),
-    title: appointment?.department || appointment?.hospital || "",
+    title: appointment?.title || appointment?.department || appointment?.hospital || "",
     date: appointment?.date || todayInTaipei(),
     time: appointment?.time || "",
     hospital: appointment?.hospital || "",
@@ -2098,7 +2100,7 @@ function ManualReminderModal({ mode = "create", initialAppointment = null, onClo
         ...formData,
         date: normalizeDateInput(formData.date),
         title: formData.title || formData.department || formData.hospital,
-        department: formData.department || formData.title,
+        department: formData.department,
         fasting_hours: formData.fasting_required ? formData.fasting_hours : null,
       });
     } catch (err) {
@@ -2444,7 +2446,7 @@ function OverviewView({
           {nextAppointment ? (
             <>
               <div className="date-badge">{formatDateLabel(nextAppointment.date, nextAppointment.time)}</div>
-              <h3>{nextAppointment.department}</h3>
+              <h3>{nextAppointment.title || nextAppointment.department}</h3>
               <p>{[nextAppointment.hospital, nextAppointment.doctor && `${nextAppointment.doctor}醫師`].filter(Boolean).join(" ｜ ")}</p>
               <button type="button" className="inline-action" onClick={onOpenCalendar}>看看診清單</button>
             </>
@@ -2465,7 +2467,7 @@ function OverviewView({
               <>
                 {urgentItems.map((item) => (
               <article key={item.id} className="attention-item">
-                <strong>{typeLabel(item.type)}：{item.department}</strong>
+                <strong>{typeLabel(item.type)}：{item.title || item.department}</strong>
                 <span>{item.fasting_required ? `前 ${item.fasting_hours || 8} 小時先不要吃東西` : item.reminder_text || "照提醒做就好"}</span>
               </article>
                 ))}
@@ -2572,13 +2574,13 @@ function CalendarView({ appointments, onUpload, onAddReminder, onEditAppointment
         </div>
         {futureAppointments.length ? futureAppointments.map((apt) => (
           <article key={apt.id} id={`event-${apt.date}`} className="event-row">
-            <button type="button" className="card-corner-edit" onClick={() => onEditAppointment(apt)} aria-label={`編輯 ${apt.department || "提醒"}`}>
+            <button type="button" className="card-corner-edit" onClick={() => onEditAppointment(apt)} aria-label={`編輯 ${apt.title || apt.department || "提醒"}`}>
               編輯
             </button>
             <div className="event-type">{typeIcon(apt.type)}</div>
             <div>
               <p className="event-date">{formatDateLabel(apt.date, apt.time)}</p>
-              <h3>{apt.department}</h3>
+              <h3>{apt.title || apt.department}</h3>
               <p>{[apt.hospital, apt.doctor && `${apt.doctor}醫師`, apt.number && `${apt.number}號`].filter(Boolean).join(" ｜ ")}</p>
               {apt.location && <p className="location-line">地點：{apt.location}</p>}
               {apt.notes && <p className="soft-note">{apt.notes}</p>}
@@ -2715,7 +2717,7 @@ function RecordsView({ records, searchQuery, onUpload }) {
                 <span className="record-date-col">{formatDateLabel(record.date)}</span>
                 <span className="record-tag">{typeLabel(record.type)}</span>
                 <div className="record-info">
-                  <strong>{record.department}</strong>
+                  <strong>{record.title || record.department}</strong>
                   <span>{record.hospital}</span>
                 </div>
                 <span className="record-status-tag">{record.status === "completed" ? "✓ 已完成" : "提醒"}</span>

@@ -196,7 +196,7 @@ function buildAppointmentTask(appointment, today) {
     kind: "appointment",
     type: appointment.type || "clinic_visit",
     label: appointmentKindLabel(appointment.type),
-    title: isFamilyNote ? "家庭提醒" : appointment.department || appointment.hospital || appointmentKindLabel(appointment.type),
+    title: isFamilyNote ? "家庭提醒" : appointment.title || appointment.department || appointment.hospital || appointmentKindLabel(appointment.type),
     subtitle: [appointment.time, appointment.hospital, appointment.doctor && `${appointment.doctor}醫師`].filter(Boolean).join(" ｜ "),
     detail: appointment.reminder_text || appointment.notes || appointment.location || "",
     time: isFamilyNote ? "每天留意" : needsReview ? "日期待確認" : (appointment.time || "時間待確認"),

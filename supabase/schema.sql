@@ -153,6 +153,7 @@ create table if not exists public.appointments (
   type text,
   date text,
   time text,
+  title text,
   hospital text,
   department text,
   doctor text,

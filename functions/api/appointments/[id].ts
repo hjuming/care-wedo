@@ -40,6 +40,7 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env, params 
     if (body.type !== undefined) allowed.type = body.type;
     if (body.date !== undefined) allowed.date = body.date;
     if (body.time !== undefined) allowed.time = body.time;
+    if (body.title !== undefined) allowed.title = body.title;
     if (body.hospital !== undefined) allowed.hospital = body.hospital;
     if (body.department !== undefined) allowed.department = body.department;
     if (body.doctor !== undefined) allowed.doctor = body.doctor;

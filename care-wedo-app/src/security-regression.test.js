@@ -120,6 +120,32 @@ test("Ask family opens an editable branded copy modal instead of a browser promp
   assert.doesNotMatch(handleAskFamily, /window\.prompt|window\.alert|navigator\.share/);
 });
 
+test("Manual reminders keep title separate from department", () => {
+  const app = readProjectFile("care-wedo-app/src/App.jsx");
+  const schema = readProjectFile("supabase/schema.sql");
+  const migration = readProjectFile("supabase/migration_phase48_appointment_title.sql");
+  const createApi = readProjectFile("functions/api/appointments.ts");
+  const updateApi = readProjectFile("functions/api/appointments/[id].ts");
+  const shared = readProjectFile("functions/_shared/supabase.ts");
+  const manualModal = app.slice(app.indexOf("function buildReminderFormData"), app.indexOf("function OverviewView"));
+  const updateHandler = app.slice(app.indexOf("async function handleAppointmentUpdate"), app.indexOf("async function handleDeleteAppointment"));
+
+  assert.match(schema, /title text/);
+  assert.match(migration, /add column if not exists title text/);
+  assert.match(shared, /title\?: string \| null/);
+  assert.match(shared, /title: row\.title/);
+  assert.match(createApi, /title,/);
+  assert.match(createApi, /department: cleanString\(body\.department\) \|\| null/);
+  assert.match(createApi, /Could not find\.\*title/);
+  assert.match(createApi, /department: legacyTitle/);
+  assert.match(updateApi, /allowed\.title = body\.title/);
+  assert.match(shared, /Could not find\.\*title/);
+  assert.match(manualModal, /title: appointment\?\.title \|\| appointment\?\.department/);
+  assert.match(manualModal, /department: formData\.department,/);
+  assert.match(updateHandler, /title: payload\.title/);
+  assert.match(updateHandler, /department: payload\.department \|\| null/);
+});
+
 test("Medication records expose schedule fields for elder-friendly medicine instructions", () => {
   const schema = readProjectFile("supabase/schema.sql");
   const shared = readProjectFile("functions/_shared/supabase.ts");

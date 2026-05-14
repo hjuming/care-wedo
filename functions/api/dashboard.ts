@@ -265,7 +265,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       .filter(Boolean);
 
     const checklist = appointments.slice(0, 3).map((apt) => {
-      const label = `${apt.date || ""} ${apt.department || apt.hospital || "回診"}`.trim();
+      const label = `${apt.date || ""} ${apt.title || apt.department || apt.hospital || "回診"}`.trim();
       if (apt.fasting_required) return `${label}：需空腹 ${apt.fasting_hours || 8} 小時`;
       return label;
     });
