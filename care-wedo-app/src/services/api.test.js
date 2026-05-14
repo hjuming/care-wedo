@@ -31,6 +31,17 @@ test("buildDashboardRequest can scope dashboard data to one care profile", () =>
   });
 });
 
+test("buildDashboardRequest can scope dashboard data to one family group", () => {
+  assert.deepEqual(buildDashboardRequest("/api", { idToken: "token.123", profileId: 42, groupId: 7 }), {
+    url: "/api/dashboard?profile_id=42&group_id=7",
+    init: {
+      headers: {
+        Authorization: "Bearer token.123",
+      },
+    },
+  });
+});
+
 test("isAuthFailureMessage detects stale login and token failures", () => {
   assert.equal(isAuthFailureMessage("LINE token verify failed."), true);
   assert.equal(isAuthFailureMessage("idToken expired"), true);

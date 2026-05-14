@@ -114,6 +114,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       receive_daily_brief?: boolean;
       receive_evening_alert?: boolean;
       receive_upload_summary?: boolean;
+      notes?: string[] | string;
     }>().catch(() => ({}));
 
     if (body.action === "create") {
@@ -190,6 +191,60 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
       const membership = await updateUserFamilyGroupMembership(env, userId, body.group_id, updates);
       return Response.json({ success: true, membership });
+    }
+
+    if (body.action === "update_family_notes") {
+      if (!body.group_id) return Response.json({ error: "請提供群組 ID" }, { status: 400 });
+
+      const memberships = await getUserMemberships(env, userId);
+      const isMember = memberships.some((m) => m.group_id === body.group_id);
+      if (!isMember) return Response.json({ error: "您不是此群組成員" }, { status: 403 });
+
+      const rawNotes = Array.isArray(body.notes)
+        ? body.notes
+        : String(body.notes || "").split("\n");
+      const notes = rawNotes
+        .map((note) => String(note || "").trim().slice(0, 280))
+        .filter(Boolean)
+        .slice(0, 12);
+
+      await supabaseFetch(
+        env,
+        `appointments?group_id=eq.${body.group_id}&profile_id=is.null&type=eq.family_note&status=eq.upcoming`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ status: "deleted" }),
+        },
+      );
+
+      if (notes.length === 0) {
+        return Response.json({ success: true, notes: [] });
+      }
+
+      const rows = await supabaseFetch<Array<{ id: number; reminder_text: string | null }>>(
+        env,
+        "appointments?select=id,reminder_text",
+        {
+          method: "POST",
+          headers: { Prefer: "return=representation" },
+          body: JSON.stringify(notes.map((note) => ({
+            user_id: userId,
+            group_id: body.group_id,
+            profile_id: null,
+            created_by_user_id: userId,
+            type: "family_note",
+            date: null,
+            time: null,
+            hospital: "家庭提醒",
+            department: "家庭提醒",
+            notes: note,
+            reminder_text: note,
+            status: "upcoming",
+          }))),
+        },
+      );
+
+      return Response.json({ success: true, notes: rows.map((row) => row.reminder_text).filter(Boolean) });
     }
 
     if (body.action === "get_members") {

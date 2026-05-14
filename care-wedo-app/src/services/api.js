@@ -13,10 +13,13 @@ export function buildDashboardRequest(apiBase = API_BASE, identity = {}) {
     };
   }
 
-  const query = identity.profileId ? `?profile_id=${encodeURIComponent(identity.profileId)}` : "";
+  const query = new URLSearchParams();
+  if (identity.profileId) query.set("profile_id", identity.profileId);
+  if (identity.groupId) query.set("group_id", identity.groupId);
+  const queryString = query.toString() ? `?${query.toString()}` : "";
 
   return {
-    url: `${apiBase}/dashboard${query}`,
+    url: `${apiBase}/dashboard${queryString}`,
     init,
   };
 }
@@ -239,6 +242,26 @@ export async function updateMembership({ idToken, groupId, updates }) {
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
     throw createApiError(err.error || "更新群組通知設定失敗", resp.status);
+  }
+  return resp.json();
+}
+
+export async function updateFamilyNotes({ idToken, groupId, notes }) {
+  const resp = await fetch(`${API_BASE}/groups`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+    },
+    body: JSON.stringify({
+      action: "update_family_notes",
+      group_id: groupId,
+      notes,
+    }),
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw createApiError(err.error || "更新家庭提醒失敗", resp.status);
   }
   return resp.json();
 }

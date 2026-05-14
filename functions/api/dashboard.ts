@@ -9,6 +9,7 @@ import {
   getGroupOcrUsage,
   getGroupPlan,
   getOrCreateDefaultUser,
+  getUserGroups,
   serializeCareProfile,
   serializeAppointment,
   serializeMedication,
@@ -90,6 +91,10 @@ const STATIC_DEMO_DASHBOARD = {
     },
   ],
   checklist: ["2026-05-14 家醫科：示範回診"],
+  groups: [],
+  active_group_id: null,
+  active_group_name: null,
+  family_notes: [],
   needs_setup: false,
   needs_profile_setup: false,
 };
@@ -101,12 +106,22 @@ function parseProfileId(request: Request): number | null {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
+function parseGroupId(request: Request): number | null {
+  const value = new URL(request.url).searchParams.get("group_id");
+  if (!value) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
 // Prefer is_default first (getAccessibleProfiles already sorts this way).
 // requestedProfileId must belong to the accessible profiles list.
-function chooseProfile(profiles: CareProfileRow[], requestedProfileId: number | null): CareProfileRow | null {
+function chooseProfile(profiles: CareProfileRow[], requestedProfileId: number | null, requestedGroupId: number | null): CareProfileRow | null {
   if (requestedProfileId) {
     const found = profiles.find((p) => p.id === requestedProfileId);
-    if (found) return found;
+    if (found && (!requestedGroupId || found.group_id === requestedGroupId)) return found;
+  }
+  if (requestedGroupId) {
+    return profiles.find((p) => p.group_id === requestedGroupId) || null;
   }
   return profiles[0] || null;
 }
@@ -146,10 +161,9 @@ async function fetchDashboardMembers(env: Env, groupId: number | null, currentUs
 }
 
 async function fetchAppointments(env: Env, groupId: number | null, profileId: number | null): Promise<AppointmentRow[]> {
-  if (!profileId && !groupId) return [];
-  const path = profileId
-    ? `appointments?profile_id=eq.${profileId}&status=eq.upcoming&select=*&order=date.asc.nullslast,created_at.desc`
-    : `appointments?group_id=eq.${groupId}&status=eq.upcoming&select=*&order=date.asc.nullslast,created_at.desc`;
+  if (!groupId) return [];
+  const profileScope = profileId ? `&or=(profile_id.eq.${profileId},profile_id.is.null)` : "";
+  const path = `appointments?group_id=eq.${groupId}&status=eq.upcoming${profileScope}&select=*&order=date.asc.nullslast,created_at.desc`;
   return supabaseFetch<AppointmentRow[]>(env, path);
 }
 
@@ -174,6 +188,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     // ── Authenticated path ────────────────────────────────────────────────────
     const userId = await getOrCreateDefaultUser(env, identity.lineUserId, identity);
     const requestedProfileId = parseProfileId(request);
+    const requestedGroupId = parseGroupId(request);
 
     // Step 1: Resolve groups
     const memberships = await supabaseFetch<Array<{ group_id: number }>>(
@@ -191,6 +206,10 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
         appointments: [],
         medications: [],
         checklist: [],
+        groups: [],
+        active_group_id: null,
+        active_group_name: null,
+        family_notes: [],
         care_profiles: [],
         active_profile_id: null,
         needs_setup: true,
@@ -199,12 +218,16 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     }
 
     // Step 2: Resolve profiles
+    const groups = await getUserGroups(env, userId);
+    const fallbackGroupId = memberships[0]?.group_id ?? null;
+    const activeRequestedGroupId = groups.some((group) => group.id === requestedGroupId) ? requestedGroupId : fallbackGroupId;
     const profiles = await getAccessibleProfiles(env, userId);
-    const selectedProfile = chooseProfile(profiles, requestedProfileId);
+    const selectedProfile = chooseProfile(profiles, requestedProfileId, activeRequestedGroupId);
 
     if (!selectedProfile) {
       // User has a group but no care recipient yet — still read group plan for accurate limits
-      const groupId = memberships[0]?.group_id ?? null;
+      const groupId = activeRequestedGroupId;
+      const activeGroup = groups.find((group) => group.id === groupId) || null;
       const groupPlan = await getGroupPlan(env, groupId);
       const ocrUsed = await getGroupOcrUsage(env, groupId);
       return Response.json({
@@ -215,6 +238,10 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
         appointments: [],
         medications: [],
         checklist: [],
+        groups,
+        active_group_id: groupId,
+        active_group_name: activeGroup?.name || "家庭群組",
+        family_notes: [],
         care_profiles: profiles.map(serializeCareProfile),
         active_profile_id: null,
         needs_setup: false,
@@ -224,6 +251,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
 
     const activeGroupId = selectedProfile.group_id;
     const activeProfileId = selectedProfile.id;
+    const activeGroup = groups.find((group) => group.id === activeGroupId) || null;
 
     // Step 3: Fetch care data scoped to group + profile
     const [appointments, medications, members] = await Promise.all([
@@ -231,6 +259,10 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       fetchMedications(env, activeGroupId, activeProfileId),
       fetchDashboardMembers(env, activeGroupId, userId),
     ]);
+    const familyNotes = appointments
+      .filter((appointment) => appointment.type === "family_note" && !appointment.profile_id)
+      .map((appointment) => appointment.reminder_text || appointment.notes || appointment.department || "")
+      .filter(Boolean);
 
     const checklist = appointments.slice(0, 3).map((apt) => {
       const label = `${apt.date || ""} ${apt.department || apt.hospital || "回診"}`.trim();
@@ -253,6 +285,10 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       },
       mode: "personal",
       ...buildPlanUsage(groupPlan, ocrUsed),
+      groups,
+      active_group_id: activeGroupId,
+      active_group_name: activeGroup?.name || "家庭群組",
+      family_notes: familyNotes,
       active_profile_id: activeProfileId,
       care_profiles: profiles.map(serializeCareProfile),
       appointments: appointments.map(serializeAppointment),

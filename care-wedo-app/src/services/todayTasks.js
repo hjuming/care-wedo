@@ -43,6 +43,7 @@ function timeRank(value = "") {
 }
 
 function appointmentActionLabel(type) {
+  if (type === "family_note") return "我知道了";
   if (type === "refill_reminder") return "我已領藥";
   if (type === "inspection") return "我已完成";
   if (["reminder", "medication", "measurement", "document", "rehab", "exercise", "other"].includes(type)) return "我知道了";
@@ -50,6 +51,7 @@ function appointmentActionLabel(type) {
 }
 
 function appointmentKindLabel(type) {
+  if (type === "family_note") return "家庭提醒";
   if (type === "refill_reminder") return "領藥";
   if (type === "inspection") return "檢查";
   if (type === "medication") return "用藥";
@@ -186,24 +188,25 @@ export function groupMedicationsBySchedule(medications = []) {
 }
 
 function buildAppointmentTask(appointment, today) {
-  const needsReview = !appointment.date;
+  const isFamilyNote = appointment.type === "family_note";
+  const needsReview = !appointment.date && !isFamilyNote;
   return {
     id: `appointment-${appointment.id}`,
     sourceId: appointment.id,
     kind: "appointment",
     type: appointment.type || "clinic_visit",
     label: appointmentKindLabel(appointment.type),
-    title: appointment.department || appointment.hospital || appointmentKindLabel(appointment.type),
+    title: isFamilyNote ? "家庭提醒" : appointment.department || appointment.hospital || appointmentKindLabel(appointment.type),
     subtitle: [appointment.time, appointment.hospital, appointment.doctor && `${appointment.doctor}醫師`].filter(Boolean).join(" ｜ "),
     detail: appointment.reminder_text || appointment.notes || appointment.location || "",
-    time: needsReview ? "日期待確認" : (appointment.time || "時間待確認"),
+    time: isFamilyNote ? "每天留意" : needsReview ? "日期待確認" : (appointment.time || "時間待確認"),
     date: appointment.date || "",
     dateLabel: appointment.date ? formatShortDateLabel(appointment.date) : "",
     primaryActionLabel: appointmentActionLabel(appointment.type),
     status: appointment.status || "upcoming",
     needsReview,
-    rank: needsReview ? SLOT_ORDER["日期待確認"] * 10000 : appointmentRank(appointment),
-    isToday: isSameDate(appointment.date, today),
+    rank: isFamilyNote ? 85000000 : needsReview ? SLOT_ORDER["日期待確認"] * 10000 : appointmentRank(appointment),
+    isToday: isFamilyNote || isSameDate(appointment.date, today),
   };
 }
 

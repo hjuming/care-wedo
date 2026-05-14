@@ -52,6 +52,27 @@ test("Dashboard API returns family members for the global care contact dock", ()
   assert.match(source, /collaborators:/);
 });
 
+test("Family notes are stored as group-scoped reminders", () => {
+  const dashboard = readProjectFile("functions/api/dashboard.ts");
+  const groupsApi = readProjectFile("functions/api/groups.ts");
+  const app = readProjectFile("care-wedo-app/src/App.jsx");
+  assert.match(groupsApi, /update_family_notes/);
+  assert.match(groupsApi, /group_id:\s*body\.group_id/);
+  assert.match(groupsApi, /type:\s*"family_note"/);
+  assert.match(groupsApi, /profile_id:\s*null/);
+  assert.match(dashboard, /parseGroupId/);
+  assert.match(dashboard, /active_group_id/);
+  assert.match(dashboard, /family_notes/);
+  assert.match(app, /GroupBadge/);
+  assert.match(app, /onEditFamilyNotes/);
+});
+
+test("Dashboard fetches group-level reminders with the active profile", () => {
+  const dashboard = readProjectFile("functions/api/dashboard.ts");
+  assert.match(dashboard, /profile_id\.is\.null/);
+  assert.match(dashboard, /group_id=eq\.\$\{groupId\}/);
+});
+
 test("Global care contact sheets support keyboard close and focus return", () => {
   const source = readProjectFile("care-wedo-app/src/App.jsx");
   const dock = source.slice(source.indexOf("function GlobalCareContactDock"));

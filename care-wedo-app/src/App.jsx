@@ -6,7 +6,7 @@ import LoginSetup from "./components/LoginSetup";
 import MobileBottomNav from "./components/MobileBottomNav";
 import OcrResult from "./components/OcrResult";
 import { patientData, medicines, timeline as initialTimeline } from "./data/patient";
-import { confirmOcrDocument, createAppointment, fetchDashboard, joinGroup, markMedicationSlotStatus, ocrAnalyze, patchAppointment, patchMedication, updateProfile } from "./services/api";
+import { confirmOcrDocument, createAppointment, fetchDashboard, joinGroup, markMedicationSlotStatus, ocrAnalyze, patchAppointment, patchMedication, updateFamilyNotes, updateProfile } from "./services/api";
 import { initLineIdentity, loginWithLine, logoutLineIdentity, resetCareWedoSessionAndReturnHome } from "./services/liff";
 import { trackError, trackEvent } from "./services/telemetry";
 import { buildTodayTasks, formatTaipeiTodayLabel, groupMedicationsBySchedule, hasSameDayTasks } from "./services/todayTasks";
@@ -69,6 +69,7 @@ const MOBILE_SECTIONS = [
 ];
 
 function typeLabel(type) {
+  if (type === "family_note") return "家庭提醒";
   if (type === "inspection") return "檢查";
   if (type === "refill_reminder") return "領藥";
   if (type === "medication") return "用藥";
@@ -82,6 +83,7 @@ function typeLabel(type) {
 }
 
 function typeIcon(type) {
+  if (type === "family_note") return "家";
   if (type === "inspection") return "驗";
   if (type === "refill_reminder") return "藥";
   if (type === "medication") return "服";
@@ -693,27 +695,24 @@ function DashboardApp() {
   const [scanStep, setScanStep] = useState(null);
   const [dashboard, setDashboard] = useState(null);
   const [dashboardError, setDashboardError] = useState(null);
+  const [activeGroupId, setActiveGroupId] = useState(null);
   const [activeProfileId, setActiveProfileId] = useState(null);
   const [identity, setIdentity] = useState({ status: "loading", idToken: null, profile: null, message: null });
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [showManualReminder, setShowManualReminder] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState(null);
-  const [familyNotes, setFamilyNotes] = useState([
-    "哪些藥不能吃、以前有沒有過敏",
-    "看診前要不要量血壓、空腹、帶健保卡",
-    "緊急時要打給誰、常去哪家醫院",
-  ]);
+  const [showFamilyNotesEditor, setShowFamilyNotesEditor] = useState(false);
+  const [familyNotes, setFamilyNotes] = useState([]);
   const dashboardRequestSeqRef = useRef(0);
   const dashboardCacheRef = useRef(new Map());
   const dashboardShellRef = useRef(null);
 
-  const loadDashboard = useCallback(async (lineIdentity, profileId = null) => {
+  const loadDashboard = useCallback(async (lineIdentity, profileId = null, groupId = null) => {
     const requestSeq = dashboardRequestSeqRef.current + 1;
     dashboardRequestSeqRef.current = requestSeq;
-    const cacheKey = profileId ? String(profileId) : "default";
 
     try {
-      const data = await fetchDashboard({ idToken: lineIdentity?.idToken, profileId });
+      const data = await fetchDashboard({ idToken: lineIdentity?.idToken, profileId, groupId });
       if (requestSeq !== dashboardRequestSeqRef.current) {
         return data;
       }
@@ -725,7 +724,8 @@ function DashboardApp() {
       }
 
       const resolvedProfileId = data.active_profile_id || profileId || null;
-      const resolvedCacheKey = resolvedProfileId ? String(resolvedProfileId) : cacheKey;
+      const resolvedGroupId = data.active_group_id || groupId || null;
+      const resolvedCacheKey = `${resolvedGroupId || "default"}:${resolvedProfileId || "default"}`;
       const cachedProfileData = dashboardCacheRef.current.get(resolvedCacheKey);
       const nextData = cachedProfileData && dashboardHasCareData(cachedProfileData) && !dashboardHasCareData(data)
         ? mergeDashboardShell(cachedProfileData, data)
@@ -740,14 +740,19 @@ function DashboardApp() {
       };
 
       dashboardCacheRef.current.set(resolvedCacheKey, nextData);
-      if (!profileId) {
+      if (!profileId && !groupId) {
         dashboardCacheRef.current.set("default", nextData);
       }
 
       setDashboard(nextData);
       setDashboardError(null);
+      if (nextData.active_group_id) {
+        setActiveGroupId(nextData.active_group_id);
+        window.localStorage.setItem("care_wedo_active_group_id", String(nextData.active_group_id));
+      }
       if (resolvedProfileId) {
         setActiveProfileId(resolvedProfileId);
+        window.localStorage.setItem("care_wedo_active_profile_id", String(resolvedProfileId));
       }
       return data;
     } catch (err) {
@@ -756,11 +761,11 @@ function DashboardApp() {
       }
       // AUTH_REQUIRED or expired token in production → clear stale auth state and return home.
       if (IS_PROD && err.code === "AUTH_REQUIRED") {
-        trackError("frontend.dashboard_auth_reset", err, { profileId });
+        trackError("frontend.dashboard_auth_reset", err, { profileId, groupId });
         await resetCareWedoSessionAndReturnHome();
         return null;
       }
-      trackError("frontend.dashboard", err, { profileId });
+      trackError("frontend.dashboard", err, { profileId, groupId });
       setDashboardError(err.message);
       return null;
     }
@@ -771,19 +776,21 @@ function DashboardApp() {
       if (!prev) return prev;
       const next = typeof updater === "function" ? updater(prev) : updater;
       const cacheProfileId = next.active_profile_id || activeProfileId;
+      const cacheGroupId = next.active_group_id || activeGroupId;
       if (cacheProfileId) {
         dashboardCacheRef.current.set(String(cacheProfileId), next);
+        dashboardCacheRef.current.set(`${cacheGroupId || "default"}:${cacheProfileId}`, next);
       }
       return next;
     });
-  }, [activeProfileId]);
+  }, [activeGroupId, activeProfileId]);
 
   async function handleProfileUpdate(updates) {
     if (!activeProfileId) {
       throw new Error("請先使用 LINE 登入並建立照護對象後再儲存。");
     }
     await updateProfile(activeProfileId, updates, { idToken: identity.idToken });
-    await loadDashboard(identity, activeProfileId);
+    await loadDashboard(identity, activeProfileId, activeGroupId);
     setShowEditProfile(false);
   }
 
@@ -826,7 +833,12 @@ function DashboardApp() {
         }
 
         const preferredProfileId = Number(window.localStorage.getItem("care_wedo_active_profile_id"));
-        await loadDashboard(lineIdentity, Number.isFinite(preferredProfileId) && preferredProfileId > 0 ? preferredProfileId : null);
+        const preferredGroupId = Number(window.localStorage.getItem("care_wedo_active_group_id"));
+        await loadDashboard(
+          lineIdentity,
+          Number.isFinite(preferredProfileId) && preferredProfileId > 0 ? preferredProfileId : null,
+          Number.isFinite(preferredGroupId) && preferredGroupId > 0 ? preferredGroupId : null,
+        );
       } catch (err) {
         if (!active) return;
         // 正式環境發生錯誤代表無法驗證身分，清掉舊狀態並回首頁
@@ -867,7 +879,14 @@ function DashboardApp() {
 
   const isPersonalMode = dashboard?.mode === "personal" || identity.status === "authenticated";
   const careProfiles = dashboard?.care_profiles || [];
-  const selectedProfile = careProfiles.find((profile) => profile.id === activeProfileId) || careProfiles[0] || null;
+  const groups = dashboard?.groups || [];
+  const activeGroup = groups.find((group) => group.id === activeGroupId)
+    || groups.find((group) => group.id === dashboard?.active_group_id)
+    || null;
+  const selectedProfile = careProfiles.find((profile) => profile.id === activeProfileId)
+    || careProfiles.find((profile) => profile.group_id === activeGroupId)
+    || careProfiles[0]
+    || null;
 
   const patient = (isPersonalMode && dashboard) 
     ? { ...dashboard.patient, name: selectedProfile?.display_name || dashboard.patient.name, age: calculateAge(selectedProfile) } 
@@ -935,30 +954,18 @@ function DashboardApp() {
   const showContactDock = !IS_PROD || isPersonalMode;
 
   useEffect(() => {
-    const key = `care_wedo_family_notes_${activeProfileId || "default"}`;
-    const stored = window.localStorage.getItem(key);
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length) {
-          setFamilyNotes(parsed);
-          return;
-        }
-      } catch {
-        // keep defaults
-      }
-    }
-    setFamilyNotes([
-      "哪些藥不能吃、以前有沒有過敏",
-      "看診前要不要量血壓、空腹、帶健保卡",
-      "緊急時要打給誰、常去哪家醫院",
-    ]);
-  }, [activeProfileId]);
+    setFamilyNotes(dashboard?.family_notes || []);
+  }, [dashboard?.active_group_id, dashboard?.family_notes]);
 
-  function handleFamilyNotesChange(notes) {
+  async function handleFamilyNotesChange(notes) {
     const nextNotes = notes.map((item) => item.trim()).filter(Boolean);
+    if (!activeGroupId) {
+      setFamilyNotes(nextNotes);
+      return;
+    }
+    await updateFamilyNotes({ idToken: identity.idToken, groupId: activeGroupId, notes: nextNotes });
     setFamilyNotes(nextNotes);
-    window.localStorage.setItem(`care_wedo_family_notes_${activeProfileId || "default"}`, JSON.stringify(nextNotes));
+    await loadDashboard(identity, activeProfileId, activeGroupId);
   }
 
   async function handleAskFamily(task = null) {
@@ -1036,7 +1043,7 @@ function DashboardApp() {
       });
       if (result.success && result.data) {
         setOcrData({ data: result.data, saved: result.saved });
-        await loadDashboard(identity, activeProfileId);
+        await loadDashboard(identity, activeProfileId, activeGroupId);
       } else {
         setOcrError(result.error || "解析失敗");
       }
@@ -1096,7 +1103,7 @@ function DashboardApp() {
         medications: correctedMedications,
       },
     } : prev);
-    await loadDashboard(identity, activeProfileId);
+    await loadDashboard(identity, activeProfileId, activeGroupId);
   }
 
   async function handleMedicationTaken(group, status) {
@@ -1113,13 +1120,13 @@ function DashboardApp() {
         idToken: identity.idToken,
         timeSlot: group.slot,
       });
-      await loadDashboard(identity, activeProfileId);
+      await loadDashboard(identity, activeProfileId, activeGroupId);
     } catch (err) {
       if (err.code === "AUTH_REQUIRED") {
         await resetCareWedoSessionAndReturnHome();
         return;
       }
-      await loadDashboard(identity, activeProfileId);
+      await loadDashboard(identity, activeProfileId, activeGroupId);
       throw err;
     }
   }
@@ -1129,7 +1136,7 @@ function DashboardApp() {
       throw new Error("請先選擇照護對象。");
     }
     await createAppointment({ ...payload, profile_id: activeProfileId }, { idToken: identity.idToken });
-    await loadDashboard(identity, activeProfileId);
+    await loadDashboard(identity, activeProfileId, activeGroupId);
     setShowManualReminder(false);
   }
 
@@ -1159,7 +1166,7 @@ function DashboardApp() {
       reminder_text: payload.notes || null,
       status: "upcoming",
     }, { idToken: identity.idToken });
-    await loadDashboard(identity, activeProfileId);
+    await loadDashboard(identity, activeProfileId, activeGroupId);
     setEditingAppointment(null);
   }
 
@@ -1171,24 +1178,50 @@ function DashboardApp() {
       ...prev,
       appointments: (prev.appointments || []).filter((apt) => String(apt.id) !== String(appointment.id)),
     }));
-    await loadDashboard(identity, activeProfileId);
+    await loadDashboard(identity, activeProfileId, activeGroupId);
   }
 
   function handleProfileChange(profileId) {
-    trackEvent("frontend.profile_switch", { profileId });
+    const profileGroupId = careProfiles.find((profile) => profile.id === profileId)?.group_id || activeGroupId;
+    trackEvent("frontend.profile_switch", { profileId, groupId: profileGroupId });
     setActiveProfileId(profileId);
+    if (profileGroupId) {
+      setActiveGroupId(profileGroupId);
+      window.localStorage.setItem("care_wedo_active_group_id", String(profileGroupId));
+    }
     window.localStorage.setItem("care_wedo_active_profile_id", String(profileId));
-    const cached = dashboardCacheRef.current.get(String(profileId));
+    const cached = dashboardCacheRef.current.get(`${profileGroupId || "default"}:${profileId}`)
+      || dashboardCacheRef.current.get(String(profileId));
     if (cached) {
       setDashboard(mergeDashboardShell(cached, dashboardShellRef.current));
       setDashboardError(null);
     }
-    loadDashboard(identity, profileId);
+    loadDashboard(identity, profileId, profileGroupId);
+  }
+
+  function handleGroupChange(groupId) {
+    const groupProfile = careProfiles.find((profile) => profile.group_id === groupId);
+    const nextProfileId = groupProfile?.id || null;
+    trackEvent("frontend.group_switch", { groupId, profileId: nextProfileId });
+    setActiveGroupId(groupId);
+    setActiveProfileId(nextProfileId);
+    window.localStorage.setItem("care_wedo_active_group_id", String(groupId));
+    if (nextProfileId) {
+      window.localStorage.setItem("care_wedo_active_profile_id", String(nextProfileId));
+    } else {
+      window.localStorage.removeItem("care_wedo_active_profile_id");
+    }
+    const cached = dashboardCacheRef.current.get(`${groupId}:${nextProfileId || "default"}`);
+    if (cached) {
+      setDashboard(mergeDashboardShell(cached, dashboardShellRef.current));
+      setDashboardError(null);
+    }
+    loadDashboard(identity, nextProfileId, groupId);
   }
 
   function handleSetupComplete() {
     // Reload dashboard after setup
-    loadDashboard(identity, activeProfileId);
+    loadDashboard(identity, activeProfileId, activeGroupId);
   }
 
   // Production: show loading screen until auth is resolved, preventing demo data flash
@@ -1322,6 +1355,9 @@ function DashboardApp() {
               nextAppointment={nextAppointment}
               urgentItems={urgentItems}
               familyNotes={familyNotes}
+              groups={groups}
+              activeGroup={activeGroup}
+              activeGroupId={activeGroupId}
               hasCareData={hasCareData}
               patient={patient}
               selectedProfile={selectedProfile}
@@ -1330,6 +1366,8 @@ function DashboardApp() {
               onOpenMeds={() => setActiveSection("meds")}
               onOpenFamily={() => setActiveSection("settings")}
               onOpenProfile={() => setShowEditProfile(true)}
+              onGroupChange={handleGroupChange}
+              onEditFamilyNotes={() => setShowFamilyNotesEditor(true)}
               onUpload={handleUploadClick}
               onAddReminder={() => setShowManualReminder(true)}
               onEditAppointment={handleEditAppointment}
@@ -1372,7 +1410,7 @@ function DashboardApp() {
               selectedProfile={selectedProfile}
               activeProfileId={activeProfileId}
               onProfileChange={handleProfileChange}
-              onGroupChange={() => loadDashboard(identity, activeProfileId)}
+              onGroupChange={() => loadDashboard(identity, activeProfileId, activeGroupId)}
               onEditProfile={() => setShowEditProfile(true)}
               familyNotes={familyNotes}
               onFamilyNotesChange={handleFamilyNotesChange}
@@ -1402,6 +1440,15 @@ function DashboardApp() {
         <ManualReminderModal
           onClose={() => setShowManualReminder(false)}
           onSave={handleManualReminderSave}
+        />
+      )}
+
+      {showFamilyNotesEditor && (
+        <FamilyNotesModal
+          groupName={activeGroup?.name || dashboard?.active_group_name || "家庭群組"}
+          notes={familyNotes}
+          onClose={() => setShowFamilyNotesEditor(false)}
+          onSave={handleFamilyNotesChange}
         />
       )}
 
@@ -1600,6 +1647,46 @@ function ProfileSwitcher({ profiles, activeProfileId, onChange }) {
           </button>
         ))}
       </div>
+    </div>
+  );
+}
+
+function GroupBadge({ groups = [], activeGroupId, activeGroupName, onChange }) {
+  const [open, setOpen] = useState(false);
+  const label = activeGroupName || groups.find((group) => group.id === activeGroupId)?.name || "家庭群組";
+
+  if (!groups.length) {
+    return <span className="group-context-badge">{label}</span>;
+  }
+
+  return (
+    <div className="group-context-switcher">
+      <button
+        type="button"
+        className="group-context-badge"
+        onClick={() => setOpen((current) => !current)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
+        {label}
+      </button>
+      {open && (
+        <div className="group-context-menu" role="listbox" aria-label="切換家庭群組">
+          {groups.map((group) => (
+            <button
+              key={group.id}
+              type="button"
+              className={group.id === activeGroupId ? "active" : ""}
+              onClick={() => {
+                setOpen(false);
+                onChange?.(group.id);
+              }}
+            >
+              {group.name || "家庭群組"}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -2136,6 +2223,9 @@ function OverviewView({
   nextAppointment,
   urgentItems,
   familyNotes,
+  groups,
+  activeGroup,
+  activeGroupId,
   hasCareData,
   patient,
   selectedProfile,
@@ -2144,6 +2234,8 @@ function OverviewView({
   onOpenMeds,
   onOpenFamily,
   onOpenProfile,
+  onGroupChange,
+  onEditFamilyNotes,
   onUpload,
   onAddReminder,
   onEditAppointment,
@@ -2171,6 +2263,12 @@ function OverviewView({
           <h3>{careTitle}</h3>
           <p>{todayLabel.date}</p>
         </div>
+        <GroupBadge
+          groups={groups}
+          activeGroupId={activeGroupId}
+          activeGroupName={activeGroup?.name}
+          onChange={onGroupChange}
+        />
       </section>
 
       <section className="today-hero-panel">
@@ -2281,7 +2379,12 @@ function OverviewView({
         </article>
 
         <article className="summary-panel">
-          <p className="panel-eyebrow">需要多留意</p>
+          <div className="panel-title-row">
+            <p className="panel-eyebrow">需要多留意</p>
+            <button type="button" className="card-corner-edit inline-edit-button" onClick={onEditFamilyNotes}>
+              編輯
+            </button>
+          </div>
           <div className="attention-list">
             {urgentItems.length || familyNotes.length ? (
               <>
@@ -2657,15 +2760,25 @@ function SettingsView({
 function FamilyNotesEditor({ notes, onChange }) {
   const [draft, setDraft] = useState(notes.join("\n"));
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     setDraft(notes.join("\n"));
   }, [notes]);
 
-  function handleSave() {
-    onChange(draft.split("\n"));
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1800);
+  async function handleSave() {
+    setSaving(true);
+    setError("");
+    try {
+      await onChange(draft.split("\n"));
+      setSaved(true);
+      setTimeout(() => setSaved(false), 1800);
+    } catch (err) {
+      setError(err.message || "儲存失敗，請再試一次");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -2676,9 +2789,30 @@ function FamilyNotesEditor({ notes, onChange }) {
         rows={5}
         aria-label="家庭群組提醒"
       />
-      <button type="button" className="inline-action" onClick={handleSave}>
-        {saved ? "已儲存" : "儲存提醒"}
+      {error && <p className="error-msg">{error}</p>}
+      <button type="button" className="inline-action" onClick={handleSave} disabled={saving}>
+        {saving ? "儲存中..." : saved ? "已儲存" : "儲存提醒"}
       </button>
+    </div>
+  );
+}
+
+function FamilyNotesModal({ groupName, notes, onClose, onSave }) {
+  return (
+    <div className="modal-overlay">
+      <div className="modal-content family-notes-modal">
+        <div className="modal-header">
+          <div>
+            <p className="panel-eyebrow">{groupName}</p>
+            <h2>編輯需要多留意</h2>
+          </div>
+          <button type="button" onClick={onClose} className="btn-close">✕</button>
+        </div>
+        <div className="modal-body">
+          <p className="helper-copy">每一行會成為一張家庭提醒卡，儲存在目前家庭群組，切換群組後會顯示各自的提醒。</p>
+          <FamilyNotesEditor notes={notes} onChange={onSave} />
+        </div>
+      </div>
     </div>
   );
 }

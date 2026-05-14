@@ -25,3 +25,10 @@ test("Dashboard keeps profile shell data separate from profile record data", () 
   assert.match(appSource, /dashboardShellRef/);
   assert.match(appSource, /mergeDashboardShell/);
 });
+
+test("Dashboard supports switching family groups from the today page", () => {
+  assert.match(appSource, /activeGroupId/);
+  assert.match(appSource, /care_wedo_active_group_id/);
+  assert.match(appSource, /function GroupBadge/);
+  assert.match(appSource, /frontend\.group_switch/);
+});

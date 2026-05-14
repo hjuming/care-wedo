@@ -100,6 +100,43 @@ test("buildTodayTasks falls back to the nearest future appointment when today is
   assert.equal(tasks[0].isToday, false);
 });
 
+test("buildTodayTasks shows group family notes on the today page", () => {
+  const tasks = buildTodayTasks({
+    today: "2026-05-06",
+    appointments: [
+      {
+        id: 10,
+        type: "family_note",
+        date: null,
+        hospital: "家庭提醒",
+        department: "家庭提醒",
+        reminder_text: "哪些藥不能吃、以前有沒有過敏",
+        status: "upcoming",
+      },
+    ],
+  });
+
+  assert.deepEqual(tasks.map((task) => ({
+    kind: task.kind,
+    label: task.label,
+    title: task.title,
+    time: task.time,
+    detail: task.detail,
+    primaryActionLabel: task.primaryActionLabel,
+    isToday: task.isToday,
+  })), [
+    {
+      kind: "appointment",
+      label: "家庭提醒",
+      title: "家庭提醒",
+      time: "每天留意",
+      detail: "哪些藥不能吃、以前有沒有過敏",
+      primaryActionLabel: "我知道了",
+      isToday: true,
+    },
+  ]);
+});
+
 test("formatTaipeiTodayLabel returns a large-date friendly label", () => {
   assert.deepEqual(formatTaipeiTodayLabel("2026-05-06"), {
     headline: "今天",
