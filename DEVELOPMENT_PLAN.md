@@ -1,8 +1,8 @@
 # Care WEDO — V1.0 Beta 開發計畫
 
 > **建立日期**：2026-05-05  
-> **最後更新**：2026-05-05  
-> **當前狀態**：Sprint 0–5 程式碼已完成，驗證階段（LINE 登入流程確認中）
+> **最後更新**：2026-05-13  
+> **當前狀態**：Sprint 0–5 程式碼已完成，進入正式環境實機測試與 Beta 上線收斂
 
 ---
 
@@ -21,22 +21,22 @@
 
 ---
 
-## 🔴 目前最高優先：LINE 登入問題
+## 🔴 目前最高優先：正式環境實機閉環
 
-在 Sprint 4 實機驗證前，以下問題必須先解決。
+在封閉 Beta 開放前，以下流程必須在正式環境跑完。
 
-### 問題 1：電腦版 LINE 登入後回到首頁
+### 守門項目 1：LINE 登入導向設定
 
-**描述**：使用者點擊登入按鈕 → LINE 授權畫面 → 授權後回到 `https://care.wedopr.com/`（首頁），而非預期的 `/app`（Dashboard）。
+**若設定跑掉的症狀**：使用者點擊登入按鈕 → LINE 授權畫面 → 授權後回到 `https://care.wedopr.com/`（首頁），而非預期的 `/app`（Dashboard）。
 
 **根本原因**：LINE OAuth 的 redirect URI 必須與 LINE Developers Console 設定的 **LIFF Endpoint URL** 完全相符。若 Endpoint URL 設為根路徑（`https://care.wedopr.com/`）而非 `/app`，LINE 會把使用者導回根路徑。
 
-**必做修復（非程式碼）**：
+**正式測試前確認（非程式碼）**：
 ```
 LINE Developers Console
 → Care WEDO Login Channel
 → LIFF App（照護小管家）
-→ Endpoint URL 改為：https://care.wedopr.com/app
+→ Endpoint URL 維持：https://care.wedopr.com/app
 → 儲存 → 重新測試
 ```
 
@@ -67,7 +67,7 @@ LINE Developers Console
 - [x] 直接開啟 `https://care.wedopr.com/app`，未登入自動跳 `/login`
 - [x] `/login` 頁顯示 LINE 登入按鈕
 - [x] 本機開發（`npm run dev`）仍可用 demo 模式
-- [ ] LINE LIFF 登入成功後可進入 `/app` ← **待 LINE Endpoint URL 修正後驗證**
+- [ ] LINE LIFF 登入成功後可進入 `/app` ← **待正式環境實機驗證**
 
 ---
 
@@ -258,7 +258,7 @@ LINE Developers Console
 3. **錯誤監控整合**：
    * 在前端 `main.jsx` 與 `ErrorBoundary` 中整合 Sentry。
    * 在 Cloudflare Functions 中加入結構化 Log 紀錄，方便追蹤 OCR 失敗原因。
-4. **OCR 人工校正介面**：
-   * 目前 OCR 若辨識錯誤（如日期抓錯），使用者無法在 Dashboard 修正。建議增加「編輯」按鈕。
+4. **OCR 人工校正實機驗證**：
+   * Dashboard 已有 OCR 校正與確認式流程；下一步需用真實單據驗證「有錯我要改」與「正確，存起來」是否符合長輩/家人使用情境。
 5. **通知頻率設定**：
    * 讓使用者可以自訂「早安健康簡報」的發送時間，或關閉特定通知。

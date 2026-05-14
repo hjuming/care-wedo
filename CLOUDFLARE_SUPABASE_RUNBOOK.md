@@ -1,7 +1,7 @@
 # Care WEDO — Cloudflare + Supabase 部署 Runbook
 
-> **版本**：V1.0 Beta 開發中  
-> **最後更新**：2026-05-05  
+> **版本**：V1.0 Beta Candidate  
+> **最後更新**：2026-05-13  
 > **部署方式**：GitHub Actions + wrangler v4（Cloudflare 原生 CI 已停用，見下方說明）
 
 ---
@@ -72,6 +72,19 @@ LINE_LOGIN_CHANNEL_ID=<Login Channel ID>
 CRON_SECRET=<自訂密碼，用於保護排程 API>
 ```
 
+> **2026-05-13 smoke test 發現**：正式站 `/api/cron/reminders` 與 `/api/cron/evening` 回傳 `CRON_SECRET is not configured.`。上線測試前需在 Cloudflare Pages production environment 補上 `CRON_SECRET`，且值必須與 GitHub Actions secret `CRON_SECRET` 一致。
+
+### CRON_SECRET 重設流程
+
+若無法讀取既有 GitHub Actions secret，請直接重設兩邊為同一組新值：
+
+1. 產生新的隨機 secret，不要貼到聊天或文件。
+2. GitHub repo → Settings → Secrets and variables → Actions → 更新 `CRON_SECRET`。
+3. Cloudflare Pages → `care-wedo` project → Settings → Environment variables → Production → 更新 `CRON_SECRET`。
+4. 重新部署或等待 Cloudflare Pages Functions 讀取最新 production environment。
+5. 手動執行 `Daily Medical Reminders` 與 `Evening Fasting Reminders` workflows。
+6. 確認 `/api/cron/reminders`、`/api/cron/evening` 不再回 `CRON_SECRET is not configured.`。
+
 ### Cloudflare Pages（前端建置）
 
 `wrangler.toml` 的 `[vars]` 區塊已設定：
@@ -104,10 +117,10 @@ CLOUDFLARE_ACCOUNT_ID=<Cloudflare Account ID>
 2. 開啟 `Use webhook`
 3. 點 `Verify` 確認收到 200
 
-### LIFF App（⚠️ 目前問題所在）
+### LIFF App（登入導向設定）
 
 1. 在 LINE Login Channel 建立 LIFF App
-2. **Endpoint URL 必須設為：`https://care.wedopr.com/app`**
+2. **Endpoint URL 必須維持為：`https://care.wedopr.com/app`**
    - 這是 LINE OAuth 授權完成後的跳轉位址
    - 若設為根路徑 `/`，使用者登入後會被帶回首頁，不進 Dashboard（已知 bug）
 3. Scope：`profile`、`openid`
@@ -206,8 +219,8 @@ Authentication error [code: 10000]
 
 ### LIFF 登入流程
 
-- [ ] 電腦版：點擊登入 → LINE 授權 → 進入 `/app` Dashboard（**目前有問題**）
-- [ ] 手機版：首頁正常顯示（**目前有問題**）
+- [ ] 電腦版：點擊登入 → LINE 授權 → 進入 `/app` Dashboard
+- [ ] 手機版：首頁正常顯示，LINE 內建瀏覽器不載入舊版 CSS
 - [ ] Dashboard 顯示當前使用者的專屬資料（非 demo 資料）
 - [ ] 登出按鈕正常運作
 
@@ -243,4 +256,5 @@ Authentication error [code: 10000]
 - Cloudflare Pages Functions 不使用 Python Flask，OCR 直接用 Gemini Vision
 - Cron 使用 GitHub Actions 外部觸發，而非 Cloudflare Cron Triggers（Pages 不原生支援）
 - `SUPABASE_SERVICE_ROLE_KEY` 繞過 RLS，後端所有查詢邏輯必須自行確保不允許跨群組存取
-- `_middleware.ts` 目前只做 CORS，無 JWT 驗證（技術債，Beta 後修復）
+- `_middleware.ts` 已做 CORS 與 protected API LINE idToken 驗證；`/api/dashboard` GET 仍允許無登入回 demo payload，方便公開首頁與開發測試。
+- 正式告警平台尚未接入；Beta 期間先依 Cloudflare Logs、GitHub Actions cron 結果與前端結構化 log 追蹤。
