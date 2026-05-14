@@ -1019,6 +1019,18 @@ input:focus-visible {
   border: 1px solid var(--border);
 }
 
+.secondary-action.subtle {
+  min-height: 42px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 15px;
+}
+
+.danger-subtle {
+  color: var(--danger);
+  border-color: rgba(186, 66, 66, 0.22);
+}
+
 .login-mini-status {
   display: flex;
   align-items: center;
@@ -2011,6 +2023,22 @@ input:focus-visible {
   grid-template-columns: 54px minmax(0, 1fr);
   gap: 14px;
   padding: 16px;
+}
+
+.event-row-actions,
+.card-inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.card-inline-actions {
+  margin-top: 0;
+}
+
+.card-inline-actions .secondary-action {
+  flex: 1 1 0;
 }
 
 .event-type {

@@ -563,6 +563,7 @@ function DashboardApp() {
   const [identity, setIdentity] = useState({ status: "loading", idToken: null, profile: null, message: null });
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [showManualReminder, setShowManualReminder] = useState(false);
+  const [editingAppointment, setEditingAppointment] = useState(null);
   const [familyNotes, setFamilyNotes] = useState([
     "哪些藥不能吃、以前有沒有過敏",
     "看診前要不要量血壓、空腹、帶健保卡",
@@ -965,6 +966,47 @@ function DashboardApp() {
     setShowManualReminder(false);
   }
 
+  function handleEditAppointment(appointmentOrId) {
+    const appointment = typeof appointmentOrId === "object"
+      ? appointmentOrId
+      : appointments.find((apt) => String(apt.id) === String(appointmentOrId));
+    if (!appointment) return;
+    setEditingAppointment(appointment);
+  }
+
+  async function handleAppointmentUpdate(payload) {
+    if (!editingAppointment?.id) {
+      throw new Error("找不到要編輯的提醒。");
+    }
+    await patchAppointment(editingAppointment.id, {
+      type: payload.type,
+      date: payload.date || null,
+      time: payload.time || null,
+      hospital: payload.hospital || null,
+      department: payload.department || payload.title || null,
+      doctor: payload.doctor || null,
+      location: payload.location || null,
+      fasting_required: Boolean(payload.fasting_required),
+      fasting_hours: payload.fasting_required ? payload.fasting_hours || 8 : null,
+      notes: payload.notes || null,
+      reminder_text: payload.notes || null,
+      status: "upcoming",
+    }, { idToken: identity.idToken });
+    await loadDashboard(identity, activeProfileId);
+    setEditingAppointment(null);
+  }
+
+  async function handleDeleteAppointment(appointment) {
+    if (!appointment?.id) return;
+    if (!window.confirm("確定要刪除這筆行程或提醒嗎？刪除後首頁與未來行程不會再顯示。")) return;
+    await patchAppointment(appointment.id, { status: "deleted" }, { idToken: identity.idToken });
+    updateActiveDashboard((prev) => ({
+      ...prev,
+      appointments: (prev.appointments || []).filter((apt) => String(apt.id) !== String(appointment.id)),
+    }));
+    await loadDashboard(identity, activeProfileId);
+  }
+
   function handleProfileChange(profileId) {
     trackEvent("frontend.profile_switch", { profileId });
     setActiveProfileId(profileId);
@@ -1109,6 +1151,8 @@ function DashboardApp() {
               onOpenProfile={() => setShowEditProfile(true)}
               onUpload={handleUploadClick}
               onAddReminder={() => setShowManualReminder(true)}
+              onEditAppointment={handleEditAppointment}
+              onDeleteAppointment={handleDeleteAppointment}
               onComplete={handleComplete}
               onAskFamily={handleAskFamily}
             />
@@ -1119,6 +1163,8 @@ function DashboardApp() {
               appointments={appointments}
               onUpload={handleUploadClick}
               onAddReminder={() => setShowManualReminder(true)}
+              onEditAppointment={handleEditAppointment}
+              onDeleteAppointment={handleDeleteAppointment}
             />
           )}
 
@@ -1176,6 +1222,15 @@ function DashboardApp() {
         <ManualReminderModal
           onClose={() => setShowManualReminder(false)}
           onSave={handleManualReminderSave}
+        />
+      )}
+
+      {editingAppointment && (
+        <ManualReminderModal
+          mode="edit"
+          initialAppointment={editingAppointment}
+          onClose={() => setEditingAppointment(null)}
+          onSave={handleAppointmentUpdate}
         />
       )}
 
@@ -1631,8 +1686,24 @@ function EmptyGuide({ title, description, primaryLabel, onPrimary, secondaryLabe
   );
 }
 
-function ManualReminderModal({ onClose, onSave }) {
-  const [formData, setFormData] = useState({
+function buildReminderFormData(appointment = null) {
+  return {
+    type: appointment?.type || "reminder",
+    title: appointment?.department || appointment?.hospital || "",
+    date: appointment?.date || todayInTaipei(),
+    time: appointment?.time || "",
+    hospital: appointment?.hospital || "",
+    department: appointment?.department || "",
+    doctor: appointment?.doctor || "",
+    location: appointment?.location || "",
+    notes: appointment?.notes || appointment?.reminder_text || "",
+    fasting_required: Boolean(appointment?.fasting_required),
+    fasting_hours: appointment?.fasting_hours || 8,
+  };
+}
+
+function ManualReminderModal({ mode = "create", initialAppointment = null, onClose, onSave }) {
+  const [formData, setFormData] = useState(() => initialAppointment ? buildReminderFormData(initialAppointment) : {
     type: "reminder",
     title: "",
     date: todayInTaipei(),
@@ -1670,7 +1741,7 @@ function ManualReminderModal({ onClose, onSave }) {
     <div className="modal-overlay">
       <div className="modal-content manual-reminder-modal">
         <div className="modal-header">
-          <h2>新增提醒</h2>
+          <h2>{mode === "edit" ? "編輯提醒" : "新增提醒"}</h2>
           <button type="button" onClick={onClose} className="btn-close">✕</button>
         </div>
         <form onSubmit={handleSubmit}>
@@ -1712,9 +1783,10 @@ function ManualReminderModal({ onClose, onSave }) {
               <div className="form-group">
                 <label>時間</label>
                 <input
-                  type="time"
+                  type="text"
                   value={formData.time}
                   onChange={(event) => setFormData({ ...formData, time: event.target.value })}
+                  placeholder="例如：07:45 或 7:45-19:00"
                 />
               </div>
             </div>
@@ -1786,7 +1858,7 @@ function ManualReminderModal({ onClose, onSave }) {
           </div>
           <div className="modal-footer">
             <button type="button" className="secondary-action" onClick={onClose} disabled={saving}>取消</button>
-            <button type="submit" className="primary-action" disabled={saving}>{saving ? "儲存中..." : "儲存提醒"}</button>
+            <button type="submit" className="primary-action" disabled={saving}>{saving ? "儲存中..." : mode === "edit" ? "儲存修改" : "儲存提醒"}</button>
           </div>
         </form>
       </div>
@@ -1812,6 +1884,8 @@ function OverviewView({
   onOpenProfile,
   onUpload,
   onAddReminder,
+  onEditAppointment,
+  onDeleteAppointment,
   onComplete,
   onAskFamily,
 }) {
@@ -1872,6 +1946,16 @@ function OverviewView({
                     <button type="button" className="primary-action elder-primary-action" onClick={() => handlePrimaryAction(task)} disabled={isDone}>
                       {isDone ? "已記好了" : task.primaryActionLabel}
                     </button>
+                    {task.kind === "appointment" && (
+                      <div className="card-inline-actions">
+                        <button type="button" className="secondary-action subtle" onClick={() => onEditAppointment(task.sourceId)}>
+                          編輯
+                        </button>
+                        <button type="button" className="secondary-action subtle danger-subtle" onClick={() => onDeleteAppointment({ id: task.sourceId })}>
+                          刪除
+                        </button>
+                      </div>
+                    )}
                     <button type="button" className="secondary-action elder-secondary-action subtle" onClick={() => onAskFamily(task)}>
                       問家人
                     </button>
@@ -1974,7 +2058,7 @@ function OverviewView({
   );
 }
 
-function CalendarView({ appointments, onUpload, onAddReminder }) {
+function CalendarView({ appointments, onUpload, onAddReminder, onEditAppointment, onDeleteAppointment }) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const futureAppointments = useMemo(
     () => appointments.filter((apt) => apt.status !== "completed" && isDateTodayOrFuture(apt.date)),
@@ -2059,6 +2143,10 @@ function CalendarView({ appointments, onUpload, onAddReminder }) {
               <p>{[apt.hospital, apt.doctor && `${apt.doctor}醫師`, apt.number && `${apt.number}號`].filter(Boolean).join(" ｜ ")}</p>
               {apt.location && <p className="location-line">地點：{apt.location}</p>}
               {apt.notes && <p className="soft-note">{apt.notes}</p>}
+              <div className="event-row-actions">
+                <button type="button" className="secondary-action subtle" onClick={() => onEditAppointment(apt)}>編輯</button>
+                <button type="button" className="secondary-action subtle danger-subtle" onClick={() => onDeleteAppointment(apt)}>刪除</button>
+              </div>
             </div>
           </article>
         )) : (
