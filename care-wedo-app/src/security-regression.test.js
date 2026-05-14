@@ -153,6 +153,22 @@ test("Care reminder detail text is highlighted on cards", () => {
   assert.match(css, /box-decoration-break:\s*clone/);
 });
 
+test("Records page defaults to future arrangements and loads history on demand", () => {
+  const app = readProjectFile("care-wedo-app/src/App.jsx");
+  const css = readProjectFile("care-wedo-app/src/index.css");
+  const dashboard = readProjectFile("functions/api/dashboard.ts");
+  const recordsView = app.slice(app.indexOf("function RecordsView"), app.indexOf("function SettingsView"));
+
+  assert.match(dashboard, /status=neq\.deleted/);
+  assert.match(app, /records=\{allAppointments\}/);
+  assert.match(recordsView, /useState\("future"\)/);
+  assert.match(recordsView, /歷史紀錄/);
+  assert.match(recordsView, /isDateTodayOrFuture\(record\.date,\s*today\)/);
+  assert.match(recordsView, /matchSearch\(record,\s*searchQuery\)/);
+  assert.match(recordsView, /appointmentTimeValue\(a\)\.localeCompare\(appointmentTimeValue\(b\)\)/);
+  assert.match(css, /\.record-mode-switch/);
+});
+
 test("Medication records expose schedule fields for elder-friendly medicine instructions", () => {
   const schema = readProjectFile("supabase/schema.sql");
   const shared = readProjectFile("functions/_shared/supabase.ts");

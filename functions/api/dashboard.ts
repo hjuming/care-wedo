@@ -163,7 +163,7 @@ async function fetchDashboardMembers(env: Env, groupId: number | null, currentUs
 async function fetchAppointments(env: Env, groupId: number | null, profileId: number | null): Promise<AppointmentRow[]> {
   if (!groupId) return [];
   const profileScope = profileId ? `&or=(profile_id.eq.${profileId},profile_id.is.null)` : "";
-  const path = `appointments?group_id=eq.${groupId}&status=eq.upcoming${profileScope}&select=*&order=date.asc.nullslast,created_at.desc`;
+  const path = `appointments?group_id=eq.${groupId}&status=neq.deleted${profileScope}&select=*&order=date.asc.nullslast,created_at.desc`;
   return supabaseFetch<AppointmentRow[]>(env, path);
 }
 

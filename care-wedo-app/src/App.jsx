@@ -956,8 +956,6 @@ function DashboardApp() {
   }, [appointments]);
 
   const urgentItems = appointments.filter((item) => (item.fasting_required || item.type === "refill_reminder") && item.status !== "completed" && isDateTodayOrFuture(item.date, todayInTaipei())).slice(0, 3);
-  const records = appointments.filter((item) => item.status === "completed");
-  const searchableRecords = searchQuery ? appointments : records;
   const hasCareData = dashboardHasCareData(dashboard);
   const todayDate = todayInTaipei();
   const todayLabel = useMemo(() => formatTaipeiTodayLabel(todayDate), [todayDate]);
@@ -1399,7 +1397,7 @@ function DashboardApp() {
 
           {activeSection === "records" && (
             <RecordsView
-              records={searchableRecords}
+              records={allAppointments}
               searchQuery={searchQuery}
               onUpload={handleUploadClick}
             />
@@ -2693,21 +2691,54 @@ function MedicationView({ medications, onUpload, onTaken }) {
   );
 }
 
+function appointmentTimeValue(record = {}) {
+  const date = typeof record.date === "string" && record.date ? record.date : "9999-12-31";
+  const time = typeof record.time === "string" && /^\d{1,2}:\d{2}/.test(record.time) ? record.time.slice(0, 5) : "23:59";
+  return `${date}T${time}`;
+}
+
 function RecordsView({ records, searchQuery, onUpload }) {
+  const [mode, setMode] = useState("future");
+  const modeLabel = mode === "history" ? "歷史紀錄" : "未來安排";
   const grouped = useMemo(() => {
+    const today = todayInTaipei();
+    const filteredRecords = records
+      .filter((record) => record.status !== "deleted")
+      .filter((record) => {
+        if (mode === "history") return true;
+        return record.status !== "completed" && isDateTodayOrFuture(record.date, today);
+      })
+      .filter((record) => matchSearch(record, searchQuery))
+      .sort((a, b) => appointmentTimeValue(a).localeCompare(appointmentTimeValue(b)));
     const groups = {};
-    records.forEach(record => {
+    filteredRecords.forEach(record => {
       if (!record.date || typeof record.date !== "string") return;
       // Defensive slice: only if it looks like YYYY-MM-DD
       const monthStr = record.date.includes("-") ? record.date.slice(0, 7) : "其他日期"; 
       if (!groups[monthStr]) groups[monthStr] = [];
       groups[monthStr].push(record);
     });
-    return Object.entries(groups).sort((a, b) => b[0].localeCompare(a[0]));
-  }, [records]);
+    return Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [records, searchQuery, mode]);
 
   return (
     <div className="records-timeline-view">
+      <div className="record-mode-switch" role="group" aria-label="查詢紀錄模式">
+        <button
+          type="button"
+          className={mode === "future" ? "active" : ""}
+          onClick={() => setMode("future")}
+        >
+          未來安排
+        </button>
+        <button
+          type="button"
+          className={mode === "history" ? "active" : ""}
+          onClick={() => setMode("history")}
+        >
+          歷史紀錄
+        </button>
+      </div>
       {grouped.length ? grouped.map(([month, items]) => (
         <section key={month} className="record-month-group">
           <h3 className="month-divider">{month.replace("-", " 年 ")} 月</h3>
@@ -2727,8 +2758,8 @@ function RecordsView({ records, searchQuery, onUpload }) {
         </section>
       )) : (
         <EmptyGuide
-          title="目前還沒有照護紀錄。"
-          description={searchQuery ? "換一個醫院、科別、醫師或提醒類型試試看。" : "每一次看診、用藥調整、症狀觀察，都可以慢慢整理成家人看得懂的健康時間線。"}
+          title={searchQuery ? "沒有符合的紀錄。" : `目前沒有${modeLabel}。`}
+          description={searchQuery ? "換一個醫院、科別、醫師或提醒類型試試看。" : mode === "history" ? "切回未來安排可以查看接下來要做的事。" : "之後新增的看診、檢查或領藥提醒會先出現在這裡。"}
           primaryLabel="上傳看診單"
           onPrimary={onUpload}
           secondaryLabel="新增照護紀錄"
