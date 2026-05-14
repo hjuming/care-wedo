@@ -6,7 +6,7 @@ import LoginSetup from "./components/LoginSetup";
 import MobileBottomNav from "./components/MobileBottomNav";
 import OcrResult from "./components/OcrResult";
 import { patientData, medicines, timeline as initialTimeline } from "./data/patient";
-import { confirmOcrDocument, createAppointment, fetchDashboard, joinGroup, markMedicationSlotStatus, ocrAnalyze, patchAppointment, patchMedication, updateFamilyNotes, updateProfile } from "./services/api";
+import { confirmOcrDocument, createAppointment, fetchDashboard, joinGroup, markMedicationSlotStatus, ocrAnalyze, patchAppointment, patchMedication, updateActiveProfilePreference, updateFamilyNotes, updateProfile, updateProfileOrder } from "./services/api";
 import { initLineIdentity, loginWithLine, logoutLineIdentity, resetCareWedoSessionAndReturnHome } from "./services/liff";
 import { trackError, trackEvent } from "./services/telemetry";
 import { buildTodayTasks, formatTaipeiTodayLabel, groupMedicationsBySchedule, hasSameDayTasks } from "./services/todayTasks";
@@ -812,6 +812,32 @@ function DashboardApp() {
     setShowEditProfile(false);
   }
 
+  async function handleProfileOrderChange(groupId, orderedProfileIds) {
+    const sortOrderMap = new Map(orderedProfileIds.map((id, index) => [Number(id), (index + 1) * 10]));
+    updateActiveDashboard((prev) => ({
+      ...prev,
+      care_profiles: (prev.care_profiles || []).map((profile) => (
+        sortOrderMap.has(Number(profile.id)) ? { ...profile, sort_order: sortOrderMap.get(Number(profile.id)) } : profile
+      )),
+    }));
+
+    if (!identity.idToken) return;
+
+    try {
+      await updateProfileOrder(orderedProfileIds, { idToken: identity.idToken });
+      await loadDashboard(identity, activeProfileId, activeGroupId);
+    } catch (err) {
+      trackError("frontend.profile_order", err, { groupId });
+      await loadDashboard(identity, activeProfileId, activeGroupId);
+    }
+  }
+
+  function persistActiveProfilePreference(profileId) {
+    if (!identity.idToken || !profileId) return;
+    updateActiveProfilePreference(profileId, { idToken: identity.idToken })
+      .catch((err) => trackError("frontend.active_profile_preference", err, { profileId }));
+  }
+
   useEffect(() => {
     let active = true;
 
@@ -1187,6 +1213,7 @@ function DashboardApp() {
     const profileGroupId = careProfiles.find((profile) => profile.id === profileId)?.group_id || activeGroupId;
     trackEvent("frontend.profile_switch", { profileId, groupId: profileGroupId });
     setActiveProfileId(profileId);
+    persistActiveProfilePreference(profileId);
     if (profileGroupId) {
       setActiveGroupId(profileGroupId);
       window.localStorage.setItem("care_wedo_active_group_id", String(profileGroupId));
@@ -1210,6 +1237,7 @@ function DashboardApp() {
     window.localStorage.setItem("care_wedo_active_group_id", String(groupId));
     if (nextProfileId) {
       window.localStorage.setItem("care_wedo_active_profile_id", String(nextProfileId));
+      persistActiveProfilePreference(nextProfileId);
     } else {
       window.localStorage.removeItem("care_wedo_active_profile_id");
     }
@@ -1299,8 +1327,10 @@ function DashboardApp() {
 
           <ProfileSwitcher
             profiles={careProfiles}
+            groups={groups}
             activeProfileId={activeProfileId}
             onChange={handleProfileChange}
+            onReorder={handleProfileOrderChange}
           />
 
           <nav className="section-nav">
@@ -1631,7 +1661,65 @@ function ProfileEditModal({ profile, onClose, onSave, canPersist }) {
 }
 
 
-function ProfileSwitcher({ profiles, activeProfileId, onChange }) {
+function profileSortValue(profile = {}) {
+  const order = Number(profile.sort_order);
+  return Number.isFinite(order) ? order : 0;
+}
+
+function sortProfilesForSwitcher(profiles = []) {
+  return [...profiles].sort((a, b) => (
+    profileSortValue(a) - profileSortValue(b)
+    || Number(b.is_default === true) - Number(a.is_default === true)
+    || String(a.created_at || "").localeCompare(String(b.created_at || ""))
+    || String(a.display_name || "").localeCompare(String(b.display_name || ""), "zh-Hant")
+  ));
+}
+
+function moveProfileId(profileIds, fromId, toId) {
+  const next = profileIds.map(Number);
+  const fromIndex = next.indexOf(Number(fromId));
+  const toIndex = next.indexOf(Number(toId));
+  if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return next;
+  const [moved] = next.splice(fromIndex, 1);
+  next.splice(toIndex, 0, moved);
+  return next;
+}
+
+function groupProfilesForSwitcher(profiles = [], groups = []) {
+  const profilesByGroupId = new Map();
+  sortProfilesForSwitcher(profiles).forEach((profile) => {
+    const key = profile.group_id || "ungrouped";
+    if (!profilesByGroupId.has(key)) profilesByGroupId.set(key, []);
+    profilesByGroupId.get(key).push(profile);
+  });
+
+  const knownSections = groups
+    .filter((group) => profilesByGroupId.has(group.id))
+    .map((group) => ({
+      id: group.id,
+      name: group.name || "家庭群組",
+      profiles: profilesByGroupId.get(group.id),
+    }));
+
+  const knownGroupIds = new Set(groups.map((group) => group.id));
+  const extraSections = Array.from(profilesByGroupId.entries())
+    .filter(([groupId]) => groupId === "ungrouped" || !knownGroupIds.has(groupId))
+    .map(([groupId, groupProfiles]) => ({
+      id: groupId,
+      name: groupId === "ungrouped" ? "未分組" : "家庭群組",
+      profiles: groupProfiles,
+    }));
+
+  return [...knownSections, ...extraSections];
+}
+
+function ProfileSwitcher({ profiles, groups = [], activeProfileId, onChange, onReorder }) {
+  const [dragState, setDragState] = useState(null);
+  const longPressTimerRef = useRef(null);
+  const pointerDragRef = useRef(null);
+  const suppressClickRef = useRef(false);
+  const sections = useMemo(() => groupProfilesForSwitcher(profiles, groups), [profiles, groups]);
+
   if (!profiles.length) {
     return (
       <div className="profile-switcher empty">
@@ -1642,19 +1730,108 @@ function ProfileSwitcher({ profiles, activeProfileId, onChange }) {
     );
   }
 
+  function clearLongPressTimer() {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  }
+
+  function requestReorder(groupId, fromId, toId) {
+    if (!fromId || !toId || Number(fromId) === Number(toId)) return;
+    const section = sections.find((item) => String(item.id) === String(groupId));
+    if (!section) return;
+    const nextIds = moveProfileId(section.profiles.map((profile) => profile.id), fromId, toId);
+    onReorder?.(section.id, nextIds);
+  }
+
+  function handlePointerDown(event, profile) {
+    if (event.pointerType === "mouse") return;
+    clearLongPressTimer();
+    longPressTimerRef.current = setTimeout(() => {
+      pointerDragRef.current = { profileId: profile.id, groupId: profile.group_id || "ungrouped", targetId: profile.id };
+      suppressClickRef.current = true;
+      setDragState(pointerDragRef.current);
+    }, 420);
+  }
+
+  function handlePointerMove(event) {
+    if (!pointerDragRef.current) return;
+    event.preventDefault();
+    const element = document.elementFromPoint(event.clientX, event.clientY);
+    const target = element?.closest?.("[data-profile-id]");
+    if (!target || String(target.dataset.groupId) !== String(pointerDragRef.current.groupId)) return;
+    pointerDragRef.current = {
+      ...pointerDragRef.current,
+      targetId: Number(target.dataset.profileId),
+    };
+    setDragState(pointerDragRef.current);
+  }
+
+  function handlePointerEnd() {
+    clearLongPressTimer();
+    const currentDrag = pointerDragRef.current;
+    pointerDragRef.current = null;
+    if (currentDrag) {
+      requestReorder(currentDrag.groupId, currentDrag.profileId, currentDrag.targetId);
+      setDragState(null);
+      window.setTimeout(() => {
+        suppressClickRef.current = false;
+      }, 0);
+    }
+  }
+
   return (
     <div className="profile-switcher">
       <p className="panel-eyebrow">正在看的資料</p>
       <div className="profile-options" role="listbox" aria-label="切換照護對象">
-        {profiles.map((profile) => (
-          <button
-            key={profile.id}
-            type="button"
-            className={profile.id === activeProfileId ? "profile-option active" : "profile-option"}
-            onClick={() => onChange(profile.id)}
-          >
-            {profile.display_name}
-          </button>
+        {sections.map((section) => (
+          <section key={section.id} className="profile-group-section">
+            <p className="profile-group-title">{section.name}</p>
+            {section.profiles.map((profile) => {
+              const isActive = profile.id === activeProfileId;
+              const isDragging = dragState?.profileId === profile.id;
+              const isDropTarget = dragState?.targetId === profile.id && !isDragging;
+              return (
+                <button
+                  key={profile.id}
+                  type="button"
+                  draggable
+                  data-profile-id={profile.id}
+                  data-group-id={profile.group_id || "ungrouped"}
+                  className={[
+                    "profile-option",
+                    isActive ? "active" : "",
+                    isDragging ? "is-dragging" : "",
+                    isDropTarget ? "is-drop-target" : "",
+                  ].filter(Boolean).join(" ")}
+                  onClick={() => {
+                    if (suppressClickRef.current) return;
+                    onChange(profile.id);
+                  }}
+                  onDragStart={(event) => {
+                    event.dataTransfer.effectAllowed = "move";
+                    event.dataTransfer.setData("text/plain", String(profile.id));
+                    setDragState({ profileId: profile.id, groupId: profile.group_id || "ungrouped", targetId: profile.id });
+                  }}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    requestReorder(profile.group_id || "ungrouped", dragState?.profileId || event.dataTransfer.getData("text/plain"), profile.id);
+                    setDragState(null);
+                  }}
+                  onDragEnd={() => setDragState(null)}
+                  onPointerDown={(event) => handlePointerDown(event, profile)}
+                  onPointerMove={handlePointerMove}
+                  onPointerCancel={handlePointerEnd}
+                  onPointerUp={handlePointerEnd}
+                >
+                  <span className="profile-option-name">{profile.display_name}</span>
+                  <span className="profile-drag-handle" aria-hidden="true">☰</span>
+                </button>
+              );
+            })}
+          </section>
         ))}
       </div>
     </div>

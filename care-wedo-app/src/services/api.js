@@ -392,3 +392,39 @@ export async function updateProfile(profileId, updates, { idToken }) {
   }
   return response.json();
 }
+
+export async function updateProfileOrder(profileIds, { idToken }) {
+  const headers = { "Content-Type": "application/json" };
+  if (idToken) {
+    headers.Authorization = `Bearer ${idToken}`;
+  }
+
+  const response = await fetch(`${API_BASE}/profiles/order`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ profile_ids: profileIds }),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(async () => ({ error: await response.text() }));
+    throw new Error(error.error || "無法更新照護對象排序");
+  }
+  return response.json();
+}
+
+export async function updateActiveProfilePreference(profileId, { idToken }) {
+  const headers = { "Content-Type": "application/json" };
+  if (idToken) {
+    headers.Authorization = `Bearer ${idToken}`;
+  }
+
+  const response = await fetch(`${API_BASE}/me/active-profile`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ profile_id: profileId }),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(async () => ({ error: await response.text() }));
+    throw createApiError(error.error || "無法更新目前照護對象", response.status);
+  }
+  return response.json();
+}

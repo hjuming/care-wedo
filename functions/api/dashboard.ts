@@ -9,6 +9,7 @@ import {
   getGroupOcrUsage,
   getGroupPlan,
   getOrCreateDefaultUser,
+  getUserActiveProfileId,
   getUserGroups,
   serializeCareProfile,
   serializeAppointment,
@@ -113,15 +114,23 @@ function parseGroupId(request: Request): number | null {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
-// Prefer is_default first (getAccessibleProfiles already sorts this way).
 // requestedProfileId must belong to the accessible profiles list.
-function chooseProfile(profiles: CareProfileRow[], requestedProfileId: number | null, requestedGroupId: number | null): CareProfileRow | null {
+function chooseProfile(
+  profiles: CareProfileRow[],
+  requestedProfileId: number | null,
+  requestedGroupId: number | null,
+  preferredProfileId: number | null,
+): CareProfileRow | null {
   if (requestedProfileId) {
     const found = profiles.find((p) => p.id === requestedProfileId);
     if (found) return found;
   }
   if (requestedGroupId) {
     return profiles.find((p) => p.group_id === requestedGroupId) || null;
+  }
+  if (preferredProfileId) {
+    const found = profiles.find((p) => p.id === preferredProfileId);
+    if (found) return found;
   }
   return profiles[0] || null;
 }
@@ -162,9 +171,31 @@ async function fetchDashboardMembers(env: Env, groupId: number | null, currentUs
 
 async function fetchAppointments(env: Env, groupId: number | null, profileId: number | null): Promise<AppointmentRow[]> {
   if (!groupId) return [];
-  const profileScope = profileId ? `&or=(profile_id.eq.${profileId},profile_id.is.null)` : "";
-  const path = `appointments?group_id=eq.${groupId}&status=neq.deleted${profileScope}&select=*&order=date.asc.nullslast,created_at.desc`;
-  return supabaseFetch<AppointmentRow[]>(env, path);
+  if (!profileId) {
+    return supabaseFetch<AppointmentRow[]>(
+      env,
+      `appointments?group_id=eq.${groupId}&status=neq.deleted&select=*&order=date.asc.nullslast,created_at.desc`,
+    );
+  }
+
+  const [profileAppointments, groupFamilyNotes] = await Promise.all([
+    supabaseFetch<AppointmentRow[]>(
+      env,
+      `appointments?group_id=eq.${groupId}&profile_id=eq.${profileId}&status=neq.deleted&select=*&order=date.asc.nullslast,created_at.desc`,
+    ),
+    supabaseFetch<AppointmentRow[]>(
+      env,
+      `appointments?group_id=eq.${groupId}&profile_id=is.null&type=eq.family_note&status=neq.deleted&select=*&order=created_at.desc`,
+    ),
+  ]);
+
+  return [...profileAppointments, ...groupFamilyNotes].sort((a, b) => {
+    const aDate = a.date || "9999-12-31";
+    const bDate = b.date || "9999-12-31";
+    const byDate = aDate.localeCompare(bDate);
+    if (byDate !== 0) return byDate;
+    return String(b.created_at || "").localeCompare(String(a.created_at || ""));
+  });
 }
 
 async function fetchMedications(env: Env, groupId: number | null, profileId: number | null): Promise<MedicationRow[]> {
@@ -220,9 +251,16 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     // Step 2: Resolve profiles
     const groups = await getUserGroups(env, userId);
     const fallbackGroupId = memberships[0]?.group_id ?? null;
-    const activeRequestedGroupId = groups.some((group) => group.id === requestedGroupId) ? requestedGroupId : fallbackGroupId;
+    const requestedGroupIsValid = groups.some((group) => group.id === requestedGroupId);
+    const activeRequestedGroupId = requestedGroupIsValid ? requestedGroupId : fallbackGroupId;
     const profiles = await getAccessibleProfiles(env, userId);
-    const selectedProfile = chooseProfile(profiles, requestedProfileId, activeRequestedGroupId);
+    const preferredProfileId = await getUserActiveProfileId(env, userId);
+    const selectedProfile = chooseProfile(
+      profiles,
+      requestedProfileId,
+      requestedProfileId ? null : requestedGroupIsValid ? requestedGroupId : null,
+      preferredProfileId,
+    );
 
     if (!selectedProfile) {
       // User has a group but no care recipient yet — still read group plan for accurate limits

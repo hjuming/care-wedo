@@ -36,6 +36,7 @@ export type AppointmentRow = {
   notes: string | null;
   reminder_text: string | null;
   status: string | null;
+  created_at?: string | null;
 };
 
 export type MedicationRow = {
@@ -101,6 +102,71 @@ export type UserFeatureFlagRow = {
   updated_at: string;
 };
 
+const ACTIVE_PROFILE_FLAG_PREFIX = "active_profile:";
+const PROFILE_ORDER_FLAG_PREFIX = "profile_order:";
+
+function parseNumericFlagSuffix(featureKey: string, prefix: string): number | null {
+  if (!featureKey.startsWith(prefix)) return null;
+  const value = Number(featureKey.slice(prefix.length));
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function parseProfileOrderFlag(featureKey: string): { profileId: number; order: number } | null {
+  if (!featureKey.startsWith(PROFILE_ORDER_FLAG_PREFIX)) return null;
+  const [, groupId, order, profileId] = featureKey.split(":");
+  const parsedGroupId = Number(groupId);
+  const parsedOrder = Number(order);
+  const parsedProfileId = Number(profileId);
+  if (!Number.isFinite(parsedGroupId) || !Number.isFinite(parsedOrder) || !Number.isFinite(parsedProfileId)) return null;
+  return { profileId: parsedProfileId, order: parsedOrder };
+}
+
+async function getActiveProfileIdFromFlags(env: Env, userId: number): Promise<number | null> {
+  const rows = await supabaseFetch<Array<{ feature_key: string }>>(
+    env,
+    `user_feature_flags?user_id=eq.${userId}&feature_key=like.${ACTIVE_PROFILE_FLAG_PREFIX}*&enabled=eq.true&select=feature_key,created_at&order=created_at.desc&limit=1`,
+  );
+  return rows[0]?.feature_key ? parseNumericFlagSuffix(rows[0].feature_key, ACTIVE_PROFILE_FLAG_PREFIX) : null;
+}
+
+async function setActiveProfileIdInFlags(env: Env, userId: number, profileId: number): Promise<void> {
+  await supabaseFetch(env, `user_feature_flags?user_id=eq.${userId}&feature_key=like.${ACTIVE_PROFILE_FLAG_PREFIX}*`, {
+    method: "DELETE",
+  });
+  await supabaseFetch(env, "user_feature_flags", {
+    method: "POST",
+    headers: { Prefer: "resolution=merge-duplicates" },
+    body: JSON.stringify({
+      user_id: userId,
+      feature_key: `${ACTIVE_PROFILE_FLAG_PREFIX}${profileId}`,
+      enabled: true,
+    }),
+  });
+}
+
+async function getProfileOrderMapFromFlags(env: Env, userId: number): Promise<Map<number, number>> {
+  const rows = await supabaseFetch<Array<{ feature_key: string }>>(
+    env,
+    `user_feature_flags?user_id=eq.${userId}&feature_key=like.${PROFILE_ORDER_FLAG_PREFIX}*&enabled=eq.true&select=feature_key`,
+  );
+  const orderMap = new Map<number, number>();
+  rows.forEach((row) => {
+    const parsed = parseProfileOrderFlag(row.feature_key);
+    if (parsed) orderMap.set(parsed.profileId, parsed.order);
+  });
+  return orderMap;
+}
+
+function sortProfilesWithOrderMap(profiles: CareProfileRow[], orderMap: Map<number, number>): CareProfileRow[] {
+  if (orderMap.size === 0) return profiles;
+  return [...profiles].sort((a, b) => (
+    Number(a.group_id || 0) - Number(b.group_id || 0)
+    || (orderMap.get(a.id) ?? a.sort_order ?? 0) - (orderMap.get(b.id) ?? b.sort_order ?? 0)
+    || Number(b.is_default === true) - Number(a.is_default === true)
+    || String(a.created_at || "").localeCompare(String(b.created_at || ""))
+  ));
+}
+
 export type CareProfileRow = {
   id: number;
   group_id: number | null;
@@ -117,6 +183,7 @@ export type CareProfileRow = {
   main_department: string | null;
   notes: string | null;
   is_default: boolean;
+  sort_order?: number | null;
   created_at: string;
 };
 
@@ -260,6 +327,42 @@ export async function getOrCreateDefaultUser(
   return created[0].id;
 }
 
+export async function getUserActiveProfileId(env: Env, userId: number): Promise<number | null> {
+  try {
+    const rows = await supabaseFetch<Array<{ active_profile_id: number | null }>>(
+      env,
+      `users?id=eq.${userId}&select=active_profile_id&limit=1`,
+    );
+    return rows[0]?.active_profile_id || null;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (!/users\.active_profile_id|active_profile_id.*column|Could not find.*active_profile_id/i.test(message)) {
+      throw error;
+    }
+    return getActiveProfileIdFromFlags(env, userId);
+  }
+}
+
+export async function setUserActiveProfileId(env: Env, userId: number, profileId: number | null): Promise<boolean> {
+  try {
+    await supabaseFetch(env, `users?id=eq.${userId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ active_profile_id: profileId }),
+    });
+    return true;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (!/users\.active_profile_id|active_profile_id.*column|Could not find.*active_profile_id/i.test(message)) {
+      throw error;
+    }
+    if (profileId) {
+      await setActiveProfileIdInFlags(env, userId, profileId);
+      return true;
+    }
+    return false;
+  }
+}
+
 export async function getUserGroups(env: Env, userId: number): Promise<GroupRow[]> {
   const memberships = await supabaseFetch<UserFamilyGroupRow[]>(
     env,
@@ -289,10 +392,41 @@ export async function getAccessibleProfiles(env: Env, userId: number): Promise<C
   if (memberships.length === 0) return [];
 
   const groupIds = memberships.map((membership) => membership.group_id);
-  return supabaseFetch<CareProfileRow[]>(
-    env,
-    `care_profiles?group_id=in.(${groupIds.join(",")})&select=*&order=is_default.desc,created_at.asc`,
-  );
+  const path = `care_profiles?group_id=in.(${groupIds.join(",")})&select=*&order=group_id.asc,sort_order.asc,is_default.desc,created_at.asc`;
+  try {
+    const profiles = await supabaseFetch<CareProfileRow[]>(env, path);
+    return sortProfilesWithOrderMap(profiles, await getProfileOrderMapFromFlags(env, userId));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (!/care_profiles\.sort_order|sort_order.*column|Could not find.*sort_order/i.test(message)) throw error;
+    const profiles = await supabaseFetch<CareProfileRow[]>(
+      env,
+      `care_profiles?group_id=in.(${groupIds.join(",")})&select=*&order=group_id.asc,is_default.desc,created_at.asc`,
+    );
+    return sortProfilesWithOrderMap(profiles, await getProfileOrderMapFromFlags(env, userId));
+  }
+}
+
+export async function setProfileOrderInFlags(
+  env: Env,
+  userId: number,
+  groupId: number | null,
+  profileIds: number[],
+): Promise<void> {
+  if (!groupId) return;
+  await supabaseFetch(env, `user_feature_flags?user_id=eq.${userId}&feature_key=like.${PROFILE_ORDER_FLAG_PREFIX}${groupId}:*`, {
+    method: "DELETE",
+  });
+  if (profileIds.length === 0) return;
+  await supabaseFetch(env, "user_feature_flags", {
+    method: "POST",
+    headers: { Prefer: "resolution=merge-duplicates" },
+    body: JSON.stringify(profileIds.map((profileId, index) => ({
+      user_id: userId,
+      feature_key: `${PROFILE_ORDER_FLAG_PREFIX}${groupId}:${(index + 1) * 10}:${profileId}`,
+      enabled: true,
+    }))),
+  });
 }
 
 export async function createCareProfile(
@@ -327,10 +461,20 @@ export async function ensureGroupDefaultProfile(
   userId: number,
   displayName = "親愛的家人",
 ): Promise<CareProfileRow> {
-  const existing = await supabaseFetch<CareProfileRow[]>(
-    env,
-    `care_profiles?group_id=eq.${groupId}&select=*&order=is_default.desc,created_at.asc&limit=1`,
-  );
+  let existing: CareProfileRow[];
+  try {
+    existing = await supabaseFetch<CareProfileRow[]>(
+      env,
+      `care_profiles?group_id=eq.${groupId}&select=*&order=sort_order.asc,is_default.desc,created_at.asc&limit=1`,
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (!/care_profiles\.sort_order|sort_order.*column|Could not find.*sort_order/i.test(message)) throw error;
+    existing = await supabaseFetch<CareProfileRow[]>(
+      env,
+      `care_profiles?group_id=eq.${groupId}&select=*&order=is_default.desc,created_at.asc&limit=1`,
+    );
+  }
 
   if (existing[0]) return existing[0];
 
@@ -577,6 +721,7 @@ export function serializeCareProfile(row: CareProfileRow) {
     main_department: row.main_department,
     notes: row.notes,
     is_default: row.is_default,
+    sort_order: row.sort_order || 0,
   };
 }
 

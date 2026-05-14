@@ -6,6 +6,7 @@ create table if not exists public.users (
   email text,
   plan text not null default 'free',
   plan_expires_at timestamptz,
+  active_profile_id bigint,
   created_at timestamptz not null default now()
 );
 
@@ -14,7 +15,8 @@ alter table public.users
   add column if not exists plan text not null default 'free',
   add column if not exists plan_expires_at timestamptz,
   add column if not exists picture_url text,
-  add column if not exists email text;
+  add column if not exists email text,
+  add column if not exists active_profile_id bigint;
 
 create table if not exists public.user_feature_flags (
   id          bigserial primary key,
@@ -121,6 +123,7 @@ create table if not exists public.care_profiles (
   main_department text,
   notes text,
   is_default boolean not null default false,
+  sort_order integer not null default 0,
   created_at timestamptz not null default now()
 );
 
@@ -128,7 +131,8 @@ alter table public.care_profiles
   add column if not exists birth_date date,
   add column if not exists emergency_phone text,
   add column if not exists email text,
-  add column if not exists gender text;
+  add column if not exists gender text,
+  add column if not exists sort_order integer not null default 0;
 
 create table if not exists public.user_family_groups (
   user_id bigint not null references public.users(id) on delete cascade,
@@ -246,6 +250,9 @@ create index if not exists medication_logs_medication_date_idx
 
 create index if not exists care_profiles_group_id_idx
   on public.care_profiles (group_id, is_default desc, created_at asc);
+
+create index if not exists care_profiles_group_order_idx
+  on public.care_profiles (group_id, sort_order, created_at asc);
 
 -- Migration Phase 1: add source_document_id / created_by_user_id
 alter table public.appointments

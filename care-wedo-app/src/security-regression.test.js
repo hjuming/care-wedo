@@ -69,7 +69,8 @@ test("Family notes are stored as group-scoped reminders", () => {
 
 test("Dashboard fetches group-level reminders with the active profile", () => {
   const dashboard = readProjectFile("functions/api/dashboard.ts");
-  assert.match(dashboard, /profile_id\.is\.null/);
+  assert.match(dashboard, /profile_id=is\.null/);
+  assert.match(dashboard, /type=eq\.family_note/);
   assert.match(dashboard, /group_id=eq\.\$\{groupId\}/);
 });
 
@@ -78,6 +79,7 @@ test("Dashboard honors an explicitly selected profile over stale group state", (
   const chooseProfile = dashboard.slice(dashboard.indexOf("function chooseProfile"), dashboard.indexOf("type DashboardMemberRow"));
   assert.match(chooseProfile, /if \(requestedProfileId\)/);
   assert.match(chooseProfile, /if \(found\) return found/);
+  assert.match(chooseProfile, /if \(preferredProfileId\)/);
   assert.doesNotMatch(chooseProfile, /found && \(!requestedGroupId \|\| found\.group_id === requestedGroupId\)/);
 });
 
