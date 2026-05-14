@@ -23,11 +23,47 @@ function openDashboardRoute() {
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
 
-function clearCareWedoLocalSession() {
+export function clearCareWedoLocalSession() {
   Object.keys(window.localStorage)
-    .filter((key) => key.startsWith("care_wedo_"))
+    .filter((key) => {
+      const normalized = key.toLowerCase();
+      return key.startsWith("care_wedo_") || normalized.includes("liff") || normalized.includes("line");
+    })
     .forEach((key) => window.localStorage.removeItem(key));
-  window.sessionStorage?.clear();
+
+  Object.keys(window.sessionStorage || {})
+    .filter((key) => {
+      const normalized = key.toLowerCase();
+      return key.startsWith("care_wedo_") || normalized.includes("liff") || normalized.includes("line");
+    })
+    .forEach((key) => window.sessionStorage.removeItem(key));
+}
+
+export async function resetCareWedoSessionAndReturnHome() {
+  clearCareWedoLocalSession();
+
+  try {
+    const cacheNames = await window.caches?.keys?.();
+    await Promise.all(
+      (cacheNames || [])
+        .filter((name) => name.toLowerCase().includes("care-wedo"))
+        .map((name) => window.caches.delete(name)),
+    );
+  } catch {
+    // Cache cleanup is best-effort; local auth state cleanup is the important part.
+  }
+
+  if (LIFF_ID) {
+    try {
+      const { default: liff } = await import("@line/liff");
+      await liff.init({ liffId: LIFF_ID });
+      if (liff.isLoggedIn()) liff.logout();
+    } catch {
+      // ignore
+    }
+  }
+
+  window.location.replace("/");
 }
 
 /** 初始化 LIFF 並取得身分。在 DashboardApp boot() 中呼叫。 */
@@ -120,19 +156,5 @@ export async function loginWithLine() {
 
 /** 登出並導回未登入首頁 */
 export async function logoutLineIdentity() {
-  clearCareWedoLocalSession();
-  if (!LIFF_ID) {
-    window.location.replace("/");
-    return;
-  }
-  try {
-    const { default: liff } = await import("@line/liff");
-    await liff.init({ liffId: LIFF_ID });
-    if (liff.isLoggedIn()) {
-      liff.logout();
-    }
-  } catch {
-    // ignore
-  }
-  window.location.replace("/");
+  await resetCareWedoSessionAndReturnHome();
 }

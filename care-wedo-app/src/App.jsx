@@ -7,7 +7,7 @@ import MobileBottomNav from "./components/MobileBottomNav";
 import OcrResult from "./components/OcrResult";
 import { patientData, medicines, timeline as initialTimeline } from "./data/patient";
 import { confirmOcrDocument, createAppointment, fetchDashboard, joinGroup, markMedicationSlotStatus, ocrAnalyze, patchAppointment, patchMedication, updateProfile } from "./services/api";
-import { initLineIdentity, loginWithLine, logoutLineIdentity } from "./services/liff";
+import { initLineIdentity, loginWithLine, logoutLineIdentity, resetCareWedoSessionAndReturnHome } from "./services/liff";
 import { trackError, trackEvent } from "./services/telemetry";
 import { buildTodayTasks, formatTaipeiTodayLabel, groupMedicationsBySchedule, hasSameDayTasks } from "./services/todayTasks";
 import { buildSearchSuggestions, matchSearch } from "./services/search";
@@ -718,9 +718,9 @@ function DashboardApp() {
         return data;
       }
 
-      // Production: demo payload is only valid in dev. Redirect if received unexpectedly.
+      // Production: demo payload is only valid in dev. Reset stale auth state if received unexpectedly.
       if (IS_PROD && data?.mode === "demo") {
-        window.location.replace("/login");
+        await resetCareWedoSessionAndReturnHome();
         return null;
       }
 
@@ -754,9 +754,10 @@ function DashboardApp() {
       if (requestSeq !== dashboardRequestSeqRef.current) {
         return null;
       }
-      // AUTH_REQUIRED or expired token in production → redirect to login
-      if (IS_PROD && (err.code === "AUTH_REQUIRED" || err.message?.includes("idToken"))) {
-        window.location.replace("/login");
+      // AUTH_REQUIRED or expired token in production → clear stale auth state and return home.
+      if (IS_PROD && err.code === "AUTH_REQUIRED") {
+        trackError("frontend.dashboard_auth_reset", err, { profileId });
+        await resetCareWedoSessionAndReturnHome();
         return null;
       }
       trackError("frontend.dashboard", err, { profileId });
@@ -794,18 +795,18 @@ function DashboardApp() {
         const lineIdentity = await initLineIdentity();
         if (!active || lineIdentity.status === "redirecting") return;
 
-        // 登入閘門：unauthenticated 一律導向 /login
+        // 登入閘門：unauthenticated 一律清掉舊狀態並回首頁
         if (lineIdentity.status === "unauthenticated") {
           if (!active) return;
           setIdentity(lineIdentity);
-          window.location.replace("/login");
+          await resetCareWedoSessionAndReturnHome();
           return;
         }
 
         // Production: demo identity must never be treated as valid
         if (IS_PROD && lineIdentity.status === "demo") {
           if (!active) return;
-          window.location.replace("/login");
+          await resetCareWedoSessionAndReturnHome();
           return;
         }
 
@@ -828,7 +829,7 @@ function DashboardApp() {
         await loadDashboard(lineIdentity, Number.isFinite(preferredProfileId) && preferredProfileId > 0 ? preferredProfileId : null);
       } catch (err) {
         if (!active) return;
-        // 正式環境發生錯誤代表無法驗證身分，導向 /login
+        // 正式環境發生錯誤代表無法驗證身分，清掉舊狀態並回首頁
         if (import.meta.env.PROD) {
           setIdentity({
             status: "unauthenticated",
@@ -836,7 +837,7 @@ function DashboardApp() {
             profile: null,
             message: err instanceof Error ? err.message : "登入失敗，請重新嘗試。",
           });
-          window.location.replace("/login");
+          await resetCareWedoSessionAndReturnHome();
           return;
         }
         // 本機開發環境降級為 demo 模式

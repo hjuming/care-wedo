@@ -21,6 +21,10 @@ export function buildDashboardRequest(apiBase = API_BASE, identity = {}) {
   };
 }
 
+export function isAuthFailureMessage(message = "") {
+  return /請先登入|登入失敗|unauthorized|auth_required|id[ _-]?token|token|oauth|line/i.test(String(message || ""));
+}
+
 /**
  * 上傳圖片進行 OCR 解析
  * @param {File[]} files - 圖片檔案陣列
@@ -70,7 +74,7 @@ export async function fetchDashboard(identity) {
   const res = await fetch(url, init);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    if (res.status === 401) {
+    if (res.status === 401 || isAuthFailureMessage(err.error)) {
       const authError = new Error(err.error || "請先登入");
       authError.code = "AUTH_REQUIRED";
       throw authError;

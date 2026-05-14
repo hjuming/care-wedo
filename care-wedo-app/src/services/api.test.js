@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildDashboardRequest } from "./api.js";
+import { buildDashboardRequest, isAuthFailureMessage } from "./api.js";
 
 test("buildDashboardRequest returns the dashboard endpoint without identity data in demo mode", () => {
   assert.deepEqual(buildDashboardRequest("/api"), {
@@ -29,4 +29,11 @@ test("buildDashboardRequest can scope dashboard data to one care profile", () =>
       },
     },
   });
+});
+
+test("isAuthFailureMessage detects stale login and token failures", () => {
+  assert.equal(isAuthFailureMessage("LINE token verify failed."), true);
+  assert.equal(isAuthFailureMessage("idToken expired"), true);
+  assert.equal(isAuthFailureMessage("請先登入"), true);
+  assert.equal(isAuthFailureMessage("Supabase request failed"), false);
 });
