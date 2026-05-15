@@ -102,3 +102,12 @@ test("LINE elder-friendly copy stays short and uses tap labels", () => {
   assert.doesNotMatch(callback, /處方箋或預約單照片/);
   assert.doesNotMatch(callback, /用來：|注意：|要記得的時間|藥的提醒/);
 });
+
+test("LINE upload summary counts only successful family pushes", () => {
+  const callback = readProjectFile("functions/callback.ts");
+
+  assert.match(callback, /return false/);
+  assert.match(callback, /return true/);
+  assert.match(callback, /const ok = await pushText\(env,\s*lineId,\s*text\)/);
+  assert.match(callback, /line\.upload_summary_recipient_unreachable/);
+});

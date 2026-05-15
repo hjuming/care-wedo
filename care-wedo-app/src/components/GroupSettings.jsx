@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { createCareProfile, fetchGroups, regenerateInvite, removeMember, updateMembership } from "../services/api";
 import { resetCareWedoSessionAndReturnHome } from "../services/liff";
 
+const CARE_WEDO_LINE_URL = "https://lin.ee/xzbyyvf";
+
 export default function GroupSettings({ identity, onGroupChange, onProfileCreated }) {
   const [data, setData] = useState({ groups: [], care_profiles: [], user_memberships: [] });
   const [selectedGroupId, setSelectedGroupId] = useState(null);
@@ -42,7 +44,7 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
 
   function buildInviteMessage(group, code) {
     const inviteUrl = `${window.location.origin}/login?invite_code=${encodeURIComponent(code)}`;
-    return `邀請你加入 Care WEDO「${group.name || "家庭群組"}」，一起照顧家人。\n\n邀請碼：${code}\n加入網址：${inviteUrl}\n\n打開網址後，用 LINE 登入並完成基本資料，就能同步看今日照護、未來行程與提醒。`;
+    return `邀請你加入 Care WEDO「${group.name || "家庭群組"}」，一起照顧家人。\n\n邀請碼：${code}\n加入網址：${inviteUrl}\n\n打開網址後，用 LINE 登入並完成基本資料，就能同步看今日照護、未來行程與提醒。\n\n要收到家人上傳摘要與每日提醒，也請加入 LINE 照護小管家：\n${CARE_WEDO_LINE_URL}`;
   }
 
   function copyInviteCode(group) {
@@ -243,6 +245,7 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
                     <strong>{group.invite_code}</strong>
                   </div>
                   <p className="helper-copy">給家人貼到 LINE。家人點網址登入後，會自動加入這個家庭群組。</p>
+                  <p className="helper-copy">要收到上傳摘要與每日提醒，家人也需要加入 LINE 照護小管家。</p>
                   <div className="invite-code-row">
                     <button
                       type="button"
@@ -254,6 +257,9 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
                     <button type="button" className="btn-secondary-sm" onClick={() => copyInviteCodeOnly(group.invite_code)}>
                       只複製邀請碼
                     </button>
+                    <a className="btn-secondary-sm invite-line-link" href={CARE_WEDO_LINE_URL} target="_blank" rel="noopener noreferrer">
+                      加入 LINE 小管家
+                    </a>
                     {isAdmin && (
                       <button
                         type="button"

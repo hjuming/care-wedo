@@ -239,7 +239,11 @@ test("Family invite card keeps copy actions elder-friendly on mobile", () => {
   assert.match(component, /invite-copy-head/);
   assert.match(component, /複製完整邀請/);
   assert.match(component, /只複製邀請碼/);
+  assert.match(component, /CARE_WEDO_LINE_URL/);
+  assert.match(component, /加入 LINE 小管家/);
+  assert.match(component, /要收到家人上傳摘要與每日提醒/);
   assert.match(css, /\.invite-copy-head strong/);
+  assert.match(css, /\.invite-line-link/);
   assert.match(css, /\.invite-code-row\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/s);
   assert.match(css, /@media \(max-width:\s*760px\)[\s\S]*\.invite-code-row\s*\{[\s\S]*grid-template-columns:\s*1fr/);
 });

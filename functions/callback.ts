@@ -123,7 +123,9 @@ async function pushText(env: Env, userId: string, text: string, quickReply?: any
       status: response.status,
       detail,
     });
+    return false;
   }
+  return true;
 }
 
 async function fetchLineContent(env: Env, messageId: string): Promise<string> {
@@ -474,8 +476,15 @@ async function notifyUploadSummaryRecipients(env: Env, groupId: number | null, u
   for (const row of rows) {
     const lineId = row.users?.line_user_id;
     if (!lineId || lineId === "web-mvp" || lineId === uploaderLineUserId) continue;
-    await pushText(env, lineId, text);
-    sent++;
+    const ok = await pushText(env, lineId, text);
+    if (ok) {
+      sent++;
+    } else {
+      logEvent("line.upload_summary_recipient_unreachable", {
+        group_id: groupId,
+        line_user_suffix: lineId.slice(-4),
+      });
+    }
   }
   return sent;
 }

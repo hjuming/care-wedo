@@ -4600,6 +4600,14 @@ button:disabled,
   font-weight: 900;
 }
 
+.invite-line-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  text-decoration: none;
+}
+
 .btn-danger-sm {
   color: var(--danger);
 }
