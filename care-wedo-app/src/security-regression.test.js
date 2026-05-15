@@ -207,15 +207,20 @@ test("Records page defaults to future arrangements and loads history on demand",
   assert.match(recordsView, /matchSearch\(record,\s*searchQuery\)/);
   assert.match(recordsView, /appointmentTimeValue\(a\)\.localeCompare\(appointmentTimeValue\(b\)\)/);
   assert.match(recordsView, /record-summary-button/);
+  assert.match(app, /function buildRecordReminderCopy/);
+  assert.match(recordsView, /buildRecordReminderCopy\(record\)/);
   assert.match(recordsView, /const title = typeLabel\(record\.type\)/);
   assert.match(recordsView, /record-type-chip record-type-icon/);
   assert.match(recordsView, /record-type-chip record-tag/);
+  assert.match(recordsView, /record-status-copy/);
   assert.match(recordsView, /onEditRecord\?\.\(record\)/);
-  assert.match(recordsView, /onDeleteRecord\?\.\(record\)/);
+  assert.doesNotMatch(recordsView, /onDeleteRecord/);
+  assert.doesNotMatch(recordsView, /danger-subtle/);
   assert.match(css, /\.record-mode-switch/);
   assert.match(css, /\.record-summary-button/);
   assert.match(css, /\.record-type-chip/);
   assert.match(css, /\.record-card-actions/);
+  assert.match(css, /\.record-edit-button/);
 });
 
 test("Family invite card keeps copy actions elder-friendly on mobile", () => {

@@ -1668,7 +1668,6 @@ function DashboardApp() {
               searchQuery={searchQuery}
               onUpload={handleUploadClick}
               onEditRecord={handleEditAppointment}
-              onDeleteRecord={handleDeleteAppointment}
             />
           )}
 
@@ -2459,11 +2458,16 @@ function SearchField({ value, onChange, suggestions = [], placeholder = "搜尋"
       />
       {suggestions.length > 0 && (
         <div className="search-suggestions" aria-label="常用搜尋關鍵字">
-          {suggestions.map((keyword) => (
-            <button type="button" key={keyword} onClick={() => onChange(keyword)}>
-              {keyword}
-            </button>
-          ))}
+          {suggestions.map((suggestion) => {
+            const label = typeof suggestion === "string" ? suggestion : suggestion.label;
+            const count = typeof suggestion === "string" ? null : suggestion.count;
+            return (
+              <button type="button" key={label} onClick={() => onChange(label)}>
+                <span className="search-suggestion-label">{label}</span>
+                {count !== null && <span className="search-suggestion-count">（{count}）</span>}
+              </button>
+            );
+          })}
         </div>
       )}
     </div>
@@ -3222,8 +3226,43 @@ function recordDateParts(record = {}) {
   };
 }
 
-function RecordsView({ records, searchQuery, onUpload, onEditRecord, onDeleteRecord }) {
+function buildRecordReminderCopy(record = {}) {
+  const dateParts = recordDateParts(record);
+  const title = typeLabel(record.type);
+  const carePlace = [record.hospital, record.department, record.doctor && `${record.doctor}醫師`].filter(Boolean).join(" ｜ ");
+  const note = record.notes || record.reminder_text;
+  return [
+    "請記得這筆照護提醒：",
+    [dateParts.date, dateParts.weekday, dateParts.time].filter(Boolean).join(" "),
+    title,
+    carePlace,
+    note,
+    "已存入 Care WEDO。",
+  ].filter(Boolean).join("\n");
+}
+
+async function copyText(text) {
+  if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  if (typeof document === "undefined") {
+    throw new Error("Clipboard is not available.");
+  }
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand("copy");
+  document.body.removeChild(textarea);
+}
+
+function RecordsView({ records, searchQuery, onUpload, onEditRecord }) {
   const [mode, setMode] = useState("future");
+  const [copyNotice, setCopyNotice] = useState({ id: null, message: "" });
   const modeLabel = mode === "history" ? "歷史紀錄" : "未來安排";
   const grouped = useMemo(() => {
     const today = todayInTaipei();
@@ -3239,12 +3278,21 @@ function RecordsView({ records, searchQuery, onUpload, onEditRecord, onDeleteRec
     filteredRecords.forEach(record => {
       if (!record.date || typeof record.date !== "string") return;
       // Defensive slice: only if it looks like YYYY-MM-DD
-      const monthStr = record.date.includes("-") ? record.date.slice(0, 7) : "其他日期"; 
+      const monthStr = record.date.includes("-") ? record.date.slice(0, 7) : "其他日期";
       if (!groups[monthStr]) groups[monthStr] = [];
       groups[monthStr].push(record);
     });
     return Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]));
   }, [records, searchQuery, mode]);
+
+  async function handleCopyReminder(record) {
+    try {
+      await copyText(buildRecordReminderCopy(record));
+      setCopyNotice({ id: record.id, message: "已複製提醒文字。" });
+    } catch {
+      setCopyNotice({ id: record.id, message: "複製失敗，請再試一次。" });
+    }
+  }
 
   return (
     <div className="records-timeline-view">
@@ -3275,12 +3323,7 @@ function RecordsView({ records, searchQuery, onUpload, onEditRecord, onDeleteRec
               const note = record.notes || record.reminder_text;
               return (
                 <article key={record.id} className="records-row record-completed records-card">
-                  <button
-                    type="button"
-                    className="record-summary-button"
-                    onClick={() => onEditRecord?.(record)}
-                    aria-label={`編輯 ${title}`}
-                  >
+                  <div className="record-summary-button">
                     <span className="record-date-col">
                       <span className="record-date-year">{dateParts.year}</span>
                       <strong>{dateParts.date}</strong>
@@ -3294,16 +3337,23 @@ function RecordsView({ records, searchQuery, onUpload, onEditRecord, onDeleteRec
                       {carePlace && <span className="record-place-line">{carePlace}</span>}
                       {note && <small>{note}</small>}
                     </div>
-                    <span className={record.status === "completed" ? "record-status-tag is-completed" : "record-status-tag"}>
-                      {record.status === "completed" ? "已完成" : "待提醒"}
-                    </span>
-                  </button>
+                    {record.status === "completed" ? (
+                      <span className="record-status-tag is-completed">已完成</span>
+                    ) : (
+                      <button
+                        type="button"
+                        className="record-status-tag record-status-copy"
+                        onClick={() => handleCopyReminder(record)}
+                        aria-label={`複製 ${title} 提醒文字`}
+                      >
+                        待提醒
+                      </button>
+                    )}
+                  </div>
                   <div className="record-card-actions">
-                    <button type="button" className="secondary-action subtle" onClick={() => onEditRecord?.(record)}>
+                    {copyNotice.id === record.id && <span className="record-copy-notice">{copyNotice.message}</span>}
+                    <button type="button" className="record-edit-button" onClick={() => onEditRecord?.(record)}>
                       編輯
-                    </button>
-                    <button type="button" className="secondary-action subtle danger-subtle" onClick={() => onDeleteRecord?.(record)}>
-                      刪除
                     </button>
                   </div>
                 </article>

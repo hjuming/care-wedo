@@ -71,25 +71,62 @@ function splitSuggestionText(value) {
   return [text];
 }
 
-export function buildSearchSuggestions(items = [], limit = 12) {
+function todayDateString() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+function isFutureSearchItem(item = {}, today = todayDateString()) {
+  if (item.status === "deleted" || item.status === "completed") return false;
+  if (item.active === true && !item.date) return true;
+  return typeof item.date === "string" && item.date >= today;
+}
+
+export function buildSearchSuggestions(items = [], limit = 6, today = todayDateString()) {
   const scores = new Map();
 
   items.forEach((item) => {
+    const isFuture = isFutureSearchItem(item, today);
+    const addScore = (keyword, weight) => {
+      if (!keyword) return;
+      const current = scores.get(keyword) || { label: keyword, totalCount: 0, futureCount: 0, score: 0 };
+      current.totalCount += 1;
+      current.futureCount += isFuture ? 1 : 0;
+      current.score += weight;
+      scores.set(keyword, current);
+    };
+
     if (SEARCH_TYPE_LABELS[item?.type]) {
-      const label = SEARCH_TYPE_LABELS[item.type];
-      scores.set(label, (scores.get(label) || 0) + 3);
+      addScore(SEARCH_TYPE_LABELS[item.type], 3);
     }
 
     SUGGESTION_FIELDS.forEach((field) => {
       splitSuggestionText(item?.[field]).forEach((keyword) => {
         const score = field === "hospital" ? 5 : field === "department" ? 4 : 3;
-        scores.set(keyword, (scores.get(keyword) || 0) + score);
+        addScore(keyword, score);
       });
     });
   });
 
-  return Array.from(scores.entries())
-    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "zh-Hant"))
-    .map(([keyword]) => keyword)
+  const suggestions = Array.from(scores.values());
+  const hasFutureItems = suggestions.some((item) => item.futureCount > 0);
+
+  return suggestions
+    .sort((a, b) => {
+      if (hasFutureItems) {
+        return b.futureCount - a.futureCount
+          || b.totalCount - a.totalCount
+          || b.score - a.score
+          || a.label.localeCompare(b.label, "zh-Hant");
+      }
+      return b.totalCount - a.totalCount
+        || b.score - a.score
+        || a.label.localeCompare(b.label, "zh-Hant");
+    })
+    .map(({ label, futureCount }) => ({ label, count: futureCount }))
     .slice(0, limit);
 }

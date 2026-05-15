@@ -2037,21 +2037,36 @@ input:focus-visible {
 }
 
 .search-suggestions {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 
 .search-suggestions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-height: 36px;
   border: 1px solid rgba(94, 143, 154, 0.26);
   border-radius: 999px;
   background: rgba(221, 235, 237, 0.5);
   color: var(--primary-dark);
   cursor: pointer;
-  padding: 6px 12px;
+  padding: 6px 10px;
   font-size: 14px;
   font-weight: 800;
+  min-width: 0;
+}
+
+.search-suggestion-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-suggestion-count {
+  flex: 0 0 auto;
 }
 
 .search-suggestions button:hover,
@@ -4359,13 +4374,11 @@ button:disabled,
   padding: 18px;
   border-radius: 18px;
   border: 1px solid rgba(94, 143, 154, 0.2);
-  transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
+  box-shadow: 0 14px 34px rgba(72, 55, 33, 0.06);
 }
 
 .record-completed:hover {
   border-color: rgba(94, 143, 154, 0.48);
-  box-shadow: 0 14px 34px rgba(72, 55, 33, 0.08);
-  transform: translateY(-1px);
 }
 
 .records-card {
@@ -4380,12 +4393,9 @@ button:disabled,
   gap: 18px;
   align-items: stretch;
   width: 100%;
-  border: 0;
-  background: transparent;
   color: inherit;
   padding: 0;
   text-align: left;
-  cursor: pointer;
 }
 
 .record-date-col {
@@ -4487,6 +4497,7 @@ button:disabled,
 }
 
 .record-status-tag {
+  border: 0;
   align-self: center;
   justify-self: end;
   color: var(--primary);
@@ -4498,6 +4509,17 @@ button:disabled,
   white-space: nowrap;
 }
 
+.record-status-copy {
+  cursor: pointer;
+}
+
+.record-status-copy:hover,
+.record-status-copy:focus-visible {
+  background: #cce6ea;
+  outline: 2px solid rgba(94, 143, 154, 0.28);
+  outline-offset: 2px;
+}
+
 .record-status-tag.is-completed {
   color: var(--success);
   background: var(--success-transparent);
@@ -4506,14 +4528,33 @@ button:disabled,
 .record-card-actions {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
   gap: 10px;
 }
 
-.record-card-actions .secondary-action {
+.record-copy-notice {
+  color: var(--success);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.record-edit-button {
   width: auto;
-  min-height: 44px;
-  padding: 9px 18px;
-  font-size: 16px;
+  min-height: 38px;
+  border: 1px solid rgba(94, 143, 154, 0.24);
+  border-radius: 999px;
+  background: rgba(221, 235, 237, 0.46);
+  color: var(--primary-dark);
+  cursor: pointer;
+  padding: 8px 16px;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.record-edit-button:hover,
+.record-edit-button:focus-visible {
+  background: var(--primary);
+  color: white;
 }
 
 @media (max-width: 720px) {
@@ -4549,14 +4590,13 @@ button:disabled,
   }
 
   .record-card-actions {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
+    justify-content: flex-end;
   }
 
-  .record-card-actions .secondary-action {
-    width: 100%;
-    min-height: 56px;
-    font-size: 18px;
+  .record-edit-button {
+    min-height: 40px;
+    padding-inline: 18px;
+    font-size: 16px;
   }
 }
 
