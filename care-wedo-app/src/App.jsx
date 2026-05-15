@@ -300,12 +300,6 @@ async function prepareAvatarDataUrl(file) {
   return setAvatarName(canvas.toDataURL("image/jpeg", 0.84), file.name.replace(/\.[^.]+$/, ""));
 }
 
-const EMAILJS_CONFIG = {
-  serviceId: import.meta.env.VITE_EMAILJS_SERVICE_ID,
-  templateId: import.meta.env.VITE_EMAILJS_TEMPLATE_ID,
-  publicKey: import.meta.env.VITE_EMAILJS_PUBLIC_KEY,
-};
-
 const LANDING_PROBLEMS = [
   {
     title: "看診時間容易忘",
@@ -500,43 +494,24 @@ function PlanDetailsModal({ onClose }) {
 }
 
 async function sendFeedbackEmail(formData) {
-  const { serviceId, templateId, publicKey } = EMAILJS_CONFIG;
-  if (!serviceId || !templateId || !publicKey) {
-    throw new Error("回饋信箱尚未設定，請先用 Email 聯絡我們。");
-  }
-  const submittedAt = new Date();
   const cleanName = formData.name?.trim() || "Care WEDO 使用者";
   const cleanEmail = formData.email?.trim();
   const cleanMessage = formData.message?.trim();
-  const title = `${formData.topic} 回饋`;
 
-  const response = await fetch("https://api.emailjs.com/api/v1.0/email/send", {
+  const response = await fetch("/api/feedback", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      service_id: serviceId,
-      template_id: templateId,
-      user_id: publicKey,
-      template_params: {
-        name: cleanName,
-        email: cleanEmail,
-        title,
-        from_name: cleanName,
-        reply_to: cleanEmail,
-        topic: formData.topic,
-        message: cleanMessage,
-        source: "Care WEDO landing feedback",
-        submitted_at: submittedAt.toISOString(),
-        submitted_at_taipei: submittedAt.toLocaleString("zh-TW", { timeZone: "Asia/Taipei", hour12: false }),
-        website_url: "https://care.wedopr.com/",
-        logo_url: "https://care.wedopr.com/android-chrome-192x192.png",
-        hero_image_url: "https://care.wedopr.com/assets/images/og-care-wedo.png",
-      },
+      name: cleanName,
+      email: cleanEmail,
+      topic: formData.topic,
+      message: cleanMessage,
     }),
   });
 
   if (!response.ok) {
-    throw new Error("回饋暫時送不出去，請稍後再試。");
+    const result = await response.json().catch(() => ({}));
+    throw new Error(result.error || "回饋暫時送不出去，請稍後再試。");
   }
 }
 
@@ -3639,7 +3614,7 @@ function FamilyNotesEditor({ notes, onChange }) {
               placeholder="例如：回診前 8 小時不要吃東西、記得帶健保卡"
             />
             <button type="button" className="secondary-action note-delete-action" onClick={() => removeDraft(index)}>
-              刪除這則
+              刪除
             </button>
           </article>
         ))}
@@ -3647,10 +3622,10 @@ function FamilyNotesEditor({ notes, onChange }) {
       {error && <p className="error-msg">{error}</p>}
       <div className="family-notes-actions">
         <button type="button" className="secondary-action" onClick={addDraft}>
-          新增一則
+          新增
         </button>
         <button type="button" className="inline-action" onClick={handleSave} disabled={saving}>
-          {saving ? "儲存中..." : saved ? "已儲存" : "儲存提醒"}
+          {saving ? "儲存中..." : saved ? "已儲存" : "儲存"}
         </button>
       </div>
     </div>

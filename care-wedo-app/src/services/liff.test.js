@@ -14,14 +14,17 @@ test("buildLineAppLiffFallbackUrl creates a LINE app fallback link", () => {
   assert.equal(buildLineAppLiffFallbackUrl("2009972224-fQcfBXw5"), "https://line.me/R/app/2009972224-fQcfBXw5");
 });
 
-test("shouldOpenLiffEntryUrl detects browsers that should use the direct LIFF anchor", () => {
+test("shouldOpenLiffEntryUrl detects phone browsers that should open the LINE app LIFF route", () => {
   assert.equal(shouldOpenLiffEntryUrl("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)"), true);
-  assert.equal(shouldOpenLiffEntryUrl("Mozilla/5.0 (Linux; Android 14; Pixel 8)"), true);
+  assert.equal(shouldOpenLiffEntryUrl("Mozilla/5.0 (Linux; Android 14; Pixel 8) Mobile"), true);
 });
 
-test("shouldOpenLiffEntryUrl keeps desktop browsers on regular LIFF login", () => {
+test("shouldOpenLiffEntryUrl keeps desktop and tablet browsers on regular LIFF login", () => {
   assert.equal(shouldOpenLiffEntryUrl("Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)"), false);
   assert.equal(shouldOpenLiffEntryUrl("Mozilla/5.0 (Windows NT 10.0; Win64; x64)"), false);
+  assert.equal(shouldOpenLiffEntryUrl("Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X)"), false);
+  assert.equal(shouldOpenLiffEntryUrl("Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1", 5), false);
+  assert.equal(shouldOpenLiffEntryUrl("Mozilla/5.0 (Linux; Android 14; Pixel Tablet)"), false);
 });
 
 test("loginWithLine sends mobile browsers directly to the LINE app LIFF route", async () => {

@@ -18,8 +18,15 @@ export function buildLineAppLiffFallbackUrl(liffId = LIFF_ID) {
   return `https://line.me/R/app/${encodeURIComponent(liffId)}`;
 }
 
-export function shouldOpenLiffEntryUrl(userAgent = window.navigator.userAgent) {
-  return /Android|iPhone|iPad|iPod/i.test(userAgent);
+export function shouldOpenLiffEntryUrl(
+  userAgent = globalThis.window?.navigator?.userAgent || "",
+  maxTouchPoints = globalThis.window?.navigator?.maxTouchPoints || 0,
+) {
+  const isIpad = /iPad/i.test(userAgent) || (/Macintosh/i.test(userAgent) && maxTouchPoints > 1);
+  if (isIpad) return false;
+  if (/iPhone|iPod/i.test(userAgent)) return true;
+  if (/Android/i.test(userAgent)) return /Mobile/i.test(userAgent);
+  return false;
 }
 
 function openDashboardRoute() {

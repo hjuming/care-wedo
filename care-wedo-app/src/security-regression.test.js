@@ -68,9 +68,11 @@ test("Family notes are stored as group-scoped reminders", () => {
   assert.match(app, /onEditFamilyNotes/);
   assert.match(app, /family-note-draft-card/);
   assert.match(app, /removeDraft/);
-  assert.match(app, /新增一則/);
-  assert.match(app, /刪除這則/);
+  assert.match(app, />\s*新增\s*</);
+  assert.match(app, />\s*刪除\s*</);
+  assert.match(app, /:\s*"儲存"/);
   assert.match(css, /\.family-note-draft-card/);
+  assert.match(css, /\.family-notes-actions \.inline-action/);
   assert.match(css, /\.nav-login-link/);
   assert.match(css, /text-decoration:\s*none/);
 });

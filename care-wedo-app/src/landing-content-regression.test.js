@@ -50,19 +50,20 @@ test("landing page copy matches elder-friendly beta positioning", () => {
   assert.match(app, /sendFeedbackEmail/);
   assert.match(app, /name: cleanName/);
   assert.match(app, /email: cleanEmail/);
-  assert.match(app, /title,/);
-  assert.match(app, /submitted_at_taipei/);
-  assert.match(app, /website_url: "https:\/\/care\.wedopr\.com\/"/);
-  assert.match(app, /logo_url: "https:\/\/care\.wedopr\.com\/android-chrome-192x192\.png"/);
-  assert.match(app, /hero_image_url: "https:\/\/care\.wedopr\.com\/assets\/images\/og-care-wedo\.png"/);
+  assert.equal(app.includes('fetch("/api/feedback"'), true);
   assert.match(app, /請留下 Email，我們才寄得到確認信/);
   assert.match(app, /placeholder="用來寄送確認信" required/);
-  assert.match(app, /VITE_EMAILJS_SERVICE_ID/);
-  assert.match(app, /VITE_EMAILJS_TEMPLATE_ID/);
-  assert.match(app, /VITE_EMAILJS_PUBLIC_KEY/);
 
   const viteConfig = readProjectFile("care-wedo-app/vite.config.js");
   assert.match(viteConfig, /envDir: resolve\(__dirname, '\.\.'\)/);
+
+  const feedbackApi = readProjectFile("functions/api/feedback.ts");
+  assert.match(feedbackApi, /EMAILJS_SERVICE_ID/);
+  assert.match(feedbackApi, /VITE_EMAILJS_SERVICE_ID/);
+  assert.match(feedbackApi, /submitted_at_taipei/);
+  assert.match(feedbackApi, /website_url: "https:\/\/care\.wedopr\.com\/"/);
+  assert.match(feedbackApi, /logo_url: "https:\/\/care\.wedopr\.com\/android-chrome-192x192\.png"/);
+  assert.match(feedbackApi, /hero_image_url: "https:\/\/care\.wedopr\.com\/assets\/images\/og-care-wedo\.png"/);
 });
 
 test("landing page avoids outdated free-versus-paid claims during beta", () => {
