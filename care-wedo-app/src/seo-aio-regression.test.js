@@ -16,8 +16,13 @@ test("site has complete social sharing metadata with the shared Care WEDO image"
   assert.equal(existsSync(imagePath), true);
   assert.match(html, /<link rel="canonical" href="https:\/\/care\.wedopr\.com\/" \/>/);
   assert.match(html, /property="og:image" content="https:\/\/care\.wedopr\.com\/assets\/images\/og-care-wedo\.png"/);
+  assert.match(html, /property="og:title" content="Care WEDO｜陪你照顧最重要的人"/);
+  assert.match(html, /property="og:description" content="從「一個人」升級到「一家人」。長輩用 LINE 傳照片，系統整理看診、用藥與提醒，家人同步掌握。"/);
   assert.match(html, /name="twitter:card" content="summary_large_image"/);
+  assert.match(html, /name="twitter:title" content="Care WEDO｜陪你照顧最重要的人"/);
+  assert.match(html, /name="twitter:description" content="從「一個人」升級到「一家人」。長輩用 LINE 傳照片，系統整理看診、用藥與提醒，家人同步掌握。"/);
   assert.match(html, /name="twitter:image" content="https:\/\/care\.wedopr\.com\/assets\/images\/og-care-wedo\.png"/);
+  assert.match(html, /name="description" content="Care WEDO 陪你照顧最重要的人。從「一個人」升級到「一家人」/);
   assert.match(html, /max-image-preview:large/);
 });
 

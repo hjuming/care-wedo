@@ -878,9 +878,9 @@ function LandingPage({ variant = "home" }) {
         <>
           <section className="landing-section home-spirit-section" aria-label="Care WEDO 品牌精神">
             <div className="section-kicker">Care WEDO 的角色</div>
-            <h2>清楚、直觀、溫暖陪伴。</h2>
+            <h2>Care WEDO 陪你照顧最重要的人。</h2>
             <p>
-              Care WEDO 陪你照顧最重要的人。AI 不取代醫師，也不取代家人，只把看診、用藥與提醒整理清楚，讓家人少一點慌亂，多一點安心。
+              從「一個人」升級到「一家人」。長輩用 LINE 傳照片，系統整理看診、用藥與提醒，家人同步掌握。AI 不取代醫師，也不取代家人，只把重要資訊整理清楚，讓陪伴少一點慌亂，多一點安心。
             </p>
           </section>
 
