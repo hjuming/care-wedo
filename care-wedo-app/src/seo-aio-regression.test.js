@@ -50,6 +50,10 @@ test("robots, sitemap, and llms files expose crawl and answer-layer context", ()
   const llms = readProjectFile("public/llms.txt");
   const headers = readProjectFile("public/_headers");
 
+  assert.match(robots, /User-agent: facebookexternalhit\nAllow: \//);
+  assert.match(robots, /User-agent: Facebot\nAllow: \//);
+  assert.match(robots, /User-agent: Twitterbot\nAllow: \//);
+  assert.match(robots, /User-agent: LinkedInBot\nAllow: \//);
   assert.match(robots, /Sitemap: https:\/\/care\.wedopr\.com\/sitemap\.xml/);
   assert.match(sitemap, /<loc>https:\/\/care\.wedopr\.com\/app<\/loc>/);
   assert.match(sitemap, /<loc>https:\/\/care\.wedopr\.com\/privacy<\/loc>/);
@@ -57,5 +61,7 @@ test("robots, sitemap, and llms files expose crawl and answer-layer context", ()
   assert.match(llms, /Care WEDO 是給長輩與家人的 LINE 醫療照護小管家/);
   assert.match(llms, /Family Pro/);
   assert.match(headers, /\/assets\/\*\n\s+Cache-Control: public, max-age=31536000, immutable/);
+  assert.match(headers, /\/robots\.txt\n\s+Cache-Control: public, max-age=300, must-revalidate/);
+  assert.match(headers, /\/features\n\s+Cache-Control: no-store/);
   assert.doesNotMatch(headers, /\/\*\n\s+Cache-Control: no-store/);
 });
