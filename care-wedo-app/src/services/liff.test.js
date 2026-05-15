@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildLiffEntryUrl, buildLineAppLiffFallbackUrl, clearCareWedoLocalSession, shouldOpenLiffEntryUrl } from "./liff.js";
+import { buildLiffEntryUrl, buildLineAppLiffFallbackUrl, clearCareWedoLocalSession, loginWithLine, shouldOpenLiffEntryUrl } from "./liff.js";
 
 test("buildLiffEntryUrl creates the LINE LIFF universal link", () => {
   assert.equal(buildLiffEntryUrl("2009972224-fQcfBXw5"), "https://liff.line.me/2009972224-fQcfBXw5");
@@ -22,6 +22,29 @@ test("shouldOpenLiffEntryUrl detects browsers that should use the direct LIFF an
 test("shouldOpenLiffEntryUrl keeps desktop browsers on regular LIFF login", () => {
   assert.equal(shouldOpenLiffEntryUrl("Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)"), false);
   assert.equal(shouldOpenLiffEntryUrl("Mozilla/5.0 (Windows NT 10.0; Win64; x64)"), false);
+});
+
+test("loginWithLine sends mobile browsers directly to the LINE app LIFF route", async () => {
+  const originalWindow = globalThis.window;
+  let assignedUrl = "";
+
+  globalThis.window = {
+    navigator: {
+      userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)",
+    },
+    location: {
+      assign(url) {
+        assignedUrl = url;
+      },
+    },
+  };
+
+  try {
+    await loginWithLine();
+    assert.equal(assignedUrl, "https://line.me/R/app/2009972224-fQcfBXw5");
+  } finally {
+    globalThis.window = originalWindow;
+  }
 });
 
 test("clearCareWedoLocalSession removes stale app and LIFF login state only", () => {

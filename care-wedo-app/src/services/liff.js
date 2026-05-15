@@ -129,6 +129,11 @@ export async function initLineIdentity() {
 
 /** 從登入頁直接觸發 LINE OAuth，登入後導回 /app */
 export async function loginWithLine() {
+  if (shouldOpenLiffEntryUrl()) {
+    window.location.assign(buildLineAppLiffFallbackUrl());
+    return;
+  }
+
   if (!LIFF_ID) {
     // 開發環境：直接進 /app（demo 模式）
     openDashboardRoute();

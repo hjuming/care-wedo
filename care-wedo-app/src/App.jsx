@@ -404,14 +404,15 @@ function LineIcon() {
 }
 
 function LineLoginAction({ className = "", loggingIn = false, label = "用 LINE 登入", loadingLabel = "正在開啟 LINE...", onLogin }) {
-  const showMobileFallback = shouldOpenLiffEntryUrl();
+  const isMobile = shouldOpenLiffEntryUrl();
+  const loginHref = isMobile ? buildLineAppLiffFallbackUrl() : buildLiffEntryUrl();
 
   function handleClick(event) {
     if (loggingIn) {
       event.preventDefault();
       return;
     }
-    if (!shouldOpenLiffEntryUrl()) {
+    if (!isMobile) {
       event.preventDefault();
       onLogin?.();
     }
@@ -421,18 +422,13 @@ function LineLoginAction({ className = "", loggingIn = false, label = "用 LINE 
     <span className="line-login-action-stack">
       <a
         className={`line-login-btn ${className}`.trim()}
-        href={buildLiffEntryUrl()}
+        href={loginHref}
         onClick={handleClick}
         aria-disabled={loggingIn ? "true" : undefined}
       >
         <LineIcon />
         {loggingIn ? loadingLabel : label}
       </a>
-      {showMobileFallback && (
-        <a className="line-app-fallback-link" href={buildLineAppLiffFallbackUrl()}>
-          卡在 LINE 登入頁時，改用 LINE App 開啟
-        </a>
-      )}
     </span>
   );
 }
@@ -461,9 +457,7 @@ function LandingPage() {
           <a href="#plans">方案</a>
           <a href="#faq">FAQ</a>
           <a href="/privacy">隱私</a>
-          <button type="button" className="nav-login-link nav-login-button" onClick={handleLineLogin} disabled={loggingIn}>
-            {loggingIn ? "開啟 LINE..." : "用 LINE 登入"}
-          </button>
+          <LineLoginAction className="nav-login-link nav-login-line-login" loggingIn={loggingIn} loadingLabel="開啟 LINE..." onLogin={handleLineLogin} />
         </div>
       </nav>
 
@@ -3078,6 +3072,34 @@ function appointmentTimeValue(record = {}) {
   return `${date}T${time}`;
 }
 
+function recordDateParts(record = {}) {
+  if (!record.date) {
+    return {
+      year: "日期",
+      date: "待確認",
+      weekday: "",
+      time: record.time || "時間待確認",
+    };
+  }
+
+  const date = new Date(`${record.date}T00:00:00+08:00`);
+  if (Number.isNaN(date.getTime())) {
+    return {
+      year: "",
+      date: record.date,
+      weekday: "",
+      time: record.time || "時間待確認",
+    };
+  }
+
+  return {
+    year: String(date.getFullYear()),
+    date: `${String(date.getMonth() + 1).padStart(2, "0")}/${String(date.getDate()).padStart(2, "0")}`,
+    weekday: `週${["日", "一", "二", "三", "四", "五", "六"][date.getDay()]}`,
+    time: record.time || "時間待確認",
+  };
+}
+
 function RecordsView({ records, searchQuery, onUpload, onEditRecord, onDeleteRecord }) {
   const [mode, setMode] = useState("future");
   const modeLabel = mode === "history" ? "歷史紀錄" : "未來安排";
@@ -3124,33 +3146,50 @@ function RecordsView({ records, searchQuery, onUpload, onEditRecord, onDeleteRec
         <section key={month} className="record-month-group">
           <h3 className="month-divider">{month.replace("-", " 年 ")} 月</h3>
           <div className="records-stack">
-            {items.map(record => (
-              <article key={record.id} className="records-row record-completed records-card">
-                <button
-                  type="button"
-                  className="record-summary-button"
-                  onClick={() => onEditRecord?.(record)}
-                  aria-label={`編輯 ${record.title || record.department || "照護紀錄"}`}
-                >
-                  <span className="record-date-col">{formatDateLabel(record.date, record.time)}</span>
-                  <span className="record-tag">{typeLabel(record.type)}</span>
-                  <div className="record-info">
-                    <strong>{record.title || record.department || typeLabel(record.type)}</strong>
-                    <span>{[record.hospital, record.department, record.doctor && `${record.doctor}醫師`].filter(Boolean).join(" ｜ ")}</span>
-                    {(record.notes || record.reminder_text) && <small>{record.notes || record.reminder_text}</small>}
+            {items.map(record => {
+              const dateParts = recordDateParts(record);
+              const carePlace = [record.hospital, record.department, record.doctor && `${record.doctor}醫師`].filter(Boolean).join(" ｜ ");
+              const title = record.title || record.department || typeLabel(record.type);
+              const note = record.notes || record.reminder_text;
+              return (
+                <article key={record.id} className="records-row record-completed records-card">
+                  <button
+                    type="button"
+                    className="record-summary-button"
+                    onClick={() => onEditRecord?.(record)}
+                    aria-label={`編輯 ${title}`}
+                  >
+                    <span className="record-date-col">
+                      <span className="record-date-year">{dateParts.year}</span>
+                      <strong>{dateParts.date}</strong>
+                      <span>{[dateParts.weekday, dateParts.time].filter(Boolean).join(" ")}</span>
+                    </span>
+                    <div className="record-info">
+                      <span className="record-card-heading">
+                        <span className="record-type-icon" aria-hidden="true">{typeIcon(record.type)}</span>
+                        <span>
+                          <span className="record-tag">{typeLabel(record.type)}</span>
+                          <strong>{title}</strong>
+                        </span>
+                      </span>
+                      {carePlace && <span className="record-place-line">{carePlace}</span>}
+                      {note && <small>{note}</small>}
+                    </div>
+                    <span className={record.status === "completed" ? "record-status-tag is-completed" : "record-status-tag"}>
+                      {record.status === "completed" ? "已完成" : "待提醒"}
+                    </span>
+                  </button>
+                  <div className="record-card-actions">
+                    <button type="button" className="secondary-action subtle" onClick={() => onEditRecord?.(record)}>
+                      編輯
+                    </button>
+                    <button type="button" className="secondary-action subtle danger-subtle" onClick={() => onDeleteRecord?.(record)}>
+                      刪除
+                    </button>
                   </div>
-                  <span className="record-status-tag">{record.status === "completed" ? "已完成" : "提醒"}</span>
-                </button>
-                <div className="record-card-actions">
-                  <button type="button" className="secondary-action subtle" onClick={() => onEditRecord?.(record)}>
-                    編輯
-                  </button>
-                  <button type="button" className="secondary-action subtle danger-subtle" onClick={() => onDeleteRecord?.(record)}>
-                    刪除
-                  </button>
-                </div>
-              </article>
-            ))}
+                </article>
+              );
+            })}
           </div>
         </section>
       )) : (
@@ -3167,7 +3206,6 @@ function RecordsView({ records, searchQuery, onUpload, onEditRecord, onDeleteRec
 }
 
 function SettingsView({
-  patient,
   identity,
   isPersonalMode,
   careProfiles,
@@ -3181,19 +3219,6 @@ function SettingsView({
 }) {
   return (
     <div className="settings-grid">
-      <section className="summary-panel">
-        <p className="panel-eyebrow">現在主要照顧誰</p>
-        <div className="profile-form-preview">
-          <img src={identity.profile?.pictureUrl || aiAvatar} alt="個人頭像" />
-          <div>
-            <label>稱呼</label>
-            <strong>{selectedProfile?.display_name || patient.name || "照護對象"}</strong>
-            <label>LINE 狀態</label>
-            <strong>{isPersonalMode ? "已用 LINE 登入" : IS_PROD ? "請重新登入 LINE" : "目前是範例畫面"}</strong>
-          </div>
-        </div>
-      </section>
-
       <section className="summary-panel">
         <p className="panel-eyebrow">家庭群組成員</p>
         <div className="care-profile-list">
@@ -3221,11 +3246,11 @@ function SettingsView({
         <GroupManager identity={identity} onGroupChange={onGroupChange} />
       </section>
 
-      <section className="summary-panel">
+      <section className="summary-panel wide-panel">
         <GroupSettings identity={identity} onProfileCreated={onGroupChange} onGroupChange={onGroupChange} />
       </section>
 
-      <section className="summary-panel">
+      <section className="summary-panel wide-panel">
         <p className="panel-eyebrow">家人要記得的事</p>
         <FamilyNotesEditor notes={familyNotes} onChange={onFamilyNotesChange} />
       </section>

@@ -108,12 +108,13 @@ test("Mobile LINE login uses a real LIFF link instead of a script-only redirect"
   assert.match(source, /buildLiffEntryUrl/);
   assert.match(source, /buildLineAppLiffFallbackUrl/);
   assert.match(source, /shouldOpenLiffEntryUrl/);
-  assert.match(loginAction, /href=\{buildLiffEntryUrl\(\)\}/);
-  assert.match(loginAction, /line-app-fallback-link/);
-  assert.match(loginAction, /href=\{buildLineAppLiffFallbackUrl\(\)\}/);
-  assert.match(loginAction, /if \(!shouldOpenLiffEntryUrl\(\)\)/);
+  assert.match(loginAction, /const isMobile = shouldOpenLiffEntryUrl\(\)/);
+  assert.match(loginAction, /const loginHref = isMobile \? buildLineAppLiffFallbackUrl\(\) : buildLiffEntryUrl\(\)/);
+  assert.match(loginAction, /href=\{loginHref\}/);
+  assert.match(loginAction, /if \(!isMobile\)/);
+  assert.doesNotMatch(source, /nav-login-button/);
   assert.match(css, /\.line-login-btn\[aria-disabled="true"\]/);
-  assert.match(css, /\.line-app-fallback-link/);
+  assert.match(css, /\.nav-login-line-login/);
 });
 
 test("Medication view groups medicines by time and keeps one calm taken action", () => {
