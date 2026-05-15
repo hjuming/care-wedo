@@ -1,4 +1,4 @@
-import { parseMedicalImages, saveParsedData, Env as OcrEnv } from "./_shared/medical_ocr";
+import { parseMedicalImages, saveParsedData, savePendingParsedDataToProfile, Env as OcrEnv } from "./_shared/medical_ocr";
 import { logError, logEvent } from "./_shared/logger";
 import { getAccessibleProfiles, getOrCreateDefaultUser, getUserMemberships, supabaseFetch } from "./_shared/supabase";
 
@@ -175,6 +175,35 @@ function formatResultSummary(parsed: import("./_shared/medical_ocr").ParsedMedic
   return lines.join("\n");
 }
 
+function pendingProfileQuickReply(documentId: number, profiles: Array<{ id: number; display_name: string }>) {
+  return {
+    items: profiles.slice(0, 13).map((profile) => {
+      const actionData = new URLSearchParams();
+      actionData.set("action", "assign_pending_ocr");
+      actionData.set("d", String(documentId));
+      actionData.set("p", String(profile.id));
+
+      return {
+        type: "action",
+        action: {
+          type: "postback",
+          label: profile.display_name.slice(0, 20),
+          data: actionData.toString(),
+          displayText: `這是 ${profile.display_name} 的紀錄`,
+        },
+      };
+    }),
+  };
+}
+
+function normalizeProfileAnswer(value: string) {
+  return value
+    .trim()
+    .replace(/\s+/g, "")
+    .replace(/[　,，.。・．·]/g, "")
+    .toLowerCase();
+}
+
 async function notifyUploadSummaryRecipients(env: Env, groupId: number | null, uploaderLineUserId: string, text: string) {
   if (!groupId) return 0;
 
@@ -193,6 +222,44 @@ async function notifyUploadSummaryRecipients(env: Env, groupId: number | null, u
   return sent;
 }
 
+async function assignPendingOcrByText(env: Env, event: LineEvent, incomingText: string) {
+  const userId = await getOrCreateDefaultUser(env, event.source.userId);
+  const profiles = await getAccessibleProfiles(env, userId);
+  const normalizedText = normalizeProfileAnswer(incomingText);
+  const targetProfile = profiles.find((profile) => normalizeProfileAnswer(profile.display_name) === normalizedText);
+  if (!targetProfile) return false;
+
+  const documents = await supabaseFetch<Array<{ id: number }>>(
+    env,
+    `care_documents?uploaded_by_user_id=eq.${userId}&status=eq.pending_profile_selection&select=id&order=captured_at.desc.nullslast,created_at.desc&limit=1`,
+  );
+  const documentId = documents[0]?.id;
+  if (!documentId || !event.replyToken) return false;
+
+  try {
+    const saved = await savePendingParsedDataToProfile(env, documentId, event.source.userId, targetProfile.id);
+    logEvent("line.pending_ocr_assigned_by_text", {
+      line_user_suffix: event.source.userId.slice(-4),
+      document_id: documentId,
+      target_profile_id: targetProfile.id,
+      appointment_count: saved.appointment_ids.length,
+      medication_count: saved.medication_ids.length,
+    });
+    await replyText(env, event.replyToken, `已經幫您存入【${saved.profileName}】的紀錄中。想看完整清單或修改，請點這裡：https://care.wedopr.com`);
+    const familySummary = `家人剛上傳了一筆 ${saved.profileName} 的照護資料，已經歸類完成。\n\n想看完整清單或修改，請點這裡：https://care.wedopr.com`;
+    await notifyUploadSummaryRecipients(env, saved.groupId, event.source.userId, familySummary);
+    return true;
+  } catch (err) {
+    logError("line.pending_ocr_assign_failed", err, {
+      line_user_suffix: event.source.userId.slice(-4),
+      document_id: documentId,
+      target_profile_id: targetProfile.id,
+    });
+    await replyText(env, event.replyToken, `抱歉，歸類時發生錯誤，請稍後再試。`);
+    return true;
+  }
+}
+
 /** 處理圖片 OCR（背景執行，用 Push API 回傳結果） */
 async function processImageOCR(env: Env, event: LineEvent) {
   const lineUserId = event.source.userId;
@@ -207,6 +274,22 @@ async function processImageOCR(env: Env, event: LineEvent) {
     const saved = await saveParsedData(env, parsedData, lineUserId);
     const userId = await getOrCreateDefaultUser(env, lineUserId);
     const profiles = await getAccessibleProfiles(env, userId);
+
+    if (saved.needsProfileSelection && saved.pendingDocumentId) {
+      await pushText(
+        env,
+        lineUserId,
+        `${DEFAULT_RECIPIENT}，我已經看完這張單子，但還不確定要存到哪位照護對象。\n\n請點下面按鈕選擇，選好後我才會正式存入資料庫。`,
+        pendingProfileQuickReply(saved.pendingDocumentId, profiles),
+      );
+      logEvent("line.ocr_pending_profile_selection", {
+        line_user_suffix: lineUserId.slice(-4),
+        profile_count: profiles.length,
+        pending_document_id: saved.pendingDocumentId,
+        duration_ms: Date.now() - startedAt,
+      });
+      return;
+    }
 
     const reply = formatResultSummary(parsedData, saved.profileName);
 
@@ -298,7 +381,7 @@ async function reassignRecordsToProfile(
       {
         method: "PATCH",
         headers: { Prefer: "return=representation" },
-        body: JSON.stringify({ profile_id: targetProfile.id }),
+        body: JSON.stringify({ group_id: targetProfile.group_id, profile_id: targetProfile.id }),
       },
     );
     if (rows.length !== appointmentIds.length) {
@@ -313,7 +396,7 @@ async function reassignRecordsToProfile(
       {
         method: "PATCH",
         headers: { Prefer: "return=representation" },
-        body: JSON.stringify({ profile_id: targetProfile.id }),
+        body: JSON.stringify({ group_id: targetProfile.group_id, profile_id: targetProfile.id }),
       },
     );
     if (rows.length !== medicationIds.length) {
@@ -325,6 +408,36 @@ async function reassignRecordsToProfile(
 async function handleEvent(env: Env, event: LineEvent, waitUntil: (promise: Promise<any>) => void) {
   if (event.type === "postback" && event.postback?.data && event.replyToken) {
     const params = new URLSearchParams(event.postback.data);
+    if (params.get("action") === "assign_pending_ocr") {
+      const documentId = Number(params.get("d"));
+      const targetProfileId = Number(params.get("p"));
+
+      try {
+        if (!Number.isInteger(documentId) || documentId <= 0 || !Number.isInteger(targetProfileId) || targetProfileId <= 0) {
+          throw new Error("照護對象資料不正確");
+        }
+        const saved = await savePendingParsedDataToProfile(env, documentId, event.source.userId, targetProfileId);
+        logEvent("line.pending_ocr_assigned", {
+          line_user_suffix: event.source.userId.slice(-4),
+          document_id: documentId,
+          target_profile_id: targetProfileId,
+          appointment_count: saved.appointment_ids.length,
+          medication_count: saved.medication_ids.length,
+        });
+        await replyText(env, event.replyToken, `已經幫您存入【${saved.profileName}】的紀錄中。想看完整清單或修改，請點這裡：https://care.wedopr.com`);
+        const familySummary = `家人剛上傳了一筆 ${saved.profileName} 的照護資料，已經歸類完成。\n\n想看完整清單或修改，請點這裡：https://care.wedopr.com`;
+        await notifyUploadSummaryRecipients(env, saved.groupId, event.source.userId, familySummary);
+      } catch (err) {
+        logError("line.pending_ocr_assign_failed", err, {
+          line_user_suffix: event.source.userId.slice(-4),
+          document_id: documentId,
+          target_profile_id: targetProfileId,
+        });
+        await replyText(env, event.replyToken, `抱歉，歸類時發生錯誤，請稍後再試。`);
+      }
+      return;
+    }
+
     if (params.get("action") === "reassign") {
       const targetProfileId = Number(params.get("p"));
       const appointmentIds = parseIdList(params.get("a"));
@@ -371,6 +484,8 @@ async function handleEvent(env: Env, event: LineEvent, waitUntil: (promise: Prom
   }
 
   const incomingText = event.message?.text || "";
+  if (incomingText && await assignPendingOcrByText(env, event, incomingText)) return;
+
   const reply =
     incomingText.includes("網址") || incomingText.toLowerCase().includes("url")
       ? "這裡可以看完整清單：https://care.wedopr.com"
