@@ -34,12 +34,21 @@ VITE_EMAILJS_PUBLIC_KEY
 
 EmailJS template 建議支援欄位：
 
+- `name`
+- `email`
+- `title`
 - `from_name`
 - `reply_to`
 - `topic`
 - `message`
 - `source`
 - `submitted_at`
+- `submitted_at_taipei`
+- `website_url`
+- `logo_url`
+- `hero_image_url`
+
+完整信件 HTML 範本請看專案根目錄的 `EMAILJS_FEEDBACK_TEMPLATES.md`。建議 EmailJS 直接寄給 `{{email}}`，並在 `Cc` 填管理者收件信箱留存副本。
 
 ## 開發指令
 

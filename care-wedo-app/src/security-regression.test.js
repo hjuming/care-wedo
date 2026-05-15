@@ -304,6 +304,32 @@ test("Family group creation uses a user feature flag, not group plans", () => {
   assert.doesNotMatch(canCreate, /getGroupPlan|plan_id|internal/);
 });
 
+test("Beta family groups default to Family Pro while multiple group access stays user-scoped", () => {
+  const supabase = readProjectFile("functions/_shared/supabase.ts");
+  const createGroup = supabase.slice(
+    supabase.indexOf("export async function createGroup"),
+    supabase.indexOf("// Add creator as admin"),
+  );
+
+  assert.match(createGroup, /plan_id:\s*"pro"/);
+  assert.doesNotMatch(createGroup, /hasUserFeatureFlag/);
+});
+
+test("Group settings exposes plan limits before adding care recipients", () => {
+  const groupsApi = readProjectFile("functions/api/groups.ts");
+  const component = readProjectFile("care-wedo-app/src/components/GroupSettings.jsx");
+  const css = readProjectFile("care-wedo-app/src/index.css");
+
+  assert.match(groupsApi, /getGroupPlan/);
+  assert.match(groupsApi, /care_profile_count/);
+  assert.match(groupsApi, /member_count/);
+  assert.match(groupsApi, /max_recipients/);
+  assert.match(component, /selectedRecipientLimitReached/);
+  assert.match(component, /quota-note/);
+  assert.match(component, /disabled=\{loading \|\| selectedRecipientLimitReached\}/);
+  assert.match(css, /\.quota-note-warning/);
+});
+
 test("Cron endpoints fail closed when CRON_SECRET is not configured", () => {
   for (const file of ["functions/api/cron/reminders.ts", "functions/api/cron/evening.ts"]) {
     const source = readProjectFile(file);

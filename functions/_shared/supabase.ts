@@ -506,7 +506,12 @@ export async function createGroup(env: Env, userId: number, name: string): Promi
   const created = await supabaseFetch<GroupRow[]>(env, "family_groups?select=*", {
     method: "POST",
     headers: { Prefer: "return=representation" },
-    body: JSON.stringify({ name, invite_code: inviteCode, owner_user_id: userId }),
+    body: JSON.stringify({
+      name,
+      invite_code: inviteCode,
+      owner_user_id: userId,
+      plan_id: "pro",
+    }),
   });
 
   if (!created || created.length === 0) throw new Error("無法建立群組");

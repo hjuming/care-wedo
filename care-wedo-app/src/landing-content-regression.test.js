@@ -12,17 +12,32 @@ function readProjectFile(path) {
 test("landing page copy matches elder-friendly beta positioning", () => {
   const app = readProjectFile("care-wedo-app/src/App.jsx");
 
-  assert.match(app, /測試期間全功能免費開放/);
+  assert.match(app, /測試期間開放 Family Pro/);
   assert.match(app, /長輩用 LINE 傳照片/);
   assert.match(app, /資料完整保存，LINE 只講重點/);
   assert.match(app, /正式免費版規劃/);
   assert.match(app, /正式收費版規劃/);
   assert.match(app, /10 筆\/月/);
-  assert.match(app, /100 筆\+\/月/);
-  assert.match(app, /主要照護對象/);
+  assert.match(app, /100 筆\/月/);
+  assert.match(app, /家庭群組/);
+  assert.match(app, /8 位/);
+  assert.match(app, /4 位/);
   assert.match(app, /完整歷史紀錄與健康時間線/);
+  assert.match(app, /PLAN_TIERS/);
+  assert.match(app, /Family Pro/);
+  assert.match(app, /PlanDetailsModal/);
+  assert.doesNotMatch(app, /Care Team/);
   assert.match(app, /回饋意見/);
   assert.match(app, /sendFeedbackEmail/);
+  assert.match(app, /name: cleanName/);
+  assert.match(app, /email: cleanEmail/);
+  assert.match(app, /title,/);
+  assert.match(app, /submitted_at_taipei/);
+  assert.match(app, /website_url: "https:\/\/care\.wedopr\.com\/"/);
+  assert.match(app, /logo_url: "https:\/\/care\.wedopr\.com\/android-chrome-192x192\.png"/);
+  assert.match(app, /hero_image_url: "https:\/\/care\.wedopr\.com\/assets\/images\/og-care-wedo\.png"/);
+  assert.match(app, /請留下 Email，我們才寄得到確認信/);
+  assert.match(app, /placeholder="用來寄送確認信" required/);
   assert.match(app, /VITE_EMAILJS_SERVICE_ID/);
   assert.match(app, /VITE_EMAILJS_TEMPLATE_ID/);
   assert.match(app, /VITE_EMAILJS_PUBLIC_KEY/);

@@ -472,6 +472,45 @@ input:focus-visible {
   color: var(--primary-dark);
 }
 
+.plan-tier-table {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--surface-strong);
+}
+
+.plan-tier-table-compact {
+  margin: 22px 0;
+}
+
+.plan-tier-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) repeat(3, minmax(90px, 0.42fr));
+  gap: 12px;
+  align-items: center;
+  padding: 14px 18px;
+  border-top: 1px solid var(--border);
+  font-size: 17px;
+}
+
+.plan-tier-row:first-child {
+  border-top: 0;
+}
+
+.plan-tier-head {
+  background: var(--primary-dark);
+  color: white;
+}
+
+.plan-details-modal {
+  width: min(860px, 100%);
+}
+
+.plan-details-modal .plan-tier-row {
+  font-size: 19px;
+  padding: 18px 20px;
+}
+
 .feature-table {
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -2001,7 +2040,12 @@ input:focus-visible {
 
 .section-heading-row {
   position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
   padding-left: 20px;
+  width: 100%;
 }
 
 .section-heading-row::before {
@@ -2015,6 +2059,27 @@ input:focus-visible {
   border-radius: 999px;
   box-shadow: 0 0 15px var(--section-color);
   opacity: 0.8;
+}
+
+.permission-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  border: 1px solid rgba(91, 143, 154, 0.24);
+  border-radius: 999px;
+  padding: 6px 12px;
+  background: var(--primary-soft);
+  color: var(--primary-dark);
+  font-size: 14px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.permission-badge-unlimited {
+  border-color: rgba(185, 120, 50, 0.3);
+  background: #fff1df;
+  color: var(--accent);
 }
 
 .search-box {
@@ -3005,6 +3070,15 @@ input:focus-visible {
     overflow-x: auto;
   }
 
+  .plan-tier-table {
+    overflow-x: auto;
+  }
+
+  .plan-tier-row {
+    min-width: 560px;
+    grid-template-columns: minmax(150px, 1fr) repeat(3, 110px);
+  }
+
   .feature-row {
     min-width: 620px;
     grid-template-columns: minmax(190px, 1fr) 150px 150px;
@@ -3573,6 +3647,28 @@ input:focus-visible {
   padding: 14px;
   cursor: pointer;
   font-weight: 800;
+}
+
+.profile-create-form button:disabled {
+  cursor: not-allowed;
+  opacity: 0.64;
+}
+
+.quota-note {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(91, 143, 154, 0.24);
+  border-radius: 10px;
+  background: rgba(230, 240, 241, 0.72);
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.quota-note-warning {
+  border-color: rgba(185, 120, 50, 0.28);
+  background: #fff1df;
+  color: var(--accent);
 }
 
 /* --- Modal 系統 --- */

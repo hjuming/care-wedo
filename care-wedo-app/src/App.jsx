@@ -354,7 +354,7 @@ const LANDING_PAGE_ENTRIES = [
   },
   {
     title: "方案比較",
-    copy: "測試期間全功能免費開放，正式收費規則先透明列出。",
+    copy: "測試期間開放 Family Pro，正式收費規則先透明列出。",
     href: "#plans",
   },
   {
@@ -367,14 +367,23 @@ const LANDING_PAGE_ENTRIES = [
 const FREE_FEATURES = [
   ["LINE 照護小管家", true, true],
   ["上傳前選擇照護對象", true, true],
-  ["看診單、藥袋、預約單 AI 解析", "10 筆/月", "100 筆+/月"],
+  ["看診單、藥袋、預約單 AI 解析", "10 筆/月", "100 筆/月"],
   ["長輩友善短提醒", true, true],
-  ["吃藥頁與完整資料庫", "10 筆", true],
-  ["主要照護對象", "1 位", "多位"],
-  ["家庭群組共享", "測試期開放", "多人協作照護"],
+  ["吃藥頁與完整資料庫", "10 筆", "完整保存"],
+  ["家庭群組", "1 個", "1 個"],
+  ["成員", "1 位", "8 位"],
+  ["照護對象", "1 位", "4 位"],
+  ["家庭群組共享", false, "8 位成員協作"],
   ["今日照護與未來行程", true, true],
-  ["完整歷史紀錄與健康時間線", "測試期開放", true],
+  ["完整歷史紀錄與健康時間線", "10 筆", "完整保存"],
   ["正式版月費訂閱", "不適用", "規劃中"],
+];
+
+const PLAN_TIERS = [
+  { name: "Free", ocr: 10, members: 1, recipients: 1 },
+  { name: "Family Basic", ocr: 30, members: 2, recipients: 1 },
+  { name: "Family Plus", ocr: 50, members: 5, recipients: 2 },
+  { name: "Family Pro", ocr: 100, members: 8, recipients: 4 },
 ];
 
 const LANDING_FAQS = [
@@ -392,7 +401,7 @@ const LANDING_FAQS = [
   },
   {
     question: "免費版和收費版差在哪裡？",
-    answer: "測試期間全功能免費開放。正式版會保留免費體驗；收費版提供長期保存、多位照護對象、家庭群組與健康時間線。",
+    answer: "測試期間一般測試帳號開放 Family Pro。正式版會保留免費體驗；收費版提供長期保存、多位照護對象、家庭群組與健康時間線。",
   },
   {
     question: "長輩一定要會用系統嗎？",
@@ -412,7 +421,7 @@ const LANDING_FAQS = [
   },
   {
     question: "測試期間需要付費嗎？",
-    answer: "不需要。目前系統測試期間全功能免費開放。正式收費方案會在上線前清楚公告。",
+    answer: "不需要。目前系統測試期間一般測試帳號開放 Family Pro。正式收費方案會在上線前清楚公告。",
   },
   {
     question: "家人可以一起看同一份紀錄嗎？",
@@ -443,11 +452,57 @@ function FeatureValue({ value }) {
   return <span>{value}</span>;
 }
 
+function PlanTierTable({ compact = false }) {
+  return (
+    <div className={compact ? "plan-tier-table plan-tier-table-compact" : "plan-tier-table"} role="table" aria-label="Care WEDO 方案級距">
+      <div className="plan-tier-row plan-tier-head" role="row">
+        <strong>方案</strong>
+        <strong>OCR/月</strong>
+        <strong>成員</strong>
+        <strong>照護對象</strong>
+      </div>
+      {PLAN_TIERS.map((tier) => (
+        <div className="plan-tier-row" role="row" key={tier.name}>
+          <span>{tier.name}</span>
+          <span>{tier.ocr}</span>
+          <span>{tier.members}</span>
+          <span>{tier.recipients}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PlanDetailsModal({ onClose }) {
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content plan-details-modal" role="dialog" aria-modal="true" aria-labelledby="plan-details-title" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-header">
+          <div>
+            <p className="modal-kicker">方案規劃中</p>
+            <h2 id="plan-details-title">Care WEDO 方案級距</h2>
+          </div>
+          <button type="button" className="btn-close" onClick={onClose} aria-label="關閉">×</button>
+        </div>
+        <div className="modal-body">
+          <PlanTierTable />
+          <p className="helper-copy">測試期間所有測試帳號開放 Family Pro 權限。更高階團隊方案與無限版本不對外開放。</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 async function sendFeedbackEmail(formData) {
   const { serviceId, templateId, publicKey } = EMAILJS_CONFIG;
   if (!serviceId || !templateId || !publicKey) {
     throw new Error("回饋信箱尚未設定，請先用 Email 聯絡我們。");
   }
+  const submittedAt = new Date();
+  const cleanName = formData.name?.trim() || "Care WEDO 使用者";
+  const cleanEmail = formData.email?.trim();
+  const cleanMessage = formData.message?.trim();
+  const title = `${formData.topic} 回饋`;
 
   const response = await fetch("https://api.emailjs.com/api/v1.0/email/send", {
     method: "POST",
@@ -457,12 +512,19 @@ async function sendFeedbackEmail(formData) {
       template_id: templateId,
       user_id: publicKey,
       template_params: {
-        from_name: formData.name || "Care WEDO 使用者",
-        reply_to: formData.email || "no-reply@care.wedopr.com",
+        name: cleanName,
+        email: cleanEmail,
+        title,
+        from_name: cleanName,
+        reply_to: cleanEmail,
         topic: formData.topic,
-        message: formData.message,
+        message: cleanMessage,
         source: "Care WEDO landing feedback",
-        submitted_at: new Date().toISOString(),
+        submitted_at: submittedAt.toISOString(),
+        submitted_at_taipei: submittedAt.toLocaleString("zh-TW", { timeZone: "Asia/Taipei", hour12: false }),
+        website_url: "https://care.wedopr.com/",
+        logo_url: "https://care.wedopr.com/android-chrome-192x192.png",
+        hero_image_url: "https://care.wedopr.com/assets/images/og-care-wedo.png",
       },
     }),
   });
@@ -513,6 +575,7 @@ function LineLoginAction({ className = "", loggingIn = false, label = "用 LINE 
 function LandingPage() {
   const [loggingIn, setLoggingIn] = useState(false);
   const [loginError, setLoginError] = useState(null);
+  const [showPlanDetails, setShowPlanDetails] = useState(false);
   const [feedbackForm, setFeedbackForm] = useState({
     name: "",
     email: "",
@@ -541,6 +604,10 @@ function LandingPage() {
     event.preventDefault();
     if (!feedbackForm.message.trim()) {
       setFeedbackStatus({ state: "error", message: "請先寫下您的建議。" });
+      return;
+    }
+    if (!feedbackForm.email.trim()) {
+      setFeedbackStatus({ state: "error", message: "請留下 Email，我們才寄得到確認信。" });
       return;
     }
 
@@ -580,7 +647,7 @@ function LandingPage() {
 
       <section className="landing-hero" aria-label="Care WEDO 首頁">
         <div className="landing-hero-copy">
-          <span className="landing-version">測試期間全功能免費開放</span>
+          <span className="landing-version">測試期間開放 Family Pro</span>
           <h1>
             <span>Care WEDO</span>
             <span>把醫院單子</span>
@@ -670,7 +737,7 @@ function LandingPage() {
 
       <section className="landing-section plan-section" id="plans">
         <div className="section-kicker">免費與收費</div>
-        <h2>測試期間全功能免費開放。</h2>
+        <h2>測試期間開放 Family Pro。</h2>
         <div className="plan-cards">
           <article className="plan-card">
             <span>正式免費版規劃</span>
@@ -682,10 +749,13 @@ function LandingPage() {
             <span>正式收費版規劃</span>
             <h3>家庭照護空間</h3>
             <p>適合長期照顧父母、長輩或慢性病家人。提供完整保存、家庭群組、多照護對象與健康時間線。</p>
+            <button type="button" onClick={() => setShowPlanDetails(true)}>規劃中</button>
             <LineLoginAction loggingIn={loggingIn} label="用 LINE 登入建立" onLogin={handleLineLogin} />
           </article>
         </div>
-        <p className="plan-beta-note">目前系統測試期間，免費開放完整功能。你的使用回饋會作為正式版功能與方案調整依據。</p>
+        <p className="plan-beta-note">目前系統測試期間，所有測試帳號開放 Family Pro 權限；無限版本僅供內部管理帳號使用。</p>
+
+        <PlanTierTable compact />
 
         <div className="feature-table" role="table" aria-label="Care WEDO 免費版與收費版功能對照">
           <div className="feature-row table-head" role="row">
@@ -702,6 +772,10 @@ function LandingPage() {
           ))}
         </div>
       </section>
+
+      {showPlanDetails && (
+        <PlanDetailsModal onClose={() => setShowPlanDetails(false)} />
+      )}
 
       <section className="landing-section belief-section">
         <h2>科技不該讓照護變冷。</h2>
@@ -742,7 +816,7 @@ function LandingPage() {
             </label>
             <label>
               Email
-              <input name="email" type="email" value={feedbackForm.email} onChange={handleFeedbackChange} placeholder="方便回覆時填寫" />
+              <input name="email" type="email" value={feedbackForm.email} onChange={handleFeedbackChange} placeholder="用來寄送確認信" required />
             </label>
           </div>
           <button type="submit" disabled={feedbackStatus.state === "sending"}>
@@ -1129,6 +1203,10 @@ function DashboardApp() {
   const activeGroup = groups.find((group) => group.id === activeGroupId)
     || groups.find((group) => group.id === dashboard?.active_group_id)
     || null;
+  const permissionVersion = dashboard?.permission_version || (dashboard?.plan ? {
+    label: dashboard.plan.name,
+    description: `成員 ${dashboard.plan.max_members} 位・照護對象 ${dashboard.plan.max_recipients} 位`,
+  } : null);
   const selectedProfile = careProfiles.find((profile) => profile.id === activeProfileId)
     || careProfiles.find((profile) => profile.group_id === activeGroupId)
     || careProfiles[0]
@@ -1636,7 +1714,7 @@ function DashboardApp() {
 
           {activeSection === "settings" && (
             <div className="toolbar">
-              <SectionHeading section={SECTIONS.find(s => s.id === activeSection)} />
+              <SectionHeading section={SECTIONS.find(s => s.id === activeSection)} badge={permissionVersion} />
             </div>
           )}
 
@@ -2148,10 +2226,15 @@ function GroupBadge({ groups = [], activeGroupId, activeGroupName, onChange }) {
   );
 }
 
-function SectionHeading({ section }) {
+function SectionHeading({ section, badge = null }) {
   return (
     <div className="section-heading-row" style={{ "--section-color": section.color }}>
       <h2>{section.label}</h2>
+      {badge?.label && (
+        <span className={badge.id === "unlimited" ? "permission-badge permission-badge-unlimited" : "permission-badge"} title={badge.description || ""}>
+          {badge.label}
+        </span>
+      )}
     </div>
   );
 }

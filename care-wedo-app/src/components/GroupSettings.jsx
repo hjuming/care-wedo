@@ -88,6 +88,16 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
     setTimeout(() => setCopiedCode(null), 2000);
   }
 
+  const selectedGroup = data.groups?.find((group) => group.id === selectedGroupId) || null;
+  const selectedGroupPlan = selectedGroup?.plan || null;
+  const selectedCareProfileCount = selectedGroup?.care_profile_count
+    ?? data.care_profiles?.filter((profile) => profile.group_id === selectedGroupId).length
+    ?? 0;
+  const selectedRecipientLimit = selectedGroupPlan?.max_recipients || null;
+  const selectedRecipientLimitReached = Boolean(
+    selectedRecipientLimit && selectedCareProfileCount >= selectedRecipientLimit,
+  );
+
   async function handleCreateProfile(event) {
     event.preventDefault();
     setError(null);
@@ -100,6 +110,11 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
 
     if (!selectedGroupId) {
       setError("請先加入或建立一個群組");
+      return;
+    }
+
+    if (selectedRecipientLimitReached) {
+      setError(`「${selectedGroup?.name || "這個群組"}」目前已達 ${selectedCareProfileCount}/${selectedRecipientLimit} 位照護對象上限。`);
       return;
     }
 
@@ -214,6 +229,11 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
                     <p className="small-copy">
                       {isAdmin ? "👑 群組管理者" : "👨‍👩‍👧‍👦 成員"}・{members.length} 人
                     </p>
+                    {group.plan && (
+                      <p className="small-copy">
+                        成員 {group.member_count ?? members.length}/{group.plan.max_members}・照護對象 {group.care_profile_count ?? 0}/{group.plan.max_recipients}
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -307,6 +327,7 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
 
       <div className="group-settings-card">
         <p className="panel-eyebrow">新增照護對象</p>
+        <p className="helper-copy">這裡新增的是被照顧的人；要邀請一起照顧的家人，請使用上方邀請碼。</p>
         {data.groups?.length ? (
           <form className="profile-create-form" onSubmit={handleCreateProfile}>
             <label>
@@ -317,6 +338,12 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
                 ))}
               </select>
             </label>
+            {selectedGroupPlan && (
+              <p className={selectedRecipientLimitReached ? "quota-note quota-note-warning" : "quota-note"}>
+                目前 {selectedCareProfileCount}/{selectedRecipientLimit} 位照護對象
+                {selectedRecipientLimitReached ? "，已達此群組上限。" : "。"}
+              </p>
+            )}
             <label>
               照護對象稱呼
               <input
@@ -333,7 +360,7 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
                 <option value="self">自己</option>
               </select>
             </label>
-            <button type="submit" className="btn-submit" disabled={loading}>
+            <button type="submit" className="btn-submit" disabled={loading || selectedRecipientLimitReached}>
               {loading ? "儲存中..." : "新增照護對象"}
             </button>
           </form>

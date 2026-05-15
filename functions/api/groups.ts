@@ -7,6 +7,7 @@ import {
   createGroup,
   getBearerToken,
   getAccessibleProfiles,
+  getGroupPlan,
   getOrCreateDefaultUser,
   getUserGroups,
   getUserMemberships,
@@ -82,11 +83,32 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     const profiles = await getAccessibleProfiles(env, userId);
 
     // Enrich each group with member list
+    const profileCountByGroupId = new Map<number, number>();
+    profiles.forEach((profile) => {
+      if (!profile.group_id) return;
+      profileCountByGroupId.set(profile.group_id, (profileCountByGroupId.get(profile.group_id) || 0) + 1);
+    });
+
     const groupsWithMembers = await Promise.all(
-      groups.map(async (group) => ({
-        ...group,
-        members: await getGroupMembers(env, group.id),
-      }))
+      groups.map(async (group) => {
+        const [members, plan] = await Promise.all([
+          getGroupMembers(env, group.id),
+          getGroupPlan(env, group.id),
+        ]);
+        return {
+          ...group,
+          members,
+          member_count: members.length,
+          care_profile_count: profileCountByGroupId.get(group.id) || 0,
+          plan: {
+            id: plan.id,
+            name: plan.name,
+            max_members: plan.max_members,
+            max_recipients: plan.max_recipients,
+            family_group_enabled: plan.family_group_enabled,
+          },
+        };
+      })
     );
 
     return Response.json({ groups: groupsWithMembers, care_profiles: profiles.map(serializeCareProfile), user_memberships: memberships });

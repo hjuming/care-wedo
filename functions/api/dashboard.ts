@@ -3,6 +3,7 @@ import {
   CareProfileRow,
   FREE_OCR_MONTHLY_LIMIT,
   MedicationRow,
+  MULTIPLE_FAMILY_GROUPS_FEATURE,
   PlanRow,
   getBearerToken,
   getAccessibleProfiles,
@@ -11,6 +12,7 @@ import {
   getOrCreateDefaultUser,
   getUserActiveProfileId,
   getUserGroups,
+  hasUserFeatureFlag,
   serializeCareProfile,
   serializeAppointment,
   serializeMedication,
@@ -42,6 +44,22 @@ function buildPlanUsage(plan: PlanRow, ocrUsed: number) {
     // backward-compat aliases
     ocr_used: ocrUsed,
     ocr_limit: plan.monthly_ocr_limit,
+  };
+}
+
+function buildPermissionVersion(plan: PlanRow, hasUnlimitedAccess = false) {
+  if (hasUnlimitedAccess) {
+    return {
+      id: "unlimited",
+      label: "無限版本",
+      description: "內部管理權限",
+    };
+  }
+
+  return {
+    id: plan.id,
+    label: plan.name,
+    description: `成員 ${plan.max_members} 位・照護對象 ${plan.max_recipients} 位`,
   };
 }
 
@@ -284,6 +302,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
         family_notes: [],
         care_profiles: [],
         active_profile_id: null,
+        permission_version: buildPermissionVersion(FREE_PLAN_DEMO, false),
         needs_setup: true,
         needs_profile_setup: false,
       });
@@ -307,8 +326,11 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       // User has a group but no care recipient yet — still read group plan for accurate limits
       const groupId = activeRequestedGroupId;
       const activeGroup = groups.find((group) => group.id === groupId) || null;
-      const groupPlan = await getGroupPlan(env, groupId);
-      const ocrUsed = await getGroupOcrUsage(env, groupId);
+      const [groupPlan, ocrUsed, hasUnlimitedAccess] = await Promise.all([
+        getGroupPlan(env, groupId),
+        getGroupOcrUsage(env, groupId),
+        hasUserFeatureFlag(env, userId, MULTIPLE_FAMILY_GROUPS_FEATURE),
+      ]);
       return Response.json({
         ...STATIC_DEMO_DASHBOARD,
         mode: "personal",
@@ -323,6 +345,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
         family_notes: [],
         care_profiles: profiles.map(serializeCareProfile),
         active_profile_id: null,
+        permission_version: buildPermissionVersion(groupPlan, hasUnlimitedAccess),
         needs_setup: false,
         needs_profile_setup: true,
       });
@@ -351,9 +374,10 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     });
 
     // Step 4: Fetch group plan and OCR usage
-    const [groupPlan, ocrUsed] = await Promise.all([
+    const [groupPlan, ocrUsed, hasUnlimitedAccess] = await Promise.all([
       getGroupPlan(env, activeGroupId),
       getGroupOcrUsage(env, activeGroupId),
+      hasUserFeatureFlag(env, userId, MULTIPLE_FAMILY_GROUPS_FEATURE),
     ]);
 
     return Response.json({
@@ -370,6 +394,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       active_group_name: activeGroup?.name || "家庭群組",
       family_notes: familyNotes,
       active_profile_id: activeProfileId,
+      permission_version: buildPermissionVersion(groupPlan, hasUnlimitedAccess),
       care_profiles: profiles.map(serializeCareProfile),
       appointments: appointments.map(serializeAppointment),
       medications: medications.map((medication) => {
