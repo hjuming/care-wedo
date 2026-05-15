@@ -2977,7 +2977,13 @@ input:focus-visible {
 .family-notes-actions .secondary-action,
 .family-notes-actions .inline-action {
   width: 128px;
+  height: 56px;
   min-height: 56px;
+  margin-top: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
 }
 
 .note-delete-action {
