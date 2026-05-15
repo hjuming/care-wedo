@@ -214,21 +214,6 @@ function resolveProfileFromSelectionText<T extends { display_name: string }>(pro
   return matches.length === 1 ? matches[0] : null;
 }
 
-async function sendTextWithFallback(env: Env, event: LineEvent, text: string) {
-  if (event.replyToken) {
-    try {
-      await replyText(env, event.replyToken, text);
-      return;
-    } catch (error) {
-      logError("line.reply_failed_fallback_to_push", error, {
-        line_user_suffix: event.source.userId.slice(-4),
-      });
-    }
-  }
-
-  await pushText(env, event.source.userId, text);
-}
-
 async function pushAssignmentSummary(
   env: Env,
   lineUserId: string,
@@ -301,7 +286,7 @@ async function assignPendingOcrByText(env: Env, event: LineEvent, incomingText: 
   const documentId = documents[0]?.id;
   if (!documentId) return false;
 
-  await sendTextWithFallback(env, event, ASSIGNMENT_ACK_TEXT);
+  waitUntil(pushText(env, event.source.userId, ASSIGNMENT_ACK_TEXT));
   waitUntil(completePendingOcrAssignment(env, event.source.userId, documentId, targetProfile.id, "line.pending_ocr_assigned_by_text"));
   return true;
 }
@@ -462,7 +447,7 @@ async function handleEvent(env: Env, event: LineEvent, waitUntil: (promise: Prom
         if (!Number.isInteger(documentId) || documentId <= 0 || !Number.isInteger(targetProfileId) || targetProfileId <= 0) {
           throw new Error("照護對象資料不正確");
         }
-        await sendTextWithFallback(env, event, ASSIGNMENT_ACK_TEXT);
+        waitUntil(pushText(env, event.source.userId, ASSIGNMENT_ACK_TEXT));
         waitUntil(completePendingOcrAssignment(env, event.source.userId, documentId, targetProfileId, "line.pending_ocr_assigned"));
       } catch (err) {
         logError("line.pending_ocr_assign_failed", err, {
@@ -470,7 +455,7 @@ async function handleEvent(env: Env, event: LineEvent, waitUntil: (promise: Prom
           document_id: documentId,
           target_profile_id: targetProfileId,
         });
-        await sendTextWithFallback(env, event, `抱歉，歸類時發生錯誤，請稍後再試。`);
+        waitUntil(pushText(env, event.source.userId, `抱歉，歸類時發生錯誤，請稍後再試。`));
       }
       return;
     }
