@@ -2,6 +2,7 @@ import { supabaseFetch, Env as SupabaseEnv } from "../../_shared/supabase";
 import { logError, logEvent } from "../../_shared/logger";
 
 const DEFAULT_RECIPIENT = "親愛的家人";
+const WEEKDAY_LABELS = ["日", "一", "二", "三", "四", "五", "六"];
 
 type Env = SupabaseEnv & {
   CRON_SECRET?: string;
@@ -91,11 +92,6 @@ function profileLabel(profile: CareProfile | undefined | null) {
   return profile?.display_name?.trim() || DEFAULT_RECIPIENT;
 }
 
-function itemPrefix(profile: CareProfile | undefined | null) {
-  const label = profileLabel(profile);
-  return label === DEFAULT_RECIPIENT ? "" : `【${label}】 `;
-}
-
 function appointmentTypeLabel(type?: string | null) {
   if (type === "inspection") return "檢查";
   if (type === "refill_reminder") return "領藥";
@@ -106,6 +102,107 @@ function appointmentTypeLabel(type?: string | null) {
   if (type === "exercise") return "運動";
   if (type === "other" || type === "reminder") return "提醒";
   return "看診";
+}
+
+function formatDateLabel(dateStr: string) {
+  const date = new Date(`${dateStr}T00:00:00+08:00`);
+  const [year, month, day] = dateStr.split("-");
+  if (!year || !month || !day || Number.isNaN(date.getTime())) return dateStr;
+  return `${Number(month)}/${Number(day)}（${WEEKDAY_LABELS[date.getDay()]}）`;
+}
+
+function formatTimeLabel(time?: string | null) {
+  const raw = (time || "").trim();
+  if (!raw) return "";
+
+  const match = raw.match(/^(上午|下午|晚上|早上)?\s*(\d{1,2}):(\d{2})$/);
+  if (!match) return raw.replace(/(上午|下午|晚上|早上)(\d)/, "$1 $2");
+
+  const meridiem = match[1] || "";
+  let hour = Number(match[2]);
+  const minute = match[3];
+  if ((meridiem === "下午" || meridiem === "晚上") && hour > 12) hour -= 12;
+  return `${meridiem ? `${meridiem} ` : ""}${hour}:${minute}`;
+}
+
+function relativeDateLabel(dateStr: string, todayStr: string) {
+  const date = new Date(`${dateStr}T00:00:00+08:00`);
+  const today = new Date(`${todayStr}T00:00:00+08:00`);
+  if (Number.isNaN(date.getTime()) || Number.isNaN(today.getTime())) return formatDateLabel(dateStr);
+
+  const diffDays = Math.round((date.getTime() - today.getTime()) / 86400000);
+  if (diffDays === 0) return "今天";
+  if (diffDays === 1) return "明天";
+  return formatDateLabel(dateStr);
+}
+
+function appointmentActionLabel(apt: AppointmentWithUser) {
+  if (apt.type === "refill_reminder") return "可以去領下一次藥";
+  if (apt.type === "inspection") return apt.department ? `要去做${apt.department}` : "要去做檢查";
+  if (apt.department) return `要去${apt.department}`;
+  return `有一個${appointmentTypeLabel(apt.type)}提醒`;
+}
+
+function appointmentPlaceLine(apt: AppointmentWithUser) {
+  const place = apt.hospital?.trim();
+  const doctor = apt.doctor?.trim();
+  if (place && doctor) return `在${place}，${doctor}醫師。`;
+  if (place) return `地點在${place}。`;
+  if (doctor) return `醫師是${doctor}。`;
+  return "";
+}
+
+function buildAppointmentReminderLine(apt: AppointmentWithUser, profile: CareProfile | undefined, todayStr: string) {
+  const name = profileLabel(profile);
+  const dateLabel = relativeDateLabel(apt.date, todayStr);
+  const timeLabel = formatTimeLabel(apt.time);
+  const when = [dateLabel, timeLabel].filter(Boolean).join("");
+  return `${name} ${when}${when ? " " : ""}${appointmentActionLabel(apt)}。`;
+}
+
+function buildDailyReminderMessage(
+  data: { apts: AppointmentWithUser[]; meds: MedicationWithUser[] },
+  profileMap: Map<number, CareProfile>,
+  todayStr: string,
+) {
+  const hasMeds = data.meds.length > 0;
+  const hasAppointments = data.apts.length > 0;
+  const intro = hasMeds && hasAppointments
+    ? "今天的藥和接下來的預約，先跟你說一下。"
+    : hasMeds
+      ? "今天的藥先跟你說一下。"
+      : "接下來的預約先跟你說一下。";
+  const lines = [`${DEFAULT_RECIPIENT}，早安。${intro}`, ""];
+
+  if (hasMeds) {
+    for (const med of data.meds) {
+      const profile = med.profile_id ? profileMap.get(med.profile_id) : undefined;
+      const name = profileLabel(profile);
+      const dosage = med.dosage || "照單子份量";
+      lines.push(`${name} 今天要吃 ${med.name}，${dosage}。`);
+      if (med.frequency) lines.push(`時間照 ${med.frequency}。`);
+      if (med.reminder_text) lines.push(med.reminder_text);
+    }
+    lines.push("");
+  }
+
+  if (hasAppointments) {
+    for (const apt of data.apts) {
+      const profile = apt.profile_id ? profileMap.get(apt.profile_id) : undefined;
+      lines.push(buildAppointmentReminderLine(apt, profile, todayStr));
+      const placeLine = appointmentPlaceLine(apt);
+      if (placeLine) lines.push(placeLine);
+      if (apt.location) lines.push(`地址：${apt.location}`);
+      if (apt.fasting_required) lines.push(`要記得空腹，前 ${apt.fasting_hours || 8} 小時先不要吃東西。`);
+      if (apt.notes) lines.push(apt.notes);
+      lines.push("");
+    }
+  }
+
+  lines.push("需要看完整清單時，再打開 Care WEDO：");
+  lines.push("https://care.wedopr.com");
+
+  return lines.filter((line, index, all) => line !== "" || all[index - 1] !== "").join("\n").trim();
 }
 
 async function fetchCareProfiles(env: Env, profileIds: number[]) {
@@ -191,6 +288,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const startedAt = Date.now();
   try {
     const now = new Date();
+    const today = new Date(now.getTime() + 8 * 60 * 60 * 1000).toISOString().split("T")[0];
     const twTime = new Date(now.getTime() + 8 * 60 * 60 * 1000);
     twTime.setDate(twTime.getDate() + 1);
     const targetDate = twTime.toISOString().split("T")[0];
@@ -259,39 +357,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     for (const [lineUserId, data] of userBriefings.entries()) {
       if (data.apts.length === 0 && data.meds.length === 0) continue;
 
-      let msgText = `${DEFAULT_RECIPIENT}，早安。\n今天先看這幾件事就好。\n\n`;
-
-      if (data.meds.length > 0) {
-        msgText += "今天要吃的藥：\n";
-        for (const med of data.meds) {
-          const prefix = itemPrefix(med.profile_id ? profileMap.get(med.profile_id) : undefined);
-          msgText += `• ${prefix}${med.name} (${med.dosage || "照單子份量"})\n`;
-          if (med.frequency) msgText += `  時間：${med.frequency}\n`;
-          if (med.reminder_text) msgText += `  ${med.reminder_text}\n`;
-        }
-        msgText += "\n";
-      }
-
-      if (data.apts.length > 0) {
-        msgText += "明天要記得：\n";
-        for (const apt of data.apts) {
-          const prefix = itemPrefix(apt.profile_id ? profileMap.get(apt.profile_id) : undefined);
-          if (apt.type === "refill_reminder") {
-            msgText += `• ${prefix}可以去領下一次藥了。\n  地點：${apt.hospital || "醫院或藥局"}\n`;
-          } else if (apt.type === "inspection") {
-            msgText += `• ${prefix}${apt.time || ""} ${apt.hospital || ""} ${apt.department || "要去檢查"}\n`;
-            if (apt.fasting_required) msgText += `  記得：前 ${apt.fasting_hours || 8} 小時先不要吃東西。\n`;
-            if (apt.notes) msgText += `  ${apt.notes}\n`;
-          } else {
-            const typeLabel = appointmentTypeLabel(apt.type);
-            msgText += `• ${prefix}${apt.time || ""} ${apt.hospital || ""} ${apt.department || `要處理${typeLabel}`}\n`;
-            if (apt.fasting_required) msgText += `  記得：前 ${apt.fasting_hours || 8} 小時先不要吃東西。\n`;
-            if (apt.notes) msgText += `  ${apt.notes}\n`;
-          }
-        }
-      }
-
-      msgText += "\n完整清單在這裡：https://care.wedopr.com";
+      const msgText = buildDailyReminderMessage(data, profileMap, today);
 
       await pushText(env, lineUserId, msgText);
       sentCount++;
@@ -301,7 +367,6 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       }
     }
 
-    const today = new Date(now.getTime() + 8 * 60 * 60 * 1000).toISOString().split("T")[0];
     await supabaseFetch(env, `appointments?date=lt.${today}&status=eq.upcoming`, {
       method: "PATCH",
       body: JSON.stringify({ status: "expired" }),

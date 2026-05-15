@@ -347,6 +347,20 @@ test("Cron endpoints fail closed when CRON_SECRET is not configured", () => {
   }
 });
 
+test("Daily LINE reminders use family-like copy instead of announcement-style notices", () => {
+  const source = readProjectFile("functions/api/cron/reminders.ts");
+  const builder = source.slice(source.indexOf("function buildDailyReminderMessage"), source.indexOf("async function fetchCareProfiles"));
+
+  assert.match(builder, /接下來的預約先跟你說一下/);
+  assert.match(builder, /今天的藥和接下來的預約，先跟你說一下/);
+  assert.match(builder, /需要看完整清單時，再打開 Care WEDO/);
+  assert.match(builder, /地址：/);
+  assert.doesNotMatch(builder, /接下來的預約先提醒你：/);
+  assert.doesNotMatch(builder, /明天要記得/);
+  assert.doesNotMatch(builder, /完整清單在這裡/);
+  assert.doesNotMatch(builder, /`【\$\{label\}】`/);
+});
+
 test("LINE postback reassignment validates source user access before updating records", () => {
   const source = readProjectFile("functions/callback.ts");
   assert.match(source, /getUserMemberships/);
