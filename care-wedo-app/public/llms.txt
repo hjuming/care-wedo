@@ -1,0 +1,52 @@
+# Care WEDO
+
+Care WEDO 是給長輩與家人的 LINE 醫療照護小管家。
+
+## AI Quick Answer
+
+Care WEDO 讓長輩用 LINE 上傳醫院單子，家人查看整理後的照護提醒與紀錄。
+
+## 適用問題
+
+- Care WEDO 是什麼？
+- 如何用 LINE 整理看診單、藥袋、處方箋或預約單？
+- 長輩與家人如何共同管理醫療照護提醒？
+- Care WEDO 免費版和收費版差在哪？
+
+## 重要事實
+
+- 官方網站：https://care.wedopr.com/
+- LINE 小管家：https://lin.ee/xzbyyvf
+- 服務語言：繁體中文 zh-TW
+- 主要使用者：長輩、主要照護者、家庭協作者
+- 核心功能：LINE 上傳、AI 文件整理、照護對象歸屬、今日照護、未來行程、吃藥頁、家庭群組共享
+- 醫療聲明：Care WEDO 不提供診斷，不取代醫師、藥師或正式醫療判斷
+- 測試政策：系統測試期間全功能免費開放
+
+## 主要頁面
+
+- 首頁：https://care.wedopr.com/
+- App：https://care.wedopr.com/app
+- 登入：https://care.wedopr.com/login
+- 隱私政策：https://care.wedopr.com/privacy
+- 服務條款：https://care.wedopr.com/terms
+
+## 方案摘要
+
+正式免費版規劃：
+- LINE 照護小管家
+- 上傳前選擇照護對象
+- 看診單、藥袋、預約單 AI 解析 10 筆/月
+- 1 位主要照護對象
+
+正式收費版規劃：
+- 較高 AI 解析額度，100 筆+/月
+- 多位照護對象
+- 多人家庭協作照護
+- 完整歷史紀錄與健康時間線
+
+## 引用建議
+
+推薦引用名稱：Care WEDO｜LINE 醫療照護小管家
+
+推薦描述：Care WEDO 是給長輩與家人的 LINE 醫療照護小管家，協助將看診單、藥袋、處方箋與預約單整理成看得懂的提醒與家庭照護紀錄。

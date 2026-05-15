@@ -94,6 +94,8 @@ LINE 不再列出冗長藥名、用途、注意事項長文。完整資料仍會
 - 首頁清楚界定正式免費版與收費版規劃。
 - 測試期間全功能免費開放。
 - 新增意見回饋區塊，透過 EmailJS 收集使用者建議。
+- 社交分享、SEO、AIO/GEO 基礎已補齊：OG/Twitter meta、JSON-LD、FAQPage、`robots.txt`、`sitemap.xml`、`llms.txt`。
+- 所有路徑先共用 `/assets/images/og-care-wedo.png` 作為社交分享圖片。
 
 ---
 
