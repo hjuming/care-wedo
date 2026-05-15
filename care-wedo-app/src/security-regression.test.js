@@ -21,6 +21,11 @@ test("API middleware rejects invalid bearer tokens before reaching handlers", ()
   assert.match(source, /登入已失效|Invalid token|Unauthorized/);
 });
 
+test("Feedback API is public for landing page visitors", () => {
+  const source = readProjectFile("functions/api/_middleware.ts");
+  assert.match(source, /pathname === "\/api\/feedback" && method === "POST"/);
+});
+
 test("OCR API requires a valid authenticated LINE identity", () => {
   const source = readProjectFile("functions/api/ocr/[[path]].ts");
   assert.match(source, /if \(!token\) \{/);

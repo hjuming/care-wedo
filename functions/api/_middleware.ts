@@ -9,11 +9,13 @@ const corsHeaders: Record<string, string> = {
 /**
  * Paths that do NOT require JWT authentication.
  * - /api/health: public health check
+ * - /api/feedback: public landing page feedback form
  * - /api/cron/*: protected by CRON_SECRET instead
  * - /api/dashboard GET: returns demo data when unauthenticated
  */
 function isPublicPath(pathname: string, method: string): boolean {
   if (pathname === "/api/health") return true;
+  if (pathname === "/api/feedback" && method === "POST") return true;
   if (pathname.startsWith("/api/cron/")) return true;
   // Dashboard GET is allowed without auth (returns demo mode)
   if (pathname === "/api/dashboard" && method === "GET") return true;
