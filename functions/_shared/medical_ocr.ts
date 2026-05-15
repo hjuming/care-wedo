@@ -491,6 +491,46 @@ export async function savePendingParsedDataToProfile(
   return { ...saved, parsed: document.ai_summary };
 }
 
+export async function saveParsedDataToSelectedProfile(
+  env: Env,
+  parsed: ParsedMedicalData,
+  lineUserId: string | undefined,
+  targetProfileId: number,
+): Promise<SavedLineOcrData> {
+  const userId = await getOrCreateDefaultUser(env, lineUserId);
+  const profiles = await getAccessibleProfiles(env, userId);
+  const targetProfile = profiles.find((profile) => profile.id === targetProfileId);
+  if (!targetProfile) throw new Error("您沒有這個照護對象的權限");
+
+  const inserted = await supabaseFetch<Array<{ id: number }>>(env, "care_documents?select=id", {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify({
+      group_id: targetProfile.group_id,
+      profile_id: targetProfile.id,
+      uploaded_by_user_id: userId,
+      document_type: inferDocumentType(parsed),
+      ocr_text: JSON.stringify(parsed),
+      ai_summary: parsed,
+      status: "processing",
+      captured_at: new Date().toISOString(),
+    }),
+  });
+
+  const documentId = inserted[0]?.id || null;
+  if (!documentId) throw new Error("無法建立上傳文件");
+
+  const saved = await saveParsedDataToProfile(env, parsed, userId, targetProfile, documentId);
+  await supabaseFetch(env, `care_documents?id=eq.${documentId}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      status: "confirmed",
+    }),
+  });
+
+  return { ...saved, parsed };
+}
+
 export async function saveParsedData(env: Env, parsed: ParsedMedicalData, lineUserId?: string): Promise<SavedLineOcrData> {
   const userId = await getOrCreateDefaultUser(env, lineUserId);
   const matched = await resolveMatchedCareProfile(env, userId, parsed);

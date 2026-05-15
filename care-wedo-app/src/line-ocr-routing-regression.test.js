@@ -47,3 +47,18 @@ test("LINE OCR profile reassignment keeps group and profile scope consistent", (
   assert.match(reassign, /group_id:\s*targetProfile\.group_id/);
   assert.match(reassign, /profile_id:\s*targetProfile\.id/);
 });
+
+test("LINE OCR can preselect a care profile before the next image upload", () => {
+  const callback = readProjectFile("functions/callback.ts");
+  const ocr = readProjectFile("functions/_shared/medical_ocr.ts");
+
+  assert.match(callback, /LINE_NEXT_UPLOAD_PROFILE_PREFIX/);
+  assert.match(callback, /isUploadIntent/);
+  assert.match(callback, /prepareUploadProfileQuickReply/);
+  assert.match(callback, /action"\)\s*===\s*"prepare_ocr_upload"/);
+  assert.match(callback, /setNextUploadTargetProfile/);
+  assert.match(callback, /getNextUploadTargetProfile/);
+  assert.match(callback, /clearNextUploadTargetProfile/);
+  assert.match(callback, /saveParsedDataToSelectedProfile/);
+  assert.match(ocr, /export async function saveParsedDataToSelectedProfile/);
+});
