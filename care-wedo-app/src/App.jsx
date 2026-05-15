@@ -585,10 +585,11 @@ function LineLoginAction({ className = "", loggingIn = false, label = "用 LINE 
   );
 }
 
-function LandingPage() {
+function LandingPage({ variant = "home" }) {
   const [loggingIn, setLoggingIn] = useState(false);
   const [loginError, setLoginError] = useState(null);
   const [showPlanDetails, setShowPlanDetails] = useState(false);
+  const isDetailsPage = variant === "details";
   const [feedbackForm, setFeedbackForm] = useState({
     name: "",
     email: "",
@@ -649,10 +650,10 @@ function LandingPage() {
       <nav className="landing-nav" aria-label="Care WEDO 入口導覽">
         <a href="/" className="brand-home">Care WEDO</a>
         <div className="landing-nav-links">
-          <a href="#features">功能</a>
-          <a href="#plans">方案</a>
-          <a href="#feedback">回饋</a>
-          <a href="#faq">FAQ</a>
+          <a href="/features">功能說明</a>
+          <a href="/features#plans">方案</a>
+          <a href="/features#feedback">回饋</a>
+          <a href="/features#faq">FAQ</a>
           <a href="/privacy">隱私</a>
           <a className="nav-helper-link" href="https://lin.ee/xzbyyvf" target="_blank" rel="noopener noreferrer">聯繫小管家</a>
           <LineLoginAction className="nav-login-link nav-login-line-login" loggingIn={loggingIn} label="用 LINE 綁定 / 登入" loadingLabel="開啟 LINE..." onLogin={handleLineLogin} />
@@ -668,15 +669,14 @@ function LandingPage() {
             <span>才不會漏掉。</span>
           </h1>
           <p className="landing-hero-intro landing-hero-intro-desktop">
-            用 LINE 登入後，家人可以一起查看看診、用藥與提醒。需要協助，也可以直接聯繫 LINE 照護小管家。
+            用 LINE 登入後，家人可以一起查看看診、用藥與提醒。記得加入 LINE 照護小管家，才能上傳單據、解析圖片與文字，並接收提醒通知。
           </p>
           <p className="landing-hero-intro landing-hero-intro-mobile">
             <span>家人要看提醒，請先按綁定。</span>
-            <span>不會操作，就問小管家。</span>
+            <span>也請加入小管家，才能上傳單據和收提醒。</span>
           </p>
           <div className="landing-cta-row">
             <LineLoginAction className="landing-line-login landing-bind-account" loggingIn={loggingIn} label="① 用 LINE 綁定帳號" onLogin={handleLineLogin} />
-            <a className="secondary-action landing-line-entry" href="https://lin.ee/xzbyyvf" target="_blank" rel="noopener noreferrer"><CareHelperIcon />② 聯繫 LINE 照護小管家</a>
           </div>
           {loginError && <p className="notice-danger landing-login-error">{loginError}</p>}
           <p className="landing-trust-copy">Care WEDO 陪你照顧最重要的人。不取代醫師，只幫家人把照護資訊整理清楚。</p>
@@ -698,17 +698,25 @@ function LandingPage() {
             ))}
           </ol>
           <div className="hero-helper-card">
-            <strong>LINE 照護小管家可以幫你：</strong>
-            <p>詢問綁定方式、協助建立家人資料、說明看診與用藥提醒怎麼使用。</p>
+            <strong>也要加入 LINE 照護小管家好友</strong>
+            <p>加入後才能上傳圖片、解析圖片與文字資料，並接收看診與用藥提醒通知。</p>
           </div>
         </div>
       </section>
 
-      <div className="landing-mobile-sticky-cta" aria-label="手機快速綁定入口">
-        <LineLoginAction className="landing-line-login" loggingIn={loggingIn} label="用 LINE 綁定帳號" loadingLabel="開啟 LINE..." onLogin={handleLineLogin} />
-      </div>
+      <a className="landing-helper-fab" href="https://lin.ee/xzbyyvf" target="_blank" rel="noopener noreferrer" aria-label="聯繫 LINE 照護小管家">
+        <CareHelperIcon />
+      </a>
 
-      <section className="landing-section landing-entry-section" aria-label="快速入口">
+      {isDetailsPage ? (
+        <>
+          <section className="landing-section details-intro-section" aria-label="Care WEDO 說明">
+            <div className="section-kicker">了解 Care WEDO</div>
+            <h2>把看診、用藥與提醒整理成家人看得懂的照護資訊。</h2>
+            <p>這裡保留完整功能、方案、回饋與常見問題。第一次使用者可以先回首頁完成 LINE 綁定。</p>
+          </section>
+
+          <section className="landing-section landing-entry-section" aria-label="快速入口">
         <div className="section-kicker">網站入口</div>
         <h2>第一次來，先看這三件事。</h2>
         <div className="landing-entry-grid">
@@ -865,6 +873,24 @@ function LandingPage() {
           ))}
         </div>
       </section>
+        </>
+      ) : (
+        <>
+          <section className="landing-section home-spirit-section" aria-label="Care WEDO 品牌精神">
+            <div className="section-kicker">Care WEDO 的角色</div>
+            <h2>清楚、直觀、溫暖陪伴。</h2>
+            <p>
+              Care WEDO 陪你照顧最重要的人。AI 不取代醫師，也不取代家人，只把看診、用藥與提醒整理清楚，讓家人少一點慌亂，多一點安心。
+            </p>
+          </section>
+
+          <section className="home-more-section" aria-label="更多資訊">
+            <a href="/features">看功能與方案</a>
+            <a href="/features#feedback">留下試用回饋</a>
+            <a href="/privacy">查看隱私政策</a>
+          </section>
+        </>
+      )}
 
       <footer className="landing-footer">
         <div className="footer-brand">
@@ -987,6 +1013,12 @@ export default function App() {
       e.preventDefault();
       window.history.pushState(null, "", href);
       setRoute(resolveCareWedoRoute(href));
+      const hash = href.includes("#") ? href.slice(href.indexOf("#")) : "";
+      if (hash) {
+        window.setTimeout(() => document.querySelector(hash)?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+      } else {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
     };
     document.addEventListener("click", handleClick);
 
@@ -998,6 +1030,7 @@ export default function App() {
 
   if (route === "app") return <DashboardApp />;
   if (route === "login") return <LoginPage />;
+  if (route === "features") return <LandingPage variant="details" />;
   if (route === "privacy") return <PrivacyPage />;
   if (route === "terms") return <TermsPage />;
   return <LandingPage />;

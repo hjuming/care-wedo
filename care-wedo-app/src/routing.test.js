@@ -18,8 +18,9 @@ test("resolveCareWedoRoute sends the login path to the login page", () => {
 });
 
 test("resolveCareWedoRoute keeps product information pages outside the dashboard", () => {
-  assert.equal(resolveCareWedoRoute("/about"), "landing");
-  assert.equal(resolveCareWedoRoute("/features"), "landing");
+  assert.equal(resolveCareWedoRoute("/about"), "features");
+  assert.equal(resolveCareWedoRoute("/features"), "features");
+  assert.equal(resolveCareWedoRoute("/features#feedback"), "features");
 });
 
 test("resolveCareWedoRoute sends the privacy path to the privacy page", () => {
