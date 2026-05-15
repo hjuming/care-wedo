@@ -36,7 +36,7 @@ test("structured data is valid and exposes AI-friendly FAQ answers", () => {
   assert.ok(faq);
   assert.equal(faq.mainEntity.length >= 8, true);
   assert.equal(faq.mainEntity.some((item) => item.name === "Care WEDO 是什麼？"), true);
-  assert.equal(faq.mainEntity.some((item) => item.name === "免費版和收費版差在哪裡？"), true);
+  assert.equal(faq.mainEntity.some((item) => item.name === "Free 和 Family Pro 差在哪裡？"), true);
 });
 
 test("robots, sitemap, and llms files expose crawl and answer-layer context", () => {
@@ -50,7 +50,7 @@ test("robots, sitemap, and llms files expose crawl and answer-layer context", ()
   assert.match(sitemap, /<loc>https:\/\/care\.wedopr\.com\/privacy<\/loc>/);
   assert.match(llms, /AI Quick Answer/);
   assert.match(llms, /Care WEDO 是給長輩與家人的 LINE 醫療照護小管家/);
-  assert.match(llms, /正式收費版規劃/);
+  assert.match(llms, /Family Pro/);
   assert.match(headers, /\/assets\/\*\n\s+Cache-Control: public, max-age=31536000, immutable/);
   assert.doesNotMatch(headers, /\/\*\n\s+Cache-Control: no-store/);
 });

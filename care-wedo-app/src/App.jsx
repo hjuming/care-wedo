@@ -325,7 +325,7 @@ const LANDING_SOLUTIONS = [
   "LINE 上傳前先選家人，資料自動歸到正確照護對象",
   "看診單與領藥單整理成短提醒，不用讀長篇文字",
   "藥袋資訊完整存入資料庫，LINE 只回長輩需要知道的重點",
-  "家人登入後可查看今日照護、未來行程、吃藥頁與完整紀錄",
+  "家人登入後可查看今日照護、未來行程、吃藥提醒與資料保存",
 ];
 
 const LANDING_WORKFLOW = [
@@ -354,7 +354,7 @@ const LANDING_PAGE_ENTRIES = [
   },
   {
     title: "方案比較",
-    copy: "測試期間開放 Family Pro，正式收費規則先透明列出。",
+    copy: "查看 Free 和 Family Pro 的差異。",
     href: "#plans",
   },
   {
@@ -369,7 +369,7 @@ const FREE_FEATURES = [
   ["上傳前選擇照護對象", true, true],
   ["看診單、藥袋、預約單 AI 解析", "10 筆/月", "100 筆/月"],
   ["長輩友善短提醒", true, true],
-  ["吃藥頁與完整資料庫", "10 筆", "完整保存"],
+  ["吃藥提醒與資料保存", "10 筆", "完整保存"],
   ["家庭群組", "1 個", "1 個"],
   ["成員", "1 位", "8 位"],
   ["照護對象", "1 位", "4 位"],
@@ -380,10 +380,10 @@ const FREE_FEATURES = [
 ];
 
 const PLAN_TIERS = [
-  { name: "Free", ocr: 10, members: 1, recipients: 1 },
-  { name: "Family Basic", ocr: 30, members: 2, recipients: 1 },
-  { name: "Family Plus", ocr: 50, members: 5, recipients: 2 },
-  { name: "Family Pro", ocr: 100, members: 8, recipients: 4 },
+  { name: "Free", label: "Free 免費", ocr: 10, members: 1, recipients: 1 },
+  { name: "Family Basic", label: "Family Basic 家庭基礎", ocr: 30, members: 2, recipients: 1 },
+  { name: "Family Plus", label: "Family Plus 家庭進階", ocr: 50, members: 5, recipients: 2 },
+  { name: "Family Pro", label: "Family Pro 家庭專業", ocr: 100, members: 8, recipients: 4 },
 ];
 
 const LANDING_FAQS = [
@@ -400,8 +400,8 @@ const LANDING_FAQS = [
     answer: "目前可整理看診單、藥袋、處方箋、領藥資訊、掛號預約單與一般照護提醒。資料會存到對應照護對象底下，方便家人回頭查。",
   },
   {
-    question: "免費版和收費版差在哪裡？",
-    answer: "測試期間一般測試帳號開放 Family Pro。正式版會保留免費體驗；收費版提供長期保存、多位照護對象、家庭群組與健康時間線。",
+    question: "Free 和 Family Pro 差在哪裡？",
+    answer: "測試期間一般測試帳號開放 Family Pro。正式版會保留 Free 體驗；Family Pro 提供較高解析額度、家庭協作、多位照護對象與完整保存。",
   },
   {
     question: "長輩一定要會用系統嗎？",
@@ -425,11 +425,11 @@ const LANDING_FAQS = [
   },
   {
     question: "家人可以一起看同一份紀錄嗎？",
-    answer: "可以。家庭群組可讓家人一起查看今日照護、未來行程、吃藥頁與照護紀錄。測試期間此功能開放使用。",
+    answer: "可以。家庭群組可讓家人一起查看今日照護、未來行程、吃藥提醒與照護紀錄。測試期間此功能開放使用。",
   },
   {
     question: "資料有錯可以修改嗎？",
-    answer: "可以。家人登入後台後，可在查詢頁或吃藥頁編輯資料；不需要的提醒也可以在編輯畫面中刪除。",
+    answer: "可以。家人登入後台後，可在查詢頁或吃藥提醒頁編輯資料；不需要的提醒也可以在編輯畫面中刪除。",
   },
   {
     question: "Care WEDO 適合誰使用？",
@@ -441,7 +441,7 @@ const FEEDBACK_TOPICS = [
   "LINE 上傳流程",
   "提醒文案是否看得懂",
   "今日照護首頁",
-  "吃藥頁",
+  "吃藥提醒",
   "家人協作",
   "其他建議",
 ];
@@ -452,21 +452,21 @@ function FeatureValue({ value }) {
   return <span>{value}</span>;
 }
 
-function PlanTierTable({ compact = false }) {
+function PlanTierTable() {
   return (
-    <div className={compact ? "plan-tier-table plan-tier-table-compact" : "plan-tier-table"} role="table" aria-label="Care WEDO 方案級距">
+    <div className="plan-tier-table" role="table" aria-label="Care WEDO 方案級距">
       <div className="plan-tier-row plan-tier-head" role="row">
         <strong>方案</strong>
-        <strong>OCR/月</strong>
-        <strong>成員</strong>
+        <strong>圖片解析 / 月</strong>
+        <strong>家人帳號</strong>
         <strong>照護對象</strong>
       </div>
       {PLAN_TIERS.map((tier) => (
         <div className="plan-tier-row" role="row" key={tier.name}>
-          <span>{tier.name}</span>
-          <span>{tier.ocr}</span>
-          <span>{tier.members}</span>
-          <span>{tier.recipients}</span>
+          <span>{tier.label}</span>
+          <span>{tier.ocr} 筆</span>
+          <span>{tier.members} 位</span>
+          <span>{tier.recipients} 位</span>
         </div>
       ))}
     </div>
@@ -479,14 +479,14 @@ function PlanDetailsModal({ onClose }) {
       <div className="modal-content plan-details-modal" role="dialog" aria-modal="true" aria-labelledby="plan-details-title" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
           <div>
-            <p className="modal-kicker">方案規劃中</p>
-            <h2 id="plan-details-title">Care WEDO 方案級距</h2>
+            <p className="modal-kicker">Family Pro 方案</p>
+            <h2 id="plan-details-title">目前規劃</h2>
           </div>
           <button type="button" className="btn-close" onClick={onClose} aria-label="關閉">×</button>
         </div>
         <div className="modal-body">
           <PlanTierTable />
-          <p className="helper-copy">測試期間所有測試帳號開放 Family Pro 權限。更高階團隊方案與無限版本不對外開放。</p>
+          <p className="helper-copy">測試期間所有測試帳號暫時開放 Family Pro。正式價格與額度會依回饋調整。</p>
         </div>
       </div>
     </div>
@@ -672,7 +672,7 @@ function LandingPage() {
           </div>
           <div className="care-note-card">
             <span>藥袋資料</span>
-            <strong>完整存入吃藥頁</strong>
+            <strong>完整存入資料庫</strong>
             <p>LINE 不塞長藥名，家人可在後台查看完整內容。</p>
           </div>
           <div className="family-sync-card">
@@ -736,32 +736,29 @@ function LandingPage() {
       </section>
 
       <section className="landing-section plan-section" id="plans">
-        <div className="section-kicker">免費與收費</div>
+        <div className="section-kicker">Free / Family Pro</div>
         <h2>測試期間開放 Family Pro。</h2>
         <div className="plan-cards">
           <article className="plan-card">
-            <span>正式免費版規劃</span>
+            <span>Free</span>
             <h3>LINE 體驗與基礎提醒</h3>
             <p>適合先試用。保留 LINE 上傳、基礎解析與短提醒，正式額度會另行公告。</p>
             <a href="https://lin.ee/xzbyyvf" target="_blank" rel="noopener noreferrer">加入 LINE 小管家</a>
           </article>
           <article className="plan-card featured-plan">
-            <span>正式收費版規劃</span>
+            <button type="button" className="plan-name-trigger" onClick={() => setShowPlanDetails(true)}>Family Pro</button>
             <h3>家庭照護空間</h3>
             <p>適合長期照顧父母、長輩或慢性病家人。提供完整保存、家庭群組、多照護對象與健康時間線。</p>
-            <button type="button" onClick={() => setShowPlanDetails(true)}>規劃中</button>
             <LineLoginAction loggingIn={loggingIn} label="用 LINE 登入建立" onLogin={handleLineLogin} />
           </article>
         </div>
-        <p className="plan-beta-note">目前系統測試期間，所有測試帳號開放 Family Pro 權限；無限版本僅供內部管理帳號使用。</p>
+        <p className="plan-beta-note">目前系統測試期間，所有測試帳號暫時開放 Family Pro 權限。</p>
 
-        <PlanTierTable compact />
-
-        <div className="feature-table" role="table" aria-label="Care WEDO 免費版與收費版功能對照">
+        <div className="feature-table" role="table" aria-label="Care WEDO Free 與 Family Pro 功能對照">
           <div className="feature-row table-head" role="row">
             <strong>功能</strong>
-            <strong>免費版</strong>
-            <strong>收費版</strong>
+            <strong>Free</strong>
+            <strong>Family Pro</strong>
           </div>
           {FREE_FEATURES.map(([feature, free, paid]) => (
             <div className="feature-row" role="row" key={feature}>
@@ -789,7 +786,7 @@ function LandingPage() {
           <div className="section-kicker">試用回饋</div>
           <h2>哪裡不夠簡單，請直接告訴我們。</h2>
           <p>
-            我們正在測試長輩友善版。你的回饋會用來調整 LINE 文案、首頁操作、吃藥頁與家人協作流程。
+            我們正在測試長輩友善版。你的回饋會用來調整 LINE 文案、首頁操作、吃藥提醒與家人協作流程。
           </p>
         </div>
         <form className="feedback-form" onSubmit={handleFeedbackSubmit}>
@@ -806,7 +803,7 @@ function LandingPage() {
               value={feedbackForm.message}
               onChange={handleFeedbackChange}
               rows={5}
-              placeholder="例：LINE 回覆還是太長、按鈕文字看不懂、吃藥頁想更簡單..."
+              placeholder="例：LINE 回覆還是太長、按鈕文字看不懂、吃藥提醒想更簡單..."
             />
           </label>
           <div className="feedback-form-row">
@@ -998,6 +995,7 @@ function DashboardApp() {
   const [showManualReminder, setShowManualReminder] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState(null);
   const [showFamilyNotesEditor, setShowFamilyNotesEditor] = useState(false);
+  const [showPlanDetails, setShowPlanDetails] = useState(false);
   const [familyHelpDraft, setFamilyHelpDraft] = useState(null);
   const [familyNotes, setFamilyNotes] = useState([]);
   const dashboardRequestSeqRef = useRef(0);
@@ -1692,6 +1690,12 @@ function DashboardApp() {
 
           {identity.status === "authenticated" && (
             <div className="side-rail-footer">
+              <button type="button" className="side-footer-action" onClick={() => setShowPlanDetails(true)}>
+                Family Pro
+              </button>
+              <a className="side-footer-action" href="https://care.wedopr.com/">
+                Care WEDO
+              </a>
               <button type="button" className="btn-logout side-logout" onClick={logoutLineIdentity}>
                 登出
               </button>
@@ -1851,6 +1855,10 @@ function DashboardApp() {
             setEditingAppointment(null);
           }}
         />
+      )}
+
+      {showPlanDetails && (
+        <PlanDetailsModal onClose={() => setShowPlanDetails(false)} />
       )}
 
       <MobileBottomNav

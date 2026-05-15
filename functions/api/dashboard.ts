@@ -50,9 +50,9 @@ function buildPlanUsage(plan: PlanRow, ocrUsed: number) {
 function buildPermissionVersion(plan: PlanRow, hasUnlimitedAccess = false) {
   if (hasUnlimitedAccess) {
     return {
-      id: "unlimited",
-      label: "無限版本",
-      description: "內部管理權限",
+      id: plan.id,
+      label: plan.name,
+      description: `成員 ${plan.max_members} 位・照護對象 ${plan.max_recipients} 位`,
     };
   }
 

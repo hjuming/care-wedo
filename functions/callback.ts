@@ -244,7 +244,7 @@ function formatResultSummary(parsed: import("./_shared/medical_ocr").ParsedMedic
 
   if (parsed.medications?.length && appointments.length) {
     lines.push("");
-    lines.push(`藥：${parsed.medications.length} 筆，已放進吃藥頁。`);
+    lines.push(`藥：${parsed.medications.length} 筆，已放進吃藥提醒。`);
   }
 
   if (lines.length === 0) lines.push(`${DEFAULT_RECIPIENT}，資料已整理好。`);

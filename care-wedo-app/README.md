@@ -17,7 +17,7 @@ React 19 + Vite 前端，搭配 Cloudflare Pages Functions 與 Supabase。
 - 測試期間全功能免費開放。
 - 首屏主軸：把醫院單子變成家人看得懂的提醒。
 - CTA：加入 LINE 小管家、家人登入後台。
-- 方案區塊：界定正式免費版與收費版規劃。
+- 方案區塊：界定 Free 與 Family Pro 規劃。
 - 回饋區塊：使用 EmailJS 收集試用意見。
 
 ## EmailJS 回饋表單

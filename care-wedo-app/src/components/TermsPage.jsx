@@ -46,11 +46,11 @@ export default function TermsPage() {
       </section>
 
       <section className="landing-section legal-section">
-        <h2>3. 免費方案與付費方案</h2>
-        <p>目前系統測試期間，全功能免費開放。正式版方案與限制會依 Beta 回饋另行公告。</p>
+        <h2>3. Free 與 Family Pro</h2>
+        <p>目前系統測試期間，所有測試帳號暫時開放 Family Pro。正式版方案與限制會依 Beta 回饋另行公告。</p>
         <ul className="legal-list">
-          <li><strong>正式免費版規劃</strong>：保留 LINE 小管家、基礎 AI 解析與長輩友善短提醒。</li>
-          <li><strong>正式收費版規劃</strong>：提供完整保存、家庭群組、多位照護對象、較高 OCR 額度與健康時間線。</li>
+          <li><strong>Free</strong>：保留 LINE 小管家、基礎 AI 解析與長輩友善短提醒。</li>
+          <li><strong>Family Pro</strong>：提供完整保存、家庭群組、多位照護對象、較高解析額度與健康時間線。</li>
           <li>方案可隨時升級，降級或取消請依當時公告之退款政策辦理。</li>
         </ul>
       </section>

@@ -15,8 +15,12 @@ test("landing page copy matches elder-friendly beta positioning", () => {
   assert.match(app, /測試期間開放 Family Pro/);
   assert.match(app, /長輩用 LINE 傳照片/);
   assert.match(app, /資料完整保存，LINE 只講重點/);
-  assert.match(app, /正式免費版規劃/);
-  assert.match(app, /正式收費版規劃/);
+  assert.match(app, /Free \/ Family Pro/);
+  assert.match(app, /plan-name-trigger/);
+  assert.match(app, /side-footer-action/);
+  assert.match(app, /href="https:\/\/care\.wedopr\.com\/"/);
+  assert.doesNotMatch(app, /<button[^>]*>規劃中<\/button>/);
+  assert.doesNotMatch(app, /查看方案規劃/);
   assert.match(app, /10 筆\/月/);
   assert.match(app, /100 筆\/月/);
   assert.match(app, /家庭群組/);
@@ -26,6 +30,7 @@ test("landing page copy matches elder-friendly beta positioning", () => {
   assert.match(app, /PLAN_TIERS/);
   assert.match(app, /Family Pro/);
   assert.match(app, /PlanDetailsModal/);
+  assert.doesNotMatch(app, /無限版本/);
   assert.doesNotMatch(app, /Care Team/);
   assert.match(app, /回饋意見/);
   assert.match(app, /sendFeedbackEmail/);
