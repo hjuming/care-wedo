@@ -26,7 +26,6 @@ type LineWebhookBody = {
 };
 
 const encoder = new TextEncoder();
-const DEFAULT_RECIPIENT = "爸爸／媽媽";
 const ASSIGNMENT_ACK_TEXT = "收到。\n我來存檔。";
 const LINE_NEXT_UPLOAD_PROFILE_PREFIX = "line_next_upload_profile:";
 
@@ -183,19 +182,32 @@ function appendVisitSummary(lines: string[], apt: Record<string, any>) {
   const dateTime = formatLineDateTime(apt.date, apt.time);
   if (dateTime) lines.push(dateTime);
 
-  const place = [apt.hospital, apt.location].map((value) => takeFirstText(value)).filter(Boolean).join(" ");
-  if (place) lines.push(place);
+  const hospital = takeFirstText(apt.hospital);
+  if (hospital) lines.push(hospital);
+
+  const location = takeFirstText(apt.location);
+  if (location && location !== hospital) lines.push(location);
 
   const department = takeFirstText(apt.department);
   if (department && !department.includes("藥局")) lines.push(department);
 
-  const doctor = takeFirstText(apt.doctor);
-  if (doctor) lines.push(`${doctor}醫師`);
+  const doctor = formatDoctorLabel(apt.doctor);
+  if (doctor) lines.push(doctor);
 
   const number = takeFirstText(apt.number);
   if (number) lines.push(`號碼：${number}`);
 
   if (apt.fasting_required) lines.push(`要空腹：${apt.fasting_hours || 8} 小時`);
+}
+
+function formatDoctorLabel(value: unknown) {
+  const doctor = takeFirstText(value);
+  if (!doctor) return "";
+  if (doctor.endsWith("藥師")) return doctor;
+  if (doctor.endsWith("醫師")) return doctor;
+  if (doctor.endsWith("醫生")) return `${doctor.slice(0, -2)}醫師`;
+  if (doctor.endsWith("院長")) return `${doctor.slice(0, -2)}醫師`;
+  return `${doctor}醫師`;
 }
 
 function appendRefillSummary(lines: string[], appointments: Array<Record<string, any>>) {
@@ -228,17 +240,17 @@ function formatResultSummary(parsed: import("./_shared/medical_ocr").ParsedMedic
   const visitAppointment = appointments.find((apt) => !isRefillAppointment(apt));
 
   if (refillAppointments.length) {
-    lines.push(`${DEFAULT_RECIPIENT}，請記得領藥：`);
+    lines.push("已為您新增領藥提醒");
     lines.push("");
     appendRefillSummary(lines, refillAppointments);
     appendBringCard(lines);
   } else if (visitAppointment) {
-    lines.push(`${DEFAULT_RECIPIENT}，這是下次看診提醒：`);
+    lines.push("已為您新增一筆看診提醒");
     lines.push("");
     appendVisitSummary(lines, visitAppointment);
     appendBringCard(lines);
   } else if (parsed.medications?.length) {
-    lines.push(`${DEFAULT_RECIPIENT}，藥袋已整理好：`);
+    lines.push("已為您新增用藥提醒");
     lines.push("");
     lines.push(`藥：${parsed.medications.length} 筆`);
     lines.push("請照藥袋時間吃。");
@@ -249,7 +261,7 @@ function formatResultSummary(parsed: import("./_shared/medical_ocr").ParsedMedic
     lines.push(`藥：${parsed.medications.length} 筆，已放進吃藥提醒。`);
   }
 
-  if (lines.length === 0) lines.push(`${DEFAULT_RECIPIENT}，資料已整理好。`);
+  if (lines.length === 0) lines.push("已為您整理好這筆照護資料。");
   lines.push("");
   lines.push(`已存入【${profileName}】。`);
   lines.push("https://care.wedopr.com");

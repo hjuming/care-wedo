@@ -92,12 +92,15 @@ test("LINE default upload helper also shows care profile name labels", () => {
 test("LINE elder-friendly copy stays short and uses tap labels", () => {
   const callback = readProjectFile("functions/callback.ts");
 
-  assert.match(callback, /爸爸／媽媽/);
+  assert.match(callback, /已為您新增一筆看診提醒/);
   assert.match(callback, /請記得帶：健保卡/);
+  assert.match(callback, /formatDoctorLabel/);
+  assert.match(callback, /doctor\.endsWith\("院長"\)/);
   assert.match(callback, /uploadPhotoQuickReply/);
   assert.match(callback, /cameraRoll/);
   assert.match(callback, /再傳一張/);
   assert.match(callback, /看清單/);
+  assert.doesNotMatch(callback, /這是下次看診提醒/);
   assert.doesNotMatch(callback, /我會幫您整理成看診、領藥和吃藥提醒/);
   assert.doesNotMatch(callback, /處方箋或預約單照片/);
   assert.doesNotMatch(callback, /用來：|注意：|要記得的時間|藥的提醒/);
