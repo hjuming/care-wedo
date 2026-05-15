@@ -2,6 +2,7 @@ import { supabaseFetch, Env as SupabaseEnv } from "../../_shared/supabase";
 import { logError, logEvent } from "../../_shared/logger";
 
 const DEFAULT_RECIPIENT = "親愛的家人";
+const BRAND_SIGNATURE = "Care WEDO\n陪你照顧最重要的人\nhttps://care.wedopr.com";
 
 type Env = SupabaseEnv & {
   CRON_SECRET?: string;
@@ -135,11 +136,6 @@ function profileLabel(profile: CareProfile | undefined | null) {
   return profile?.display_name?.trim() || DEFAULT_RECIPIENT;
 }
 
-function itemPrefix(profile: CareProfile | undefined | null) {
-  const label = profileLabel(profile);
-  return label === DEFAULT_RECIPIENT ? "" : `【${label}】 `;
-}
-
 function resolveLineRecipients(
   item: { group_id: number | null; profile_id: number | null; users: { line_user_id: string } | null },
   groupRecipients: Map<number, string[]>,
@@ -226,10 +222,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     for (const [lineUserId, appointments] of userAlerts.entries()) {
       if (appointments.length === 0) continue;
 
-      let msgText = `${DEFAULT_RECIPIENT}，晚安。\n\n提醒您一下：\n`;
+      const lines = ["晚安", "提醒您接下來的注意事項。", ""];
 
       for (const apt of appointments) {
-        const prefix = itemPrefix(apt.profile_id ? profileMap.get(apt.profile_id) : undefined);
+        const profile = apt.profile_id ? profileMap.get(apt.profile_id) : undefined;
+        const name = profileLabel(profile);
         const typeLabel =
           apt.type === "inspection" ? "檢查" :
           apt.type === "refill_reminder" ? "領藥" :
@@ -240,14 +237,17 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
           apt.type === "exercise" ? "運動" :
           apt.type === "other" || apt.type === "reminder" ? "提醒" :
           "看診";
-        msgText += `• ${prefix}${apt.time || ""} 要去 ${apt.hospital || "醫院"} ${typeLabel}。\n`;
+        lines.push(`${name} 明天${apt.time ? ` ${apt.time}` : ""} 要去 ${apt.hospital || "醫院"} ${typeLabel}。`);
         const hours = apt.fasting_hours || 8;
         const startTimeText = calculateFastingStart(apt.time, hours);
-        msgText += `  ${startTimeText} 開始，先不要吃東西。水能不能喝，要看單子上的說明。\n`;
-        msgText += `  健保卡和單子也先放好，明天比較不會急。\n\n`;
+        lines.push(`${startTimeText} 開始，先不要吃東西。水能不能喝，要看單子上的說明。`);
+        lines.push("健保卡和單子也先放好，明天比較不會急。");
+        lines.push("");
       }
 
-      await pushText(env, lineUserId, msgText.trim());
+      lines.push(BRAND_SIGNATURE);
+
+      await pushText(env, lineUserId, lines.filter((line, index, all) => line !== "" || all[index - 1] !== "").join("\n").trim());
       sentCount++;
     }
 

@@ -350,10 +350,12 @@ test("Cron endpoints fail closed when CRON_SECRET is not configured", () => {
 test("Daily LINE reminders use family-like copy instead of announcement-style notices", () => {
   const source = readProjectFile("functions/api/cron/reminders.ts");
   const builder = source.slice(source.indexOf("function buildDailyReminderMessage"), source.indexOf("async function fetchCareProfiles"));
+  const evening = readProjectFile("functions/api/cron/evening.ts");
 
-  assert.match(builder, /先提醒一下接下來的預約/);
-  assert.match(builder, /今天的藥和接下來的預約，先提醒一下/);
-  assert.match(builder, /需要看完整清單時，再打開 Care WEDO/);
+  assert.match(builder, /"早安",\s*"提醒您接下來的注意事項。"/);
+  assert.match(source, /Care WEDO\\n陪你照顧最重要的人\\nhttps:\/\/care\.wedopr\.com/);
+  assert.match(evening, /"晚安",\s*"提醒您接下來的注意事項。"/);
+  assert.match(evening, /Care WEDO\\n陪你照顧最重要的人\\nhttps:\/\/care\.wedopr\.com/);
   assert.match(source, /!place\.includes\(doctor\)/);
   assert.doesNotMatch(builder, /接下來的預約先提醒你：/);
   assert.doesNotMatch(builder, /親愛的家人，早安/);
@@ -361,6 +363,8 @@ test("Daily LINE reminders use family-like copy instead of announcement-style no
   assert.doesNotMatch(builder, /明天要記得/);
   assert.doesNotMatch(builder, /完整清單在這裡/);
   assert.doesNotMatch(builder, /`【\$\{label\}】`/);
+  assert.doesNotMatch(evening, /提醒您一下/);
+  assert.doesNotMatch(evening, /itemPrefix/);
 });
 
 test("Morning reminders target today's appointments while evening fasting targets tomorrow", () => {

@@ -3,6 +3,7 @@ import { logError, logEvent } from "../../_shared/logger";
 
 const DEFAULT_RECIPIENT = "親愛的家人";
 const WEEKDAY_LABELS = ["日", "一", "二", "三", "四", "五", "六"];
+const BRAND_SIGNATURE = "Care WEDO\n陪你照顧最重要的人\nhttps://care.wedopr.com";
 
 type Env = SupabaseEnv & {
   CRON_SECRET?: string;
@@ -167,12 +168,7 @@ function buildDailyReminderMessage(
 ) {
   const hasMeds = data.meds.length > 0;
   const hasAppointments = data.apts.length > 0;
-  const intro = hasMeds && hasAppointments
-    ? "今天的藥和接下來的預約，先提醒一下。"
-    : hasMeds
-      ? "今天的藥先提醒一下。"
-      : "先提醒一下接下來的預約。";
-  const lines = [`早安，${intro}`, ""];
+  const lines = ["早安", "提醒您接下來的注意事項。", ""];
 
   if (hasMeds) {
     for (const med of data.meds) {
@@ -198,8 +194,7 @@ function buildDailyReminderMessage(
     }
   }
 
-  lines.push("需要看完整清單時，再打開 Care WEDO：");
-  lines.push("https://care.wedopr.com");
+  lines.push(BRAND_SIGNATURE);
 
   return lines.filter((line, index, all) => line !== "" || all[index - 1] !== "").join("\n").trim();
 }
