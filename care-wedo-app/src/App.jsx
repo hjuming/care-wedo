@@ -300,74 +300,81 @@ async function prepareAvatarDataUrl(file) {
   return setAvatarName(canvas.toDataURL("image/jpeg", 0.84), file.name.replace(/\.[^.]+$/, ""));
 }
 
+const EMAILJS_CONFIG = {
+  serviceId: import.meta.env.VITE_EMAILJS_SERVICE_ID,
+  templateId: import.meta.env.VITE_EMAILJS_TEMPLATE_ID,
+  publicKey: import.meta.env.VITE_EMAILJS_PUBLIC_KEY,
+};
+
 const LANDING_PROBLEMS = [
   {
-    title: "提醒散在不同地方",
-    copy: "回診、抽血、領藥、帶卡、空腹，常常靠家人各自記，忙起來就容易漏。",
+    title: "看診時間容易忘",
+    copy: "掛號單、檢查單、領藥日散在 LINE 和紙本裡，家人常常要重新找一次。",
   },
   {
-    title: "醫療資料很難回頭找",
-    copy: "藥袋、處方箋、檢查單與照片分散在 LINE、相簿和紙本裡，下一次看診又重新整理一次。",
+    title: "藥袋看不太懂",
+    copy: "藥名很長、字又小。長輩需要的是：什麼時候吃、要不要注意。",
   },
   {
-    title: "照護責任集中在一個人身上",
-    copy: "誰提醒了、誰陪診了、誰知道最新狀況，家人之間沒有同一份清楚紀錄。",
+    title: "家人資訊不同步",
+    copy: "誰上傳、誰陪診、誰確認過，最好有一份大家都看得到的紀錄。",
   },
 ];
 
 const LANDING_SOLUTIONS = [
-  "拍照解析看診單、藥袋與檢查提醒",
-  "整理回診、用藥、領藥與空腹注意事項",
-  "建立長輩健康時間線，方便家人回顧",
-  "登入後建立家庭群組，共享照護進度",
+  "LINE 上傳前先選家人，資料自動歸到正確照護對象",
+  "看診單與領藥單整理成短提醒，不用讀長篇文字",
+  "藥袋資訊完整存入資料庫，LINE 只回長輩需要知道的重點",
+  "家人登入後可查看今日照護、未來行程、吃藥頁與完整紀錄",
 ];
 
 const LANDING_WORKFLOW = [
   {
     step: "01",
-    title: "用 LINE 登入",
-    copy: "不用另外記帳號密碼，家人點一下就能開始建立照護空間。",
+    title: "先選家人",
+    copy: "LINE 會顯示姓名標籤，點一下就知道這次資料要存給誰。",
   },
   {
     step: "02",
-    title: "拍照或手動新增",
-    copy: "看診單、處方箋、檢查提醒與家人交代事項都能整理成卡片。",
+    title: "再拍單子",
+    copy: "藥袋、處方箋、掛號單或預約單都可以先拍照傳給小管家。",
   },
   {
     step: "03",
-    title: "家人一起照顧",
-    copy: "家庭群組同步今日照護、未來行程與每日提醒。",
+    title: "收到短提醒",
+    copy: "長輩只看重點：日期、地點、要做什麼、要帶什麼。",
   },
 ];
 
 const LANDING_PAGE_ENTRIES = [
   {
     title: "功能導覽",
-    copy: "了解 Care WEDO 如何整理門診、檢查、領藥與家庭提醒。",
+    copy: "看 Care WEDO 如何把單子整理成短提醒。",
     href: "#features",
   },
   {
     title: "方案比較",
-    copy: "先用 LINE 體驗，需要長期保存時再建立家庭照護空間。",
+    copy: "測試期間全功能免費開放，正式收費規則先透明列出。",
     href: "#plans",
   },
   {
-    title: "隱私與條款",
-    copy: "查看資料使用方式、LINE 登入與照護紀錄保存原則。",
-    href: "/privacy",
+    title: "回饋意見",
+    copy: "試用後告訴我們哪裡看不懂、哪裡需要更簡單。",
+    href: "#feedback",
   },
 ];
 
 const FREE_FEATURES = [
-  ["LINE 對話使用", true, true],
-  ["圖片 AI 解析", "每月有限次數", "較高額度"],
-  ["看診單重點摘要", true, true],
-  ["用藥資訊整理", "基礎摘要", "完整保存"],
-  ["長期記憶", false, true],
-  ["家庭群組共享", false, true],
-  ["多位照護對象", false, true],
-  ["健康時間線", false, true],
-  ["管理頁 Dashboard", false, true],
+  ["LINE 照護小管家", true, true],
+  ["上傳前選擇照護對象", true, true],
+  ["看診單、藥袋、預約單 AI 解析", "測試期開放", "較高額度"],
+  ["長輩友善短提醒", true, true],
+  ["吃藥頁與完整資料庫", "測試期開放", true],
+  ["多位照護對象", "測試期開放", true],
+  ["家庭群組共享", "測試期開放", true],
+  ["今日照護與未來行程", "測試期開放", true],
+  ["長期健康時間線", "測試期開放", true],
+  ["正式版月額方案", "不適用", "規劃中"],
 ];
 
 const LANDING_FAQS = [
@@ -377,22 +384,60 @@ const LANDING_FAQS = [
   },
   {
     question: "免費版和收費版差在哪？",
-    answer: "免費版適合先透過 LINE 體驗圖片摘要與對話提醒；收費版適合長期照護，提供記憶、家庭群組、照護對象與健康時間線。",
+    answer: "測試期間全功能免費開放。正式版會保留免費體驗；收費版提供長期保存、多位照護對象、家庭群組與健康時間線。",
   },
   {
     question: "長輩一定要會用系統嗎？",
-    answer: "不一定。家人可以負責建立資料與管理提醒，長輩只需要透過熟悉的 LINE 接收重點訊息。",
+    answer: "不一定。長輩可以只用 LINE 收提醒；家人負責登入後台、查看清單與修改資料。",
   },
   {
     question: "圖片和紀錄會被保存嗎？",
-    answer: "免費版以對話體驗為主，不提供完整長期記憶；登入後的收費版才會把照護資料保存為家庭可管理的紀錄。",
+    answer: "會。系統會保存上傳文件與解析資料；重複上傳時，提醒與藥品會盡量更新同一筆，避免清單混亂。",
   },
+];
+
+const FEEDBACK_TOPICS = [
+  "LINE 上傳流程",
+  "提醒文案是否看得懂",
+  "今日照護首頁",
+  "吃藥頁",
+  "家人協作",
+  "其他建議",
 ];
 
 function FeatureValue({ value }) {
   if (value === true) return <span className="feature-yes">有</span>;
   if (value === false) return <span className="feature-no">無</span>;
   return <span>{value}</span>;
+}
+
+async function sendFeedbackEmail(formData) {
+  const { serviceId, templateId, publicKey } = EMAILJS_CONFIG;
+  if (!serviceId || !templateId || !publicKey) {
+    throw new Error("回饋信箱尚未設定，請先用 Email 聯絡我們。");
+  }
+
+  const response = await fetch("https://api.emailjs.com/api/v1.0/email/send", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      service_id: serviceId,
+      template_id: templateId,
+      user_id: publicKey,
+      template_params: {
+        from_name: formData.name || "Care WEDO 使用者",
+        reply_to: formData.email || "no-reply@care.wedopr.com",
+        topic: formData.topic,
+        message: formData.message,
+        source: "Care WEDO landing feedback",
+        submitted_at: new Date().toISOString(),
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error("回饋暫時送不出去，請稍後再試。");
+  }
 }
 
 function LineIcon() {
@@ -436,6 +481,13 @@ function LineLoginAction({ className = "", loggingIn = false, label = "用 LINE 
 function LandingPage() {
   const [loggingIn, setLoggingIn] = useState(false);
   const [loginError, setLoginError] = useState(null);
+  const [feedbackForm, setFeedbackForm] = useState({
+    name: "",
+    email: "",
+    topic: FEEDBACK_TOPICS[0],
+    message: "",
+  });
+  const [feedbackStatus, setFeedbackStatus] = useState({ state: "idle", message: "" });
 
   async function handleLineLogin() {
     setLoggingIn(true);
@@ -448,6 +500,38 @@ function LandingPage() {
     }
   }
 
+  function handleFeedbackChange(event) {
+    const { name, value } = event.target;
+    setFeedbackForm((current) => ({ ...current, [name]: value }));
+  }
+
+  async function handleFeedbackSubmit(event) {
+    event.preventDefault();
+    if (!feedbackForm.message.trim()) {
+      setFeedbackStatus({ state: "error", message: "請先寫下您的建議。" });
+      return;
+    }
+
+    setFeedbackStatus({ state: "sending", message: "正在送出..." });
+    try {
+      await sendFeedbackEmail(feedbackForm);
+      trackEvent("landing_feedback_sent", { topic: feedbackForm.topic });
+      setFeedbackStatus({ state: "success", message: "收到，謝謝您的回饋。" });
+      setFeedbackForm({
+        name: "",
+        email: "",
+        topic: FEEDBACK_TOPICS[0],
+        message: "",
+      });
+    } catch (err) {
+      trackError("landing_feedback_failed", err, { topic: feedbackForm.topic });
+      setFeedbackStatus({
+        state: "error",
+        message: err instanceof Error ? err.message : "回饋暫時送不出去，請稍後再試。",
+      });
+    }
+  }
+
   return (
     <main className="landing-shell">
       <nav className="landing-nav" aria-label="Care WEDO 入口導覽">
@@ -455,6 +539,7 @@ function LandingPage() {
         <div className="landing-nav-links">
           <a href="#features">功能</a>
           <a href="#plans">方案</a>
+          <a href="#feedback">回饋</a>
           <a href="#faq">FAQ</a>
           <a href="/privacy">隱私</a>
           <LineLoginAction className="nav-login-link nav-login-line-login" loggingIn={loggingIn} loadingLabel="開啟 LINE..." onLogin={handleLineLogin} />
@@ -463,43 +548,44 @@ function LandingPage() {
 
       <section className="landing-hero" aria-label="Care WEDO 首頁">
         <div className="landing-hero-copy">
-          <span className="landing-version">長輩友善健康管理平台</span>
+          <span className="landing-version">測試期間全功能免費開放</span>
           <h1>
             <span>Care WEDO</span>
-            <span>把家人的照護提醒</span>
-            <span>整理清楚。</span>
+            <span>把醫院單子</span>
+            <span>變成家人看得懂的提醒。</span>
           </h1>
           <p>
-            拍下看診單、處方箋或檢查單，Care WEDO 會協助整理成今日照護、未來行程、吃藥紀錄與家庭提醒，讓家人一起照顧不慌亂。
+            長輩用 LINE 傳照片。系統整理資料、存進資料庫，LINE 只回最重要的提醒。
           </p>
           <div className="landing-cta-row">
-            <LineLoginAction className="landing-line-login" loggingIn={loggingIn} label="用 LINE 登入開始" onLogin={handleLineLogin} />
-            <a className="secondary-action" href="#features">先看功能導覽</a>
+            <a className="primary-action landing-line-entry" href="https://lin.ee/xzbyyvf" target="_blank" rel="noopener noreferrer">加入 LINE 小管家</a>
+            <LineLoginAction className="landing-line-login" loggingIn={loggingIn} label="家人登入後台" onLogin={handleLineLogin} />
+            <a className="secondary-action" href="#feedback">留下試用回饋</a>
           </div>
           {loginError && <p className="notice-danger landing-login-error">{loginError}</p>}
-          <p className="landing-trust-copy">AI 協助整理，家人安心陪伴。不取代醫師，也不取代家人。</p>
+          <p className="landing-trust-copy">不取代醫師，只幫家人把照護資訊整理清楚。</p>
         </div>
         <div className="landing-hero-panel" aria-label="照護重點預覽">
           <div className="care-note-card primary-note">
-            <span>今日照護</span>
-            <strong>下午 3:20 回診</strong>
-            <p>記得帶健保卡、慢箋與近期檢查單。</p>
+            <span>LINE 提醒</span>
+            <strong>6/18 上午 8:37</strong>
+            <p>台大醫院西址 1 樓。請記得帶健保卡。</p>
           </div>
           <div className="care-note-card">
-            <span>AI 整理</span>
-            <strong>藥袋照片已摘要</strong>
-            <p>用藥時間、注意事項、領藥日會整理成清單。</p>
+            <span>藥袋資料</span>
+            <strong>完整存入吃藥頁</strong>
+            <p>LINE 不塞長藥名，家人可在後台查看完整內容。</p>
           </div>
           <div className="family-sync-card">
-            <strong>家人同步</strong>
-            <p>主要照護者與家人都看同一份照護紀錄。</p>
+            <strong>家人共同照顧</strong>
+            <p>多位照護對象、家庭群組、今日照護與未來行程都可同步。</p>
           </div>
         </div>
       </section>
 
       <section className="landing-section landing-entry-section" aria-label="快速入口">
         <div className="section-kicker">網站入口</div>
-        <h2>第一次來，可以從這裡開始。</h2>
+        <h2>第一次來，先看這三件事。</h2>
         <div className="landing-entry-grid">
           {LANDING_PAGE_ENTRIES.map((item) => (
             <a key={item.title} href={item.href} className="landing-entry-card">
@@ -512,7 +598,7 @@ function LandingPage() {
 
       <section className="landing-section" id="features">
         <div className="section-kicker">照護痛點</div>
-        <h2>照顧長輩，最累的常常不是事情本身。</h2>
+        <h2>照顧長輩，最怕重要事情散掉。</h2>
         <div className="landing-card-grid">
           {LANDING_PROBLEMS.map((item) => (
             <article key={item.title} className="landing-card">
@@ -526,9 +612,9 @@ function LandingPage() {
       <section className="landing-section solution-band">
         <div>
           <div className="section-kicker">Care WEDO 的角色</div>
-          <h2>把照護資訊整理成家人看得懂的日常清單。</h2>
+          <h2>資料完整保存，LINE 只講重點。</h2>
           <p>
-            AI 負責協助分類、摘要與提醒；家人保留判斷與陪伴。Care WEDO 讓資訊更清楚，讓照護不再只靠一個人硬撐。
+            系統會把看診、領藥、藥袋與預約資訊存進資料庫。長輩收到的是短提醒；家人需要時再看完整清單。
           </p>
         </div>
         <ul className="solution-list">
@@ -538,7 +624,7 @@ function LandingPage() {
 
       <section className="landing-section workflow-section" aria-label="使用流程">
         <div className="section-kicker">使用流程</div>
-        <h2>從登入到共同照護，盡量少步驟。</h2>
+        <h2>先選家人，再上傳照片。</h2>
         <div className="workflow-grid">
           {LANDING_WORKFLOW.map((item) => (
             <article key={item.step} className="workflow-card">
@@ -552,21 +638,22 @@ function LandingPage() {
 
       <section className="landing-section plan-section" id="plans">
         <div className="section-kicker">免費與收費</div>
-        <h2>先用 LINE 試試，需要長期管理時再建立家庭照護空間。</h2>
+        <h2>測試期間全功能免費開放。</h2>
         <div className="plan-cards">
           <article className="plan-card">
-            <span>免費版</span>
-            <h3>LINE 照護小管家</h3>
-            <p>適合第一次體驗，透過 LINE 傳送看診單或藥袋照片，讓 AI 協助整理重點。</p>
+            <span>正式免費版規劃</span>
+            <h3>LINE 體驗與基礎提醒</h3>
+            <p>適合先試用。保留 LINE 上傳、基礎解析與短提醒，正式額度會另行公告。</p>
             <a href="https://lin.ee/xzbyyvf" target="_blank" rel="noopener noreferrer">加入 LINE 小管家</a>
           </article>
           <article className="plan-card featured-plan">
-            <span>收費版</span>
+            <span>正式收費版規劃</span>
             <h3>家庭照護空間</h3>
-            <p>適合長期照顧父母、長輩或慢性病家人的家庭，登入後可保存、共享、追蹤照護紀錄。</p>
+            <p>適合長期照顧父母、長輩或慢性病家人。提供完整保存、家庭群組、多照護對象與健康時間線。</p>
             <LineLoginAction loggingIn={loggingIn} label="用 LINE 登入建立" onLogin={handleLineLogin} />
           </article>
         </div>
+        <p className="plan-beta-note">目前系統測試期間，免費開放完整功能。你的使用回饋會作為正式版功能與方案調整依據。</p>
 
         <div className="feature-table" role="table" aria-label="Care WEDO 免費版與收費版功能對照">
           <div className="feature-row table-head" role="row">
@@ -589,6 +676,52 @@ function LandingPage() {
         <p>
           Care WEDO 相信，AI 最好的角色不是取代醫師，也不是取代家人，而是幫家庭把重要資訊整理清楚，讓陪伴少一點慌亂，多一點安心。
         </p>
+      </section>
+
+      <section className="landing-section feedback-section" id="feedback">
+        <div className="feedback-copy">
+          <div className="section-kicker">試用回饋</div>
+          <h2>哪裡不夠簡單，請直接告訴我們。</h2>
+          <p>
+            我們正在測試長輩友善版。你的回饋會用來調整 LINE 文案、首頁操作、吃藥頁與家人協作流程。
+          </p>
+        </div>
+        <form className="feedback-form" onSubmit={handleFeedbackSubmit}>
+          <label>
+            想回饋的項目
+            <select name="topic" value={feedbackForm.topic} onChange={handleFeedbackChange}>
+              {FEEDBACK_TOPICS.map((topic) => <option key={topic} value={topic}>{topic}</option>)}
+            </select>
+          </label>
+          <label>
+            您的建議
+            <textarea
+              name="message"
+              value={feedbackForm.message}
+              onChange={handleFeedbackChange}
+              rows={5}
+              placeholder="例：LINE 回覆還是太長、按鈕文字看不懂、吃藥頁想更簡單..."
+            />
+          </label>
+          <div className="feedback-form-row">
+            <label>
+              稱呼
+              <input name="name" value={feedbackForm.name} onChange={handleFeedbackChange} placeholder="可不填" />
+            </label>
+            <label>
+              Email
+              <input name="email" type="email" value={feedbackForm.email} onChange={handleFeedbackChange} placeholder="方便回覆時填寫" />
+            </label>
+          </div>
+          <button type="submit" disabled={feedbackStatus.state === "sending"}>
+            {feedbackStatus.state === "sending" ? "送出中..." : "送出回饋"}
+          </button>
+          {feedbackStatus.message && (
+            <p className={`feedback-status ${feedbackStatus.state === "error" ? "notice-danger" : ""}`}>
+              {feedbackStatus.message}
+            </p>
+          )}
+        </form>
       </section>
 
       <section className="landing-section faq-section" id="faq">

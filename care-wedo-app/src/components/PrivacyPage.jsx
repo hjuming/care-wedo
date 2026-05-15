@@ -40,8 +40,8 @@ export default function PrivacyPage() {
         <h2>3. 資料儲存與保留</h2>
         <p>您的個人化資料儲存於 Supabase（PostgreSQL）資料庫，伺服器位於雲端。</p>
         <ul className="legal-list">
-          <li><strong>免費方案</strong>：照護紀錄保留至您主動刪除帳號為止。</li>
-          <li><strong>付費方案</strong>：方案到期後，資料繼續保留 90 天，之後依您的申請或系統排程刪除。</li>
+          <li><strong>測試期間</strong>：全功能免費開放，照護紀錄保留至您主動刪除帳號或申請刪除為止。</li>
+          <li><strong>正式方案</strong>：正式版資料保留與額度規則會在收費功能上線前公告。</li>
         </ul>
       </section>
 

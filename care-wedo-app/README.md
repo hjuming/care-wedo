@@ -1,16 +1,59 @@
-# React + Vite
+# Care WEDO App
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React 19 + Vite 前端，搭配 Cloudflare Pages Functions 與 Supabase。
 
-Currently, two official plugins are available:
+## 主要頁面
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+| 路由 | 說明 |
+|---|---|
+| `/` | 未登入首頁，長輩友善產品說明、方案比較、回饋表單 |
+| `/login` | LINE 登入頁 |
+| `/app` | 今日照護首頁 |
+| `/privacy` | 隱私政策 |
+| `/terms` | 服務條款與非醫療聲明 |
 
-## React Compiler
+## 未登入首頁目前定位
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- 測試期間全功能免費開放。
+- 首屏主軸：把醫院單子變成家人看得懂的提醒。
+- CTA：加入 LINE 小管家、家人登入後台。
+- 方案區塊：界定正式免費版與收費版規劃。
+- 回饋區塊：使用 EmailJS 收集試用意見。
 
-## Expanding the ESLint configuration
+## EmailJS 回饋表單
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+需要以下 Vite 環境變數：
+
+```text
+VITE_EMAILJS_SERVICE_ID
+VITE_EMAILJS_TEMPLATE_ID
+VITE_EMAILJS_PUBLIC_KEY
+```
+
+請將實際值放在 `.env` 或 Cloudflare Pages 環境變數，不要寫進程式碼或文件。
+
+EmailJS template 建議支援欄位：
+
+- `from_name`
+- `reply_to`
+- `topic`
+- `message`
+- `source`
+- `submitted_at`
+
+## 開發指令
+
+```bash
+npm install
+npm run dev
+npm test
+npm run lint
+npm run build
+```
+
+## 設計原則
+
+- 長輩可讀：字大、短句、明確按鈕。
+- 首頁不做複雜功能教學，只講使用情境。
+- LINE 對話只回提醒，不輸出完整醫療解析報告。
+- 家人端保留完整資料、查詢、修改與協作。
