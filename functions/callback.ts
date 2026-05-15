@@ -27,6 +27,7 @@ type LineWebhookBody = {
 
 const encoder = new TextEncoder();
 const DEFAULT_RECIPIENT = "親愛的家人";
+const ASSIGNMENT_ACK_TEXT = `${DEFAULT_RECIPIENT}，收到，我正在把這張單子存到您選的照護對象。\n\n整理好後，我會再回報摘要給您。`;
 
 function timingSafeEqual(a: string, b: string) {
   if (a.length !== b.length) return false;
@@ -228,18 +229,45 @@ async function sendTextWithFallback(env: Env, event: LineEvent, text: string) {
   await pushText(env, event.source.userId, text);
 }
 
-async function sendAssignmentReply(
+async function pushAssignmentSummary(
   env: Env,
-  event: LineEvent,
+  lineUserId: string,
   saved: Awaited<ReturnType<typeof savePendingParsedDataToProfile>>,
 ) {
   const reply = saved.parsed
     ? formatResultSummary(saved.parsed, saved.profileName)
     : `已經幫您存入【${saved.profileName}】的紀錄中。想看完整清單或修改，請點這裡：https://care.wedopr.com`;
 
-  await sendTextWithFallback(env, event, reply);
+  await pushText(env, lineUserId, reply);
   const familySummary = `家人剛上傳了一筆 ${saved.profileName} 的照護資料，已經歸類完成。\n\n${reply}`;
-  await notifyUploadSummaryRecipients(env, saved.groupId, event.source.userId, familySummary);
+  await notifyUploadSummaryRecipients(env, saved.groupId, lineUserId, familySummary);
+}
+
+async function completePendingOcrAssignment(
+  env: Env,
+  lineUserId: string,
+  documentId: number,
+  targetProfileId: number,
+  eventName: "line.pending_ocr_assigned" | "line.pending_ocr_assigned_by_text",
+) {
+  try {
+    const saved = await savePendingParsedDataToProfile(env, documentId, lineUserId, targetProfileId);
+    logEvent(eventName, {
+      line_user_suffix: lineUserId.slice(-4),
+      document_id: documentId,
+      target_profile_id: targetProfileId,
+      appointment_count: saved.appointment_ids.length,
+      medication_count: saved.medication_ids.length,
+    });
+    await pushAssignmentSummary(env, lineUserId, saved);
+  } catch (err) {
+    logError("line.pending_ocr_assign_failed", err, {
+      line_user_suffix: lineUserId.slice(-4),
+      document_id: documentId,
+      target_profile_id: targetProfileId,
+    });
+    await pushText(env, lineUserId, `抱歉，歸類時發生錯誤，請稍後再試。`);
+  }
 }
 
 async function notifyUploadSummaryRecipients(env: Env, groupId: number | null, uploaderLineUserId: string, text: string) {
@@ -260,7 +288,7 @@ async function notifyUploadSummaryRecipients(env: Env, groupId: number | null, u
   return sent;
 }
 
-async function assignPendingOcrByText(env: Env, event: LineEvent, incomingText: string) {
+async function assignPendingOcrByText(env: Env, event: LineEvent, incomingText: string, waitUntil: (promise: Promise<any>) => void) {
   const userId = await getOrCreateDefaultUser(env, event.source.userId);
   const profiles = await getAccessibleProfiles(env, userId);
   const targetProfile = resolveProfileFromSelectionText(profiles, incomingText);
@@ -273,26 +301,9 @@ async function assignPendingOcrByText(env: Env, event: LineEvent, incomingText: 
   const documentId = documents[0]?.id;
   if (!documentId) return false;
 
-  try {
-    const saved = await savePendingParsedDataToProfile(env, documentId, event.source.userId, targetProfile.id);
-    logEvent("line.pending_ocr_assigned_by_text", {
-      line_user_suffix: event.source.userId.slice(-4),
-      document_id: documentId,
-      target_profile_id: targetProfile.id,
-      appointment_count: saved.appointment_ids.length,
-      medication_count: saved.medication_ids.length,
-    });
-    await sendAssignmentReply(env, event, saved);
-    return true;
-  } catch (err) {
-    logError("line.pending_ocr_assign_failed", err, {
-      line_user_suffix: event.source.userId.slice(-4),
-      document_id: documentId,
-      target_profile_id: targetProfile.id,
-    });
-    await sendTextWithFallback(env, event, `抱歉，歸類時發生錯誤，請稍後再試。`);
-    return true;
-  }
+  await sendTextWithFallback(env, event, ASSIGNMENT_ACK_TEXT);
+  waitUntil(completePendingOcrAssignment(env, event.source.userId, documentId, targetProfile.id, "line.pending_ocr_assigned_by_text"));
+  return true;
 }
 
 /** 處理圖片 OCR（背景執行，用 Push API 回傳結果） */
@@ -451,15 +462,8 @@ async function handleEvent(env: Env, event: LineEvent, waitUntil: (promise: Prom
         if (!Number.isInteger(documentId) || documentId <= 0 || !Number.isInteger(targetProfileId) || targetProfileId <= 0) {
           throw new Error("照護對象資料不正確");
         }
-        const saved = await savePendingParsedDataToProfile(env, documentId, event.source.userId, targetProfileId);
-        logEvent("line.pending_ocr_assigned", {
-          line_user_suffix: event.source.userId.slice(-4),
-          document_id: documentId,
-          target_profile_id: targetProfileId,
-          appointment_count: saved.appointment_ids.length,
-          medication_count: saved.medication_ids.length,
-        });
-        await sendAssignmentReply(env, event, saved);
+        await sendTextWithFallback(env, event, ASSIGNMENT_ACK_TEXT);
+        waitUntil(completePendingOcrAssignment(env, event.source.userId, documentId, targetProfileId, "line.pending_ocr_assigned"));
       } catch (err) {
         logError("line.pending_ocr_assign_failed", err, {
           line_user_suffix: event.source.userId.slice(-4),
@@ -517,7 +521,7 @@ async function handleEvent(env: Env, event: LineEvent, waitUntil: (promise: Prom
   }
 
   const incomingText = event.message?.text || "";
-  if (incomingText && await assignPendingOcrByText(env, event, incomingText)) return;
+  if (incomingText && await assignPendingOcrByText(env, event, incomingText, waitUntil)) return;
 
   const reply =
     incomingText.includes("網址") || incomingText.toLowerCase().includes("url")

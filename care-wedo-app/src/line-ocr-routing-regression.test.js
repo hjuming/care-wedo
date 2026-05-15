@@ -32,7 +32,10 @@ test("LINE pending OCR assignment accepts LINE display text and replies with the
   assert.match(callback, /normalizedText\.includes\(normalizedName\)/);
   assert.match(callback, /event\.type === "postback" && event\.postback\?\.data/);
   assert.doesNotMatch(callback, /event\.type === "postback" && event\.postback\?\.data && event\.replyToken/);
-  assert.match(callback, /sendAssignmentReply/);
+  assert.match(callback, /ASSIGNMENT_ACK_TEXT/);
+  assert.match(callback, /waitUntil\(completePendingOcrAssignment/);
+  assert.match(callback, /pushAssignmentSummary/);
+  assert.match(callback, /pushText\(env,\s*lineUserId,\s*reply\)/);
   assert.match(callback, /formatResultSummary\(saved\.parsed/);
 });
 
