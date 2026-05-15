@@ -60,6 +60,7 @@ test("landing page copy matches elder-friendly beta positioning", () => {
   const feedbackApi = readProjectFile("functions/api/feedback.ts");
   assert.match(feedbackApi, /EMAILJS_SERVICE_ID/);
   assert.match(feedbackApi, /VITE_EMAILJS_SERVICE_ID/);
+  assert.match(feedbackApi, /Origin: "https:\/\/care\.wedopr\.com"/);
   assert.match(feedbackApi, /submitted_at_taipei/);
   assert.match(feedbackApi, /website_url: "https:\/\/care\.wedopr\.com\/"/);
   assert.match(feedbackApi, /logo_url: "https:\/\/care\.wedopr\.com\/android-chrome-192x192\.png"/);

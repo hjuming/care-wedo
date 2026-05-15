@@ -70,7 +70,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const submittedAt = new Date();
     const response = await fetch("https://api.emailjs.com/api/v1.0/email/send", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Origin: "https://care.wedopr.com",
+      },
       body: JSON.stringify({
         service_id: serviceId,
         template_id: templateId,
