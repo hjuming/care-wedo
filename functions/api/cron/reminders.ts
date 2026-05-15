@@ -288,9 +288,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   try {
     const now = new Date();
     const today = new Date(now.getTime() + 8 * 60 * 60 * 1000).toISOString().split("T")[0];
-    const twTime = new Date(now.getTime() + 8 * 60 * 60 * 1000);
-    twTime.setDate(twTime.getDate() + 1);
-    const targetDate = twTime.toISOString().split("T")[0];
+    const targetDate = today;
     logEvent("cron.reminders_started", { target_date: targetDate });
 
     const reminders = await fetchReminderAppointments(env, targetDate);

@@ -363,6 +363,18 @@ test("Daily LINE reminders use family-like copy instead of announcement-style no
   assert.doesNotMatch(builder, /`【\$\{label\}】`/);
 });
 
+test("Morning reminders target today's appointments while evening fasting targets tomorrow", () => {
+  const morning = readProjectFile("functions/api/cron/reminders.ts");
+  const evening = readProjectFile("functions/api/cron/evening.ts");
+  const morningHandler = morning.slice(morning.indexOf("export const onRequestPost"));
+  const eveningHandler = evening.slice(evening.indexOf("export const onRequestPost"));
+
+  assert.match(morningHandler, /const targetDate = today/);
+  assert.doesNotMatch(morningHandler, /setDate\(twTime\.getDate\(\) \+ 1\)/);
+  assert.match(eveningHandler, /setDate\(twTime\.getDate\(\) \+ 1\)/);
+  assert.match(eveningHandler, /fetchFastingAppointments\(env,\s*targetDate\)/);
+});
+
 test("LINE postback reassignment validates source user access before updating records", () => {
   const source = readProjectFile("functions/callback.ts");
   assert.match(source, /getUserMemberships/);
