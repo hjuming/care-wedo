@@ -1,5 +1,17 @@
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
 
-/*
+/
+  Cache-Control: no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0
+
+/app
+  Cache-Control: no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0
+
+/login
+  Cache-Control: no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0
+
+/privacy
+  Cache-Control: no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0
+
+/terms
   Cache-Control: no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0

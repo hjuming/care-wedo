@@ -43,6 +43,7 @@ test("robots, sitemap, and llms files expose crawl and answer-layer context", ()
   const robots = readProjectFile("public/robots.txt");
   const sitemap = readProjectFile("public/sitemap.xml");
   const llms = readProjectFile("public/llms.txt");
+  const headers = readProjectFile("public/_headers");
 
   assert.match(robots, /Sitemap: https:\/\/care\.wedopr\.com\/sitemap\.xml/);
   assert.match(sitemap, /<loc>https:\/\/care\.wedopr\.com\/app<\/loc>/);
@@ -50,4 +51,6 @@ test("robots, sitemap, and llms files expose crawl and answer-layer context", ()
   assert.match(llms, /AI Quick Answer/);
   assert.match(llms, /Care WEDO 是給長輩與家人的 LINE 醫療照護小管家/);
   assert.match(llms, /正式收費版規劃/);
+  assert.match(headers, /\/assets\/\*\n\s+Cache-Control: public, max-age=31536000, immutable/);
+  assert.doesNotMatch(headers, /\/\*\n\s+Cache-Control: no-store/);
 });
