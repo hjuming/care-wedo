@@ -86,3 +86,24 @@ test("Mobile care pages keep important Chinese text readable", () => {
   assert.match(css, /\.invite-copy-head strong\s*\{[\s\S]*font-size: clamp\(28px, 7vw, 40px\)/);
   assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.invite-code-row\s*\{[\s\S]*grid-template-columns: 1fr/);
 });
+
+test("iPad portrait uses bottom navigation and keeps the contact dock clear", () => {
+  const css = readProjectFile("care-wedo-app/src/index.css");
+
+  assert.match(css, /@media \(min-width: 761px\) and \(max-width: 1024px\) and \(orientation: portrait\)[\s\S]*\.side-rail\s*\{[\s\S]*display: none/);
+  assert.match(css, /@media \(min-width: 761px\) and \(max-width: 1024px\) and \(orientation: portrait\)[\s\S]*\.mobile-bottom-nav\s*\{[\s\S]*display: grid/);
+  assert.match(css, /@media \(min-width: 761px\) and \(max-width: 1024px\) and \(orientation: portrait\)[\s\S]*\.dashboard-grid\s*\{[\s\S]*grid-template-columns: 1fr/);
+  assert.match(css, /@media \(min-width: 761px\) and \(max-width: 1024px\) and \(orientation: portrait\)[\s\S]*\.global-care-contact-dock\s*\{[\s\S]*bottom: calc\(104px \+ env\(safe-area-inset-bottom\)\)/);
+});
+
+test("iPad landscape search controls stay inside the viewport", () => {
+  const css = readProjectFile("care-wedo-app/src/index.css");
+
+  assert.match(css, /\.toolbar\s*\{[\s\S]*flex-wrap: wrap/);
+  assert.match(css, /\.section-heading-row\s*\{[\s\S]*min-width: 0/);
+  assert.match(css, /\.search-box\s*\{[\s\S]*min-width: 0/);
+  assert.match(css, /\.search-suggestions\s*\{[\s\S]*repeat\(auto-fit, minmax\(96px, 1fr\)\)/);
+  assert.match(css, /@media \(min-width: 761px\) and \(max-width: 1080px\) and \(orientation: landscape\)[\s\S]*\.dashboard-grid\s*\{[\s\S]*grid-template-columns: 260px minmax\(0, 1fr\)/);
+  assert.match(css, /@media \(min-width: 761px\) and \(max-width: 1080px\) and \(orientation: landscape\)[\s\S]*\.content-area\s*\{[\s\S]*overflow-x: clip/);
+  assert.match(css, /@media \(min-width: 761px\) and \(max-width: 1080px\) and \(orientation: landscape\)[\s\S]*\.toolbar \.search-box\s*\{[\s\S]*flex-basis: min\(420px, 100%\)/);
+});
