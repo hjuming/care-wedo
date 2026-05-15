@@ -14,7 +14,12 @@ test("landing page copy matches elder-friendly beta positioning", () => {
 
   assert.match(app, /測試期間開放 Family Pro/);
   assert.match(app, /陪你照顧/);
-  assert.match(app, /從「一個人」升級到「一家人」/);
+  assert.match(app, /第一次使用 Care WEDO/);
+  assert.match(app, /先綁定 LINE/);
+  assert.match(app, /用 LINE 綁定帳號/);
+  assert.match(app, /聯繫 LINE 照護小管家/);
+  assert.match(app, /兩分鐘完成綁定/);
+  assert.match(app, /不會操作就問小管家/);
   assert.match(app, /資料完整保存，LINE 只講重點/);
   assert.match(app, /Free \/ Family Pro/);
   assert.match(app, /plan-name-trigger/);

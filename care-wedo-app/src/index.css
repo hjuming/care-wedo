@@ -132,6 +132,10 @@ input:focus-visible {
   text-decoration: none;
 }
 
+.nav-helper-link {
+  color: var(--primary-dark) !important;
+}
+
 .landing-hero {
   min-height: 660px;
   border: 1px solid var(--border);
@@ -187,11 +191,19 @@ input:focus-visible {
   overflow-wrap: anywhere;
 }
 
+.landing-hero-intro-mobile {
+  display: none;
+}
+
 .landing-cta-row {
   display: flex;
   flex-wrap: wrap;
   gap: 14px;
   margin-top: 34px;
+}
+
+.landing-cta-row .line-login-action-stack {
+  width: auto;
 }
 
 .landing-cta-row .primary-action,
@@ -216,6 +228,27 @@ input:focus-visible {
   font-weight: 900;
 }
 
+.landing-bind-account {
+  min-width: 250px;
+  min-height: 64px;
+  border-radius: 16px;
+  font-size: 20px;
+}
+
+.landing-line-entry {
+  min-height: 64px;
+  border-radius: 16px;
+  border-color: rgba(49, 95, 104, 0.28);
+  background: rgba(255, 255, 255, 0.9);
+  gap: 9px;
+  font-size: 20px;
+}
+
+.care-helper-icon {
+  flex: 0 0 auto;
+  color: var(--primary-dark);
+}
+
 .line-login-action-stack {
   display: inline-flex;
   flex-direction: column;
@@ -238,8 +271,9 @@ input:focus-visible {
   gap: 14px;
 }
 
-.care-note-card,
-.family-sync-card,
+.landing-hero-guide,
+.hero-guide-steps li,
+.hero-helper-card,
 .landing-card,
 .plan-card,
 .faq-item {
@@ -249,39 +283,79 @@ input:focus-visible {
   box-shadow: 0 14px 38px rgba(72, 55, 33, 0.1);
 }
 
-.care-note-card,
-.family-sync-card {
+.landing-hero-guide {
   padding: 18px;
+  backdrop-filter: blur(4px);
 }
 
-.care-note-card span {
+.hero-guide-header {
+  display: grid;
+  gap: 4px;
+  padding: 8px 4px 2px;
+}
+
+.hero-guide-header span {
   color: var(--accent);
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 800;
 }
 
-.care-note-card strong,
-.family-sync-card strong {
+.hero-guide-header strong {
+  color: var(--primary-dark);
+  font-size: 26px;
+  line-height: 1.2;
+}
+
+.hero-guide-steps {
+  display: grid;
+  gap: 10px;
+  list-style: none;
+}
+
+.hero-guide-steps li {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 14px;
+}
+
+.hero-guide-steps li > span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  background: var(--primary-dark);
+  color: white;
+  font-weight: 900;
+}
+
+.hero-guide-steps strong,
+.hero-helper-card strong {
   display: block;
-  margin: 6px 0;
-  font-size: 24px;
+  color: var(--text-primary);
+  font-size: 18px;
   line-height: 1.25;
 }
 
-.care-note-card p,
-.family-sync-card p {
+.hero-guide-steps p,
+.hero-helper-card p {
+  margin-top: 4px;
   color: var(--text-secondary);
   font-size: 16px;
+  line-height: 1.55;
 }
 
-.primary-note {
-  background: var(--primary);
-  color: white;
+.hero-helper-card {
+  padding: 16px;
+  background: rgba(221, 235, 237, 0.86);
+  border-color: rgba(94, 143, 154, 0.28);
 }
 
-.primary-note span,
-.primary-note p {
-  color: rgba(255, 255, 255, 0.82);
+.landing-mobile-sticky-cta {
+  display: none;
 }
 
 .landing-section {
@@ -3047,7 +3121,7 @@ input:focus-visible {
   }
 
   .landing-hero-panel {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: 1fr;
   }
 
   .side-rail {
@@ -3082,8 +3156,8 @@ input:focus-visible {
   }
 
   .landing-shell {
-    width: min(100%, calc(100% - 24px));
-    padding: 12px 0 28px;
+    width: 100%;
+    padding: 12px 12px calc(92px + env(safe-area-inset-bottom));
     overflow-x: clip;
   }
 
@@ -3100,8 +3174,9 @@ input:focus-visible {
   .landing-hero {
     min-height: auto;
     width: 100%;
-    max-width: calc(100vw - 24px);
-    padding: 24px;
+    max-width: 100%;
+    padding: 22px 48px 24px 18px;
+    border-radius: 20px;
     background:
       linear-gradient(180deg, rgba(255, 250, 242, 0.98) 0%, rgba(255, 250, 242, 0.9) 58%, rgba(255, 250, 242, 0.26) 100%),
       url('./assets/hero.png') center bottom / cover no-repeat;
@@ -3111,7 +3186,7 @@ input:focus-visible {
   .landing-hero-copy,
   .landing-hero-panel {
     width: 100%;
-    max-width: 100%;
+    max-width: calc(100vw - 60px);
   }
 
   .login-route-shell {
@@ -3175,21 +3250,40 @@ input:focus-visible {
 
   .landing-hero-copy h1 {
     max-width: 100%;
-    font-size: 32px;
+    font-size: 30px;
+    line-height: 1.12;
     word-break: break-word;
   }
 
   .landing-hero-copy p {
     max-width: 100%;
     font-size: 18px;
-    word-break: break-word;
+    line-height: 1.65;
+    overflow-wrap: anywhere;
+    word-break: break-all;
+  }
+
+  .landing-hero-intro-desktop {
+    display: none;
+  }
+
+  .landing-hero-intro-mobile {
+    display: block;
+  }
+
+  .landing-hero-intro-mobile span {
+    display: block;
+  }
+
+  .landing-trust-copy {
+    display: none;
   }
 
   .landing-cta-row {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     width: 100%;
-    max-width: 100%;
+    max-width: calc(100vw - 60px);
   }
 
   .landing-cta-row .primary-action,
@@ -3201,6 +3295,13 @@ input:focus-visible {
     justify-content: center;
     min-width: 0;
     white-space: normal;
+  }
+
+  .landing-cta-row .line-login-btn,
+  .landing-cta-row .landing-line-entry {
+    min-height: 58px;
+    padding: 14px 16px;
+    font-size: 17px;
   }
 
   .landing-hero-panel,
@@ -3225,14 +3326,54 @@ input:focus-visible {
     max-width: 100%;
   }
 
-  .care-note-card,
-  .family-sync-card {
+  .landing-hero-guide,
+  .hero-guide-steps li,
+  .hero-helper-card {
     min-width: 0;
   }
 
-  .care-note-card p,
-  .family-sync-card p {
+  .landing-hero-guide {
+    padding: 16px;
+  }
+
+  .hero-guide-steps p,
+  .hero-helper-card p {
     overflow-wrap: anywhere;
+    word-break: break-all;
+  }
+
+  .hero-guide-steps strong,
+  .hero-helper-card strong {
+    overflow-wrap: anywhere;
+    word-break: break-all;
+  }
+
+  .hero-guide-header strong {
+    font-size: 22px;
+  }
+
+  .hero-guide-steps li {
+    grid-template-columns: 1fr;
+    padding: 12px;
+  }
+
+  .hero-guide-steps li > span {
+    width: 38px;
+    height: 38px;
+  }
+
+  .landing-mobile-sticky-cta {
+    position: fixed;
+    right: 24px;
+    bottom: calc(12px + env(safe-area-inset-bottom));
+    left: 24px;
+    z-index: 30;
+    display: block;
+  }
+
+  .landing-mobile-sticky-cta .line-login-action-stack,
+  .landing-mobile-sticky-cta .line-login-btn {
+    width: 100%;
   }
 
   .landing-section {

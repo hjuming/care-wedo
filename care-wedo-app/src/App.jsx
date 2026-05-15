@@ -340,6 +340,29 @@ const LANDING_WORKFLOW = [
   },
 ];
 
+const LANDING_ONBOARDING_STEPS = [
+  {
+    step: "1",
+    title: "按「用 LINE 綁定帳號」",
+    copy: "先完成 LINE 登入，家人才看得到資料。",
+  },
+  {
+    step: "2",
+    title: "LINE 會跳出確認畫面",
+    copy: "照著 LINE 畫面按確認，不用下載 App。",
+  },
+  {
+    step: "3",
+    title: "完成後開始收到提醒",
+    copy: "看診與用藥提醒會集中在 Care WEDO。",
+  },
+  {
+    step: "4",
+    title: "不會操作就問小管家",
+    copy: "協助綁定、建立家人資料，說明提醒怎麼用。",
+  },
+];
+
 const LANDING_PAGE_ENTRIES = [
   {
     title: "功能導覽",
@@ -523,6 +546,15 @@ function LineIcon() {
   );
 }
 
+function CareHelperIcon() {
+  return (
+    <svg className="care-helper-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M4.75 6.9C4.75 4.75 6.5 3 8.65 3h6.7c2.15 0 3.9 1.75 3.9 3.9v4.55c0 2.15-1.75 3.9-3.9 3.9h-2.86l-4.23 3.3c-.56.43-1.37.04-1.37-.67v-2.72A3.9 3.9 0 0 1 4.75 11.45V6.9Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/>
+      <path d="M12 7.25v4.5M9.75 9.5h4.5" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"/>
+    </svg>
+  );
+}
+
 function LineLoginAction({ className = "", loggingIn = false, label = "用 LINE 登入", loadingLabel = "正在開啟 LINE...", onLogin }) {
   const isMobile = shouldOpenLiffEntryUrl();
   const loginHref = isMobile ? buildLineAppLiffFallbackUrl() : buildLiffEntryUrl();
@@ -622,46 +654,59 @@ function LandingPage() {
           <a href="#feedback">回饋</a>
           <a href="#faq">FAQ</a>
           <a href="/privacy">隱私</a>
-          <LineLoginAction className="nav-login-link nav-login-line-login" loggingIn={loggingIn} loadingLabel="開啟 LINE..." onLogin={handleLineLogin} />
+          <a className="nav-helper-link" href="https://lin.ee/xzbyyvf" target="_blank" rel="noopener noreferrer">聯繫小管家</a>
+          <LineLoginAction className="nav-login-link nav-login-line-login" loggingIn={loggingIn} label="用 LINE 綁定 / 登入" loadingLabel="開啟 LINE..." onLogin={handleLineLogin} />
         </div>
       </nav>
 
       <section className="landing-hero" aria-label="Care WEDO 首頁">
         <div className="landing-hero-copy">
-          <span className="landing-version">測試期間開放 Family Pro</span>
+          <span className="landing-version">第一次使用 Care WEDO</span>
           <h1>
-            <span>Care WEDO</span>
-            <span>陪你照顧</span>
-            <span>最重要的人。</span>
+            <span>先綁定 LINE，</span>
+            <span>照護提醒</span>
+            <span>才不會漏掉。</span>
           </h1>
-          <p>
-            從「一個人」升級到「一家人」。長輩用 LINE 傳照片，系統整理看診、用藥與提醒，家人同步掌握。
+          <p className="landing-hero-intro landing-hero-intro-desktop">
+            用 LINE 登入後，家人可以一起查看看診、用藥與提醒。需要協助，也可以直接聯繫 LINE 照護小管家。
+          </p>
+          <p className="landing-hero-intro landing-hero-intro-mobile">
+            <span>家人要看提醒，請先按綁定。</span>
+            <span>不會操作，就問小管家。</span>
           </p>
           <div className="landing-cta-row">
-            <a className="primary-action landing-line-entry" href="https://lin.ee/xzbyyvf" target="_blank" rel="noopener noreferrer">LINE 照護小管家</a>
-            <LineLoginAction className="landing-line-login" loggingIn={loggingIn} label="家庭群組協作" onLogin={handleLineLogin} />
-            <a className="secondary-action" href="#feedback">留下試用回饋</a>
+            <LineLoginAction className="landing-line-login landing-bind-account" loggingIn={loggingIn} label="① 用 LINE 綁定帳號" onLogin={handleLineLogin} />
+            <a className="secondary-action landing-line-entry" href="https://lin.ee/xzbyyvf" target="_blank" rel="noopener noreferrer"><CareHelperIcon />② 聯繫 LINE 照護小管家</a>
           </div>
           {loginError && <p className="notice-danger landing-login-error">{loginError}</p>}
-          <p className="landing-trust-copy">不取代醫師，只幫家人把照護資訊整理清楚。</p>
+          <p className="landing-trust-copy">Care WEDO 陪你照顧最重要的人。不取代醫師，只幫家人把照護資訊整理清楚。</p>
         </div>
-        <div className="landing-hero-panel" aria-label="照護重點預覽">
-          <div className="care-note-card primary-note">
-            <span>LINE 提醒</span>
-            <strong>6/18 上午 8:37</strong>
-            <p>台大醫院西址 1 樓。請記得帶健保卡。</p>
+        <div className="landing-hero-panel landing-hero-guide" aria-label="第一次使用導引">
+          <div className="hero-guide-header">
+            <span>第一次使用照這樣做</span>
+            <strong>兩分鐘完成綁定</strong>
           </div>
-          <div className="care-note-card">
-            <span>藥袋資料</span>
-            <strong>完整存入資料庫</strong>
-            <p>LINE 不塞長藥名，家人可在後台查看完整內容。</p>
-          </div>
-          <div className="family-sync-card">
-            <strong>家人共同照顧</strong>
-            <p>多位照護對象、家庭群組、今日照護與未來行程都可同步。</p>
+          <ol className="hero-guide-steps">
+            {LANDING_ONBOARDING_STEPS.map((item) => (
+              <li key={item.step}>
+                <span>{item.step}</span>
+                <div>
+                  <strong>{item.title}</strong>
+                  <p>{item.copy}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+          <div className="hero-helper-card">
+            <strong>LINE 照護小管家可以幫你：</strong>
+            <p>詢問綁定方式、協助建立家人資料、說明看診與用藥提醒怎麼使用。</p>
           </div>
         </div>
       </section>
+
+      <div className="landing-mobile-sticky-cta" aria-label="手機快速綁定入口">
+        <LineLoginAction className="landing-line-login" loggingIn={loggingIn} label="用 LINE 綁定帳號" loadingLabel="開啟 LINE..." onLogin={handleLineLogin} />
+      </div>
 
       <section className="landing-section landing-entry-section" aria-label="快速入口">
         <div className="section-kicker">網站入口</div>
