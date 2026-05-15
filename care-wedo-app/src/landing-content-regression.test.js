@@ -13,7 +13,8 @@ test("landing page copy matches elder-friendly beta positioning", () => {
   const app = readProjectFile("care-wedo-app/src/App.jsx");
 
   assert.match(app, /測試期間開放 Family Pro/);
-  assert.match(app, /長輩用 LINE 傳照片/);
+  assert.match(app, /陪你照顧/);
+  assert.match(app, /從「一個人」升級到「一家人」/);
   assert.match(app, /資料完整保存，LINE 只講重點/);
   assert.match(app, /Free \/ Family Pro/);
   assert.match(app, /plan-name-trigger/);
@@ -34,7 +35,10 @@ test("landing page copy matches elder-friendly beta positioning", () => {
   assert.match(app, /推薦方案/);
   assert.match(app, /家人協作/);
   assert.match(app, /10筆\/月/);
-  assert.match(app, /測試期間所有帳號開放 Family Pro，一起守護長輩健康/);
+  assert.match(app, /系統測試期間，所有帳號開放 Family Pro 體驗，一起守護家人健康/);
+  assert.match(app, /家庭群組協作/);
+  assert.match(app, /家庭成員數量/);
+  assert.match(app, /家人共同協作/);
   assert.match(app, /PlanDetailsModal/);
   assert.doesNotMatch(app, /目前規劃/);
   assert.doesNotMatch(app, /圖片解析 \/ 月/);
@@ -56,6 +60,9 @@ test("landing page copy matches elder-friendly beta positioning", () => {
   assert.match(app, /VITE_EMAILJS_SERVICE_ID/);
   assert.match(app, /VITE_EMAILJS_TEMPLATE_ID/);
   assert.match(app, /VITE_EMAILJS_PUBLIC_KEY/);
+
+  const viteConfig = readProjectFile("care-wedo-app/vite.config.js");
+  assert.match(viteConfig, /envDir: resolve\(__dirname, '\.\.'\)/);
 });
 
 test("landing page avoids outdated free-versus-paid claims during beta", () => {

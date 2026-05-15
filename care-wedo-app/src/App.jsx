@@ -354,7 +354,7 @@ const LANDING_PAGE_ENTRIES = [
   },
   {
     title: "方案比較",
-    copy: "查看 Free 和 Family Pro 的差異。",
+    copy: "測試期間開放 Family Pro 體驗，一起守護家人健康。",
     href: "#plans",
   },
   {
@@ -370,10 +370,10 @@ const FREE_FEATURES = [
   ["看診單、藥袋、預約單 AI 解析", "10 筆/月", "100 筆/月"],
   ["長輩友善短提醒", true, true],
   ["吃藥提醒與資料保存", "10 筆", "完整保存"],
-  ["家庭群組", "1 個", "1 個"],
-  ["成員", "1 位", "8 位"],
+  ["家庭群組協作", "1 個", "1 個"],
+  ["家庭成員數量", "1 位", "8 位"],
   ["照護對象", "1 位", "4 位"],
-  ["家庭群組共享", false, "8 位成員協作"],
+  ["家人共同協作", false, "8 位成員協作"],
   ["今日照護與未來行程", true, true],
   ["完整歷史紀錄與健康時間線", "10 筆", "完整保存"],
   ["正式版月費訂閱", "不適用", "規劃中"],
@@ -492,7 +492,7 @@ function PlanDetailsModal({ onClose }) {
         </div>
         <div className="modal-body">
           <PlanTierTable />
-          <p className="helper-copy">測試期間所有帳號開放 Family Pro，一起守護長輩健康，目前暫未規劃收費方式，請家人們不吝指教。</p>
+          <p className="helper-copy">系統測試期間，所有帳號開放 Family Pro 體驗，一起守護家人健康。目前暫未規劃收費方式，請家人們不吝指教。</p>
         </div>
       </div>
     </div>
@@ -656,15 +656,15 @@ function LandingPage() {
           <span className="landing-version">測試期間開放 Family Pro</span>
           <h1>
             <span>Care WEDO</span>
-            <span>把醫院單子</span>
-            <span>變成家人看得懂的提醒。</span>
+            <span>陪你照顧</span>
+            <span>最重要的人。</span>
           </h1>
           <p>
-            長輩用 LINE 傳照片。系統整理資料、存進資料庫，LINE 只回最重要的提醒。
+            從「一個人」升級到「一家人」。長輩用 LINE 傳照片，系統整理看診、用藥與提醒，家人同步掌握。
           </p>
           <div className="landing-cta-row">
-            <a className="primary-action landing-line-entry" href="https://lin.ee/xzbyyvf" target="_blank" rel="noopener noreferrer">加入 LINE 小管家</a>
-            <LineLoginAction className="landing-line-login" loggingIn={loggingIn} label="家人登入後台" onLogin={handleLineLogin} />
+            <a className="primary-action landing-line-entry" href="https://lin.ee/xzbyyvf" target="_blank" rel="noopener noreferrer">LINE 照護小管家</a>
+            <LineLoginAction className="landing-line-login" loggingIn={loggingIn} label="家庭群組協作" onLogin={handleLineLogin} />
             <a className="secondary-action" href="#feedback">留下試用回饋</a>
           </div>
           {loginError && <p className="notice-danger landing-login-error">{loginError}</p>}
@@ -743,22 +743,22 @@ function LandingPage() {
 
       <section className="landing-section plan-section" id="plans">
         <div className="section-kicker">Free / Family Pro</div>
-        <h2>測試期間開放 Family Pro。</h2>
+        <h2>Family Pro 開放測試。</h2>
         <div className="plan-cards">
           <article className="plan-card">
             <span>Free</span>
             <h3>LINE 體驗與基礎提醒</h3>
-            <p>適合先試用。保留 LINE 上傳、基礎解析與短提醒，正式額度會另行公告。</p>
-            <a href="https://lin.ee/xzbyyvf" target="_blank" rel="noopener noreferrer">加入 LINE 小管家</a>
+            <p>適合功能試用。LINE 上傳圖片後，系統自動解析、收錄重要資訊，並設定提醒通知。</p>
+            <a href="https://lin.ee/xzbyyvf" target="_blank" rel="noopener noreferrer">LINE 照護小管家</a>
           </article>
           <article className="plan-card featured-plan">
             <button type="button" className="plan-name-trigger" onClick={() => setShowPlanDetails(true)}>Family Pro</button>
             <h3>家庭照護空間</h3>
             <p>適合長期照顧父母、長輩或慢性病家人。提供完整保存、家庭群組、多照護對象與健康時間線。</p>
-            <LineLoginAction loggingIn={loggingIn} label="用 LINE 登入建立" onLogin={handleLineLogin} />
+            <LineLoginAction loggingIn={loggingIn} label="建立家庭協作" onLogin={handleLineLogin} />
           </article>
         </div>
-        <p className="plan-beta-note">目前系統測試期間，所有測試帳號暫時開放 Family Pro 權限。</p>
+        <p className="plan-beta-note">系統測試期間，所有帳號開放 Family Pro 體驗，一起守護家人健康。</p>
 
         <div className="feature-table" role="table" aria-label="Care WEDO Free 與 Family Pro 功能對照">
           <div className="feature-row table-head" role="row">
@@ -790,9 +790,9 @@ function LandingPage() {
       <section className="landing-section feedback-section" id="feedback">
         <div className="feedback-copy">
           <div className="section-kicker">試用回饋</div>
-          <h2>哪裡不夠簡單，請直接告訴我們。</h2>
+          <h2>哪裡不夠簡單友善，請直接告訴我們。</h2>
           <p>
-            我們正在測試長輩友善版。你的回饋會用來調整 LINE 文案、首頁操作、吃藥提醒與家人協作流程。
+            當照護不再只是你一個人的責任，透過家庭協作，邀請家人一起同步看診、用藥與提醒資訊。您的回饋意見，會幫助長輩獲得更好的健康照護。
           </p>
         </div>
         <form className="feedback-form" onSubmit={handleFeedbackSubmit}>

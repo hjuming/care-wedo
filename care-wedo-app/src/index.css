@@ -194,6 +194,15 @@ input:focus-visible {
   margin-top: 34px;
 }
 
+.landing-cta-row .primary-action,
+.landing-cta-row .secondary-action,
+.landing-cta-row .line-login-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
 .landing-cta-row a,
 .landing-entry-card,
 .plan-card a,
@@ -582,6 +591,11 @@ input:focus-visible {
 
 .feature-row:first-child {
   border-top: 0;
+}
+
+.feature-row > :last-child {
+  color: var(--primary);
+  font-weight: 800;
 }
 
 .table-head {
@@ -3002,6 +3016,7 @@ input:focus-visible {
   .landing-shell {
     width: min(100%, calc(100% - 24px));
     padding: 12px 0 28px;
+    overflow-x: clip;
   }
 
   .landing-nav {
@@ -3022,12 +3037,13 @@ input:focus-visible {
     background:
       linear-gradient(180deg, rgba(255, 250, 242, 0.98) 0%, rgba(255, 250, 242, 0.9) 58%, rgba(255, 250, 242, 0.26) 100%),
       url('./assets/hero.png') center bottom / cover no-repeat;
+    overflow: hidden;
   }
 
   .landing-hero-copy,
   .landing-hero-panel {
     width: 100%;
-    max-width: calc(100vw - 72px);
+    max-width: 100%;
   }
 
   .login-route-shell {
@@ -3103,13 +3119,20 @@ input:focus-visible {
 
   .landing-cta-row {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     width: 100%;
     max-width: 100%;
   }
 
   .landing-cta-row .primary-action,
-  .landing-cta-row .secondary-action {
+  .landing-cta-row .secondary-action,
+  .landing-cta-row .line-login-action-stack,
+  .landing-cta-row .line-login-btn {
     width: 100%;
+    max-width: 100%;
+    justify-content: center;
+    min-width: 0;
+    white-space: normal;
   }
 
   .landing-hero-panel,
@@ -3132,6 +3155,16 @@ input:focus-visible {
   .landing-hero-panel {
     margin-top: 12px;
     max-width: 100%;
+  }
+
+  .care-note-card,
+  .family-sync-card {
+    min-width: 0;
+  }
+
+  .care-note-card p,
+  .family-sync-card p {
+    overflow-wrap: anywhere;
   }
 
   .landing-section {
