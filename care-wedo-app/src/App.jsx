@@ -2340,7 +2340,6 @@ function SearchField({ value, onChange, suggestions = [], placeholder = "搜尋"
 function buildReminderFormData(appointment = null) {
   return {
     type: normalizeManualReminderType(appointment?.type || "clinic_visit"),
-    title: appointment?.title || appointment?.department || appointment?.hospital || "",
     date: appointment?.date || todayInTaipei(),
     time: appointment?.time || "",
     hospital: appointment?.hospital || "",
@@ -2356,7 +2355,6 @@ function buildReminderFormData(appointment = null) {
 function ManualReminderModal({ mode = "create", initialAppointment = null, onClose, onSave, onDelete }) {
   const [formData, setFormData] = useState(() => initialAppointment ? buildReminderFormData(initialAppointment) : {
     type: "clinic_visit",
-    title: "",
     date: todayInTaipei(),
     time: "",
     hospital: "",
@@ -2380,7 +2378,7 @@ function ManualReminderModal({ mode = "create", initialAppointment = null, onClo
       await onSave({
         ...formData,
         date: normalizeDateInput(formData.date),
-        title: formData.title || formData.department || formData.hospital,
+        title: typeLabel(formData.type),
         department: formData.department,
         fasting_hours: formData.fasting_required ? formData.fasting_hours : null,
       });
@@ -2432,15 +2430,6 @@ function ManualReminderModal({ mode = "create", initialAppointment = null, onClo
               </div>
             </div>
             <div className="form-row-two">
-              <div className="form-group">
-                <label>提醒名稱</label>
-                <input
-                  value={formData.title}
-                  onChange={(event) => setFormData({ ...formData, title: event.target.value })}
-                  placeholder="例：下次回診、領藥提醒"
-                  required
-                />
-              </div>
               <div className="form-group">
                 <label>日期</label>
                 <div className="quick-choice-row">
@@ -3149,7 +3138,7 @@ function RecordsView({ records, searchQuery, onUpload, onEditRecord, onDeleteRec
             {items.map(record => {
               const dateParts = recordDateParts(record);
               const carePlace = [record.hospital, record.department, record.doctor && `${record.doctor}醫師`].filter(Boolean).join(" ｜ ");
-              const title = record.title || record.department || typeLabel(record.type);
+              const title = typeLabel(record.type);
               const note = record.notes || record.reminder_text;
               return (
                 <article key={record.id} className="records-row record-completed records-card">
@@ -3166,11 +3155,8 @@ function RecordsView({ records, searchQuery, onUpload, onEditRecord, onDeleteRec
                     </span>
                     <div className="record-info">
                       <span className="record-card-heading">
-                        <span className="record-type-icon" aria-hidden="true">{typeIcon(record.type)}</span>
-                        <span>
-                          <span className="record-tag">{typeLabel(record.type)}</span>
-                          <strong>{title}</strong>
-                        </span>
+                        <span className="record-type-chip record-type-icon" aria-hidden="true">{typeIcon(record.type)}</span>
+                        <span className="record-type-chip record-tag">{title}</span>
                       </span>
                       {carePlace && <span className="record-place-line">{carePlace}</span>}
                       {note && <small>{note}</small>}

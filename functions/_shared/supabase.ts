@@ -629,7 +629,7 @@ export async function patchAppointment(
         headers: { Prefer: "return=representation" },
         body: JSON.stringify({
           ...legacyUpdates,
-          department: title,
+          department: legacyUpdates.department || title,
         }),
       },
     );

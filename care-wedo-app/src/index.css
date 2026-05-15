@@ -4325,12 +4325,8 @@ button:disabled,
 
 .record-tag {
   display: inline-flex;
-  width: fit-content;
-  margin-bottom: 6px;
   background: var(--accent-soft);
   color: #8a4f18;
-  padding: 4px 10px;
-  border-radius: 999px;
   font-size: 14px;
   font-weight: 800;
 }
@@ -4343,23 +4339,28 @@ button:disabled,
 }
 
 .record-card-heading {
-  display: grid;
-  grid-template-columns: 46px minmax(0, 1fr);
-  gap: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
   align-items: center;
 }
 
-.record-type-icon {
+.record-type-chip {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 46px;
-  height: 46px;
+  min-width: 54px;
+  min-height: 46px;
+  padding: 8px 14px;
   border-radius: 12px;
+  line-height: 1;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.record-type-icon {
   background: rgba(185, 120, 50, 0.12);
   color: var(--accent);
-  font-size: 20px;
-  font-weight: 900;
 }
 
 .record-info strong {

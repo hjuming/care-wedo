@@ -158,7 +158,7 @@ test("Ask family opens an editable branded copy modal instead of a browser promp
   assert.doesNotMatch(handleAskFamily, /window\.prompt|window\.alert|navigator\.share/);
 });
 
-test("Manual reminders keep title separate from department", () => {
+test("Manual reminders derive title from type while preserving department", () => {
   const app = readProjectFile("care-wedo-app/src/App.jsx");
   const schema = readProjectFile("supabase/schema.sql");
   const migration = readProjectFile("supabase/migration_phase48_appointment_title.sql");
@@ -175,10 +175,12 @@ test("Manual reminders keep title separate from department", () => {
   assert.match(createApi, /title,/);
   assert.match(createApi, /department: cleanString\(body\.department\) \|\| null/);
   assert.match(createApi, /Could not find\.\*title/);
-  assert.match(createApi, /department: legacyTitle/);
+  assert.match(createApi, /department: legacyPayload\.department \|\| legacyTitle/);
   assert.match(updateApi, /allowed\.title = body\.title/);
   assert.match(shared, /Could not find\.\*title/);
-  assert.match(manualModal, /title: appointment\?\.title \|\| appointment\?\.department/);
+  assert.match(shared, /department: legacyUpdates\.department \|\| title/);
+  assert.doesNotMatch(manualModal, /<label>提醒名稱<\/label>/);
+  assert.match(manualModal, /title: typeLabel\(formData\.type\)/);
   assert.match(manualModal, /department: formData\.department,/);
   assert.match(updateHandler, /title: payload\.title/);
   assert.match(updateHandler, /department: payload\.department \|\| null/);
@@ -205,10 +207,14 @@ test("Records page defaults to future arrangements and loads history on demand",
   assert.match(recordsView, /matchSearch\(record,\s*searchQuery\)/);
   assert.match(recordsView, /appointmentTimeValue\(a\)\.localeCompare\(appointmentTimeValue\(b\)\)/);
   assert.match(recordsView, /record-summary-button/);
+  assert.match(recordsView, /const title = typeLabel\(record\.type\)/);
+  assert.match(recordsView, /record-type-chip record-type-icon/);
+  assert.match(recordsView, /record-type-chip record-tag/);
   assert.match(recordsView, /onEditRecord\?\.\(record\)/);
   assert.match(recordsView, /onDeleteRecord\?\.\(record\)/);
   assert.match(css, /\.record-mode-switch/);
   assert.match(css, /\.record-summary-button/);
+  assert.match(css, /\.record-type-chip/);
   assert.match(css, /\.record-card-actions/);
 });
 

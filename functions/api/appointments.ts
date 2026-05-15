@@ -95,7 +95,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
         headers: { Prefer: "return=representation" },
         body: JSON.stringify({
           ...legacyPayload,
-          department: legacyTitle,
+          department: legacyPayload.department || legacyTitle,
         }),
       });
     }
