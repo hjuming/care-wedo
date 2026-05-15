@@ -146,7 +146,7 @@ function appointmentActionLabel(apt: AppointmentWithUser) {
 function appointmentPlaceLine(apt: AppointmentWithUser) {
   const place = apt.hospital?.trim();
   const doctor = apt.doctor?.trim();
-  if (place && doctor) return `在${place}，${doctor}醫師。`;
+  if (place && doctor && !place.includes(doctor)) return `在${place}，${doctor}醫師。`;
   if (place) return `地點在${place}。`;
   if (doctor) return `醫師是${doctor}。`;
   return "";
@@ -168,11 +168,11 @@ function buildDailyReminderMessage(
   const hasMeds = data.meds.length > 0;
   const hasAppointments = data.apts.length > 0;
   const intro = hasMeds && hasAppointments
-    ? "今天的藥和接下來的預約，先跟你說一下。"
+    ? "今天的藥和接下來的預約，先提醒一下。"
     : hasMeds
-      ? "今天的藥先跟你說一下。"
-      : "接下來的預約先跟你說一下。";
-  const lines = [`${DEFAULT_RECIPIENT}，早安。${intro}`, ""];
+      ? "今天的藥先提醒一下。"
+      : "先提醒一下接下來的預約。";
+  const lines = [`早安，${intro}`, ""];
 
   if (hasMeds) {
     for (const med of data.meds) {
@@ -192,7 +192,6 @@ function buildDailyReminderMessage(
       lines.push(buildAppointmentReminderLine(apt, profile, todayStr));
       const placeLine = appointmentPlaceLine(apt);
       if (placeLine) lines.push(placeLine);
-      if (apt.location) lines.push(`地址：${apt.location}`);
       if (apt.fasting_required) lines.push(`要記得空腹，前 ${apt.fasting_hours || 8} 小時先不要吃東西。`);
       if (apt.notes) lines.push(apt.notes);
       lines.push("");
