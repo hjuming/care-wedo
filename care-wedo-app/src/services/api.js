@@ -60,6 +60,32 @@ export async function ocrAnalyze(files, options = {}) {
   return res.json();
 }
 
+/**
+ * 貼上文字進行 AI 解析
+ * @param {string} text - 使用者貼上的看診、用藥或提醒內容
+ * @returns {Promise<object>} 解析結果
+ */
+export async function ocrAnalyzeText(text, options = {}) {
+  const formData = new FormData();
+  formData.append("medical_text", text);
+  if (options.profileId) {
+    formData.append("profile_id", String(options.profileId));
+  }
+
+  const res = await fetch(`${API_BASE}/ocr/`, {
+    method: "POST",
+    headers: options.idToken ? { Authorization: `Bearer ${options.idToken}` } : undefined,
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `API 錯誤 (${res.status})`);
+  }
+
+  return res.json();
+}
+
 export async function confirmOcrDocument(documentId, { idToken }) {
   const headers = { "Content-Type": "application/json" };
   if (idToken) headers.Authorization = `Bearer ${idToken}`;

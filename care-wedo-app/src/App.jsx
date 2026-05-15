@@ -6,7 +6,7 @@ import LoginSetup from "./components/LoginSetup";
 import MobileBottomNav from "./components/MobileBottomNav";
 import OcrResult from "./components/OcrResult";
 import { patientData, medicines, timeline as initialTimeline } from "./data/patient";
-import { confirmOcrDocument, createAppointment, fetchDashboard, joinGroup, markMedicationSlotStatus, ocrAnalyze, patchAppointment, patchMedication, updateActiveProfilePreference, updateFamilyNotes, updateProfile, updateProfileOrder } from "./services/api";
+import { confirmOcrDocument, createAppointment, fetchDashboard, joinGroup, markMedicationSlotStatus, ocrAnalyze, ocrAnalyzeText, patchAppointment, patchMedication, updateActiveProfilePreference, updateFamilyNotes, updateProfile, updateProfileOrder } from "./services/api";
 import { buildLiffEntryUrl, buildLineAppLiffFallbackUrl, initLineIdentity, loginWithLine, logoutLineIdentity, resetCareWedoSessionAndReturnHome, shouldOpenLiffEntryUrl } from "./services/liff";
 import { trackError, trackEvent } from "./services/telemetry";
 import { buildTodayTasks, formatTaipeiTodayLabel, groupMedicationsBySchedule, hasSameDayTasks } from "./services/todayTasks";
@@ -1355,6 +1355,40 @@ function DashboardApp() {
     }
   }
 
+  async function handleTextUpload(text) {
+    const sourceText = text.trim();
+    if (!sourceText) {
+      setOcrError("請先貼上要整理的文字。");
+      return;
+    }
+
+    setShowUploadGuide(false);
+    setScanning(true);
+    setOcrError(null);
+    setOcrData(null);
+
+    try {
+      const result = await ocrAnalyzeText(sourceText, {
+        idToken: identity.idToken,
+        profileId: activeProfileId,
+      });
+      if (result.success && result.data) {
+        setOcrData({ data: result.data, saved: result.saved });
+        await loadDashboard(identity, activeProfileId, activeGroupId);
+      } else {
+        setOcrError(result.error || "解析失敗");
+      }
+    } catch (err) {
+      trackError("frontend.ocr_text", err, {
+        textLength: sourceText.length,
+        profileId: activeProfileId,
+      });
+      setOcrError(err.message);
+    } finally {
+      setScanning(false);
+    }
+  }
+
   function handleUploadChange(event) {
     const files = Array.from(event.target.files || []);
     if (files.length > 0) handleFilesSelected(files);
@@ -1797,6 +1831,7 @@ function DashboardApp() {
       {showUploadGuide && (
         <UploadGuide
           onConfirm={handleUploadConfirm}
+          onTextSubmit={handleTextUpload}
           onClose={() => setShowUploadGuide(false)}
         />
       )}
@@ -2435,7 +2470,9 @@ function ScanProgress({ step }) {
   );
 }
 
-function UploadGuide({ onConfirm, onClose }) {
+function UploadGuide({ onConfirm, onTextSubmit, onClose }) {
+  const [text, setText] = useState("");
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -2455,9 +2492,18 @@ function UploadGuide({ onConfirm, onClose }) {
           <p className="upload-guide-note">
             Care WEDO 會協助整理出回診時間、用藥資訊與注意事項。
           </p>
+          <label className="upload-text-label" htmlFor="medical-text-upload">也可以直接貼文字</label>
+          <textarea
+            id="medical-text-upload"
+            className="upload-textarea"
+            value={text}
+            onChange={(event) => setText(event.target.value)}
+            placeholder="例如：5/29 09:30 復健，生生優動板橋分院..."
+          />
         </div>
         <div className="modal-footer">
           <button type="button" className="secondary-action" onClick={onClose}>取消</button>
+          <button type="button" className="secondary-action" onClick={() => onTextSubmit?.(text)} disabled={!text.trim()}>整理文字</button>
           <button type="button" className="primary-action" onClick={onConfirm}>拍照或上傳照片</button>
         </div>
       </div>

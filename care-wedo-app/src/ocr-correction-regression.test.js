@@ -19,6 +19,15 @@ test("Dashboard passes an OCR correction saver to OcrResult", () => {
   assert.match(appSource, /onSaveCorrections=\{handleOcrCorrectionsSave\}/);
 });
 
+test("Dashboard supports text upload through the same OCR review flow", () => {
+  assert.match(appSource, /ocrAnalyzeText/);
+  assert.match(appSource, /handleTextUpload/);
+  assert.match(appSource, /onTextSubmit=\{handleTextUpload\}/);
+  assert.match(appSource, /整理文字/);
+  assert.match(ocrApiSource, /medical_text/);
+  assert.match(ocrApiSource, /parseMedicalText/);
+});
+
 test("OcrResult exposes an editable correction flow", () => {
   assert.match(ocrResultSource, /onSaveCorrections/);
   assert.match(ocrResultSource, /setEditing\(true\)/);

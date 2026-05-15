@@ -63,11 +63,28 @@ test("LINE OCR can preselect a care profile before the next image upload", () =>
   assert.match(ocr, /export async function saveParsedDataToSelectedProfile/);
 });
 
+test("LINE OCR accepts pasted medical text after upload intent", () => {
+  const callback = readProjectFile("functions/callback.ts");
+  const ocr = readProjectFile("functions/_shared/medical_ocr.ts");
+
+  assert.match(ocr, /export async function parseMedicalText/);
+  assert.match(callback, /parseMedicalText/);
+  assert.match(callback, /looksLikeMedicalTextUpload/);
+  assert.match(callback, /looksLikePreparedTextUpload/);
+  assert.match(callback, /hasNextUploadTargetProfile/);
+  assert.match(callback, /processTextOCR/);
+  assert.match(callback, /line\.text_ocr_started/);
+  assert.match(callback, /收到文字/);
+  assert.match(callback, /這段資料要存給誰/);
+  assert.match(callback, /請上傳照片，或直接貼上文字/);
+});
+
 test("LINE default upload helper also shows care profile name labels", () => {
   const callback = readProjectFile("functions/callback.ts");
   const defaultHelper = callback.slice(callback.indexOf("async function replyDefaultUploadHelp"));
 
   assert.match(defaultHelper, /prepareUploadProfileQuickReply\(profiles\)/);
+  assert.match(defaultHelper, /拍照或貼文字/);
   assert.match(defaultHelper, /請先選家人/);
   assert.match(callback, /await replyDefaultUploadHelp\(env,\s*event\)/);
 });

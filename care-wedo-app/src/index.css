@@ -1538,6 +1538,30 @@ input:focus-visible {
   line-height: 1.65;
 }
 
+.upload-text-label {
+  color: var(--accent);
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.upload-textarea {
+  width: 100%;
+  min-height: 160px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-strong);
+  color: var(--text-primary);
+  font-size: 17px;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.upload-textarea:focus {
+  border-color: var(--primary);
+  outline: 4px solid rgba(94, 143, 154, 0.18);
+}
+
 /* ─── OCR Scan Progress ──────────────────────────────────────────────────── */
 
 .ocr-progress {
@@ -4326,6 +4350,7 @@ button:disabled,
   border-top: 1px solid var(--border);
   display: flex;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 12px;
 }
 

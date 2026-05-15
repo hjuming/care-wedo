@@ -9,6 +9,7 @@ import {
   verifyLineIdToken,
 } from "../../_shared/supabase";
 import { logError, logEvent } from "../../_shared/logger";
+import { parseMedicalText } from "../../_shared/medical_ocr";
 
 type Env = {
   GOOGLE_API_KEY: string;
@@ -260,6 +261,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const contentType = request.headers.get("content-type") || "";
     const images: Array<{ data: string; media_type: string }> = [];
     let requestedProfileId: number | null = null;
+    let medicalText = "";
 
     if (contentType.includes("multipart/form-data")) {
       const formData = await request.formData();
@@ -268,15 +270,21 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
         ? Number(profileIdValue)
         : null;
       if (!Number.isFinite(requestedProfileId)) requestedProfileId = null;
+      const textValue = formData.get("medical_text") || formData.get("text");
+      medicalText = typeof textValue === "string" ? textValue.trim() : "";
       const files = formData.getAll("images").filter((item): item is File => item instanceof File);
 
-      if (!files.length) {
-        logEvent("ocr.validation_failed", { reason: "missing_files" });
-        return Response.json({ error: "請上傳至少一張圖片" }, { status: 400 });
+      if (!files.length && !medicalText) {
+        logEvent("ocr.validation_failed", { reason: "missing_input" });
+        return Response.json({ error: "請上傳至少一張圖片，或貼上要整理的文字" }, { status: 400 });
       }
       if (files.length > MAX_FILES) {
         logEvent("ocr.validation_failed", { reason: "too_many_files", file_count: files.length });
         return Response.json({ error: `最多上傳 ${MAX_FILES} 張圖片` }, { status: 400 });
+      }
+      if (medicalText.length > 12000) {
+        logEvent("ocr.validation_failed", { reason: "text_too_long", text_length: medicalText.length });
+        return Response.json({ error: "文字內容太長，請先保留看診、用藥或提醒相關段落。" }, { status: 400 });
       }
 
       for (const file of files) {
@@ -318,6 +326,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       group_id: activeGroupId,
       profile_id: activeProfileId,
       file_count: images.length,
+      input_type: medicalText ? "text" : "image",
+      text_length: medicalText.length || undefined,
       line_user_suffix: identity.lineUserId.slice(-4),
     });
 
@@ -334,7 +344,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       );
     }
 
-    const data = await parseMedicalImages(env, images);
+    const data = medicalText ? await parseMedicalText(env, medicalText) : await parseMedicalImages(env, images);
     const saved = await saveParsedData(env, data, userId, activeGroupId, activeProfileId);
 
     // Increment quota AFTER successful save — one successful OCR job = 1 count

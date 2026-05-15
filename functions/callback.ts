@@ -1,4 +1,4 @@
-import { parseMedicalImages, saveParsedData, saveParsedDataToSelectedProfile, savePendingParsedDataToProfile, Env as OcrEnv } from "./_shared/medical_ocr";
+import { parseMedicalImages, parseMedicalText, saveParsedData, saveParsedDataToSelectedProfile, savePendingParsedDataToProfile, Env as OcrEnv } from "./_shared/medical_ocr";
 import { logError, logEvent } from "./_shared/logger";
 import { getAccessibleProfiles, getOrCreateDefaultUser, getUserMemberships, supabaseFetch } from "./_shared/supabase";
 
@@ -350,6 +350,21 @@ function isUploadIntent(value: string) {
   return /上傳|拍照|傳照片|藥袋|藥單|處方|掛號|預約|醫院單|單子|檢查單|檢驗單|領藥/.test(text);
 }
 
+function looksLikeMedicalTextUpload(value: string) {
+  const text = value.trim();
+  if (text.length < 24) return false;
+
+  const hasCareKeyword = /醫院|診所|門診|看診|回診|看牙|牙醫|復健|檢查|檢驗|領藥|藥袋|處方|醫師|掛號|預約|空腹|院區|地址|地點|科|治療/.test(text);
+  const hasDateOrTime = /(\d{4}[/-]\d{1,2}[/-]\d{1,2}|民國\s*\d{2,3}\s*年|\d{1,2}\s*月\s*\d{1,2}\s*[日號]?|\d{1,2}[:：]\d{2}|上午|下午|早上|晚上)/.test(text);
+  return hasCareKeyword && hasDateOrTime;
+}
+
+function looksLikePreparedTextUpload(value: string) {
+  const text = value.trim();
+  if (text.length < 12) return false;
+  return /醫院|診所|門診|看診|回診|看牙|牙醫|復健|檢查|檢驗|領藥|藥袋|處方|醫師|掛號|預約|空腹|疼痛|血壓|血糖|地址|地點|治療/.test(text);
+}
+
 function parseNextUploadProfileId(featureKey: string) {
   if (!featureKey.startsWith(LINE_NEXT_UPLOAD_PROFILE_PREFIX)) return null;
   const profileId = Number(featureKey.slice(LINE_NEXT_UPLOAD_PROFILE_PREFIX.length));
@@ -386,6 +401,15 @@ async function getNextUploadTargetProfile<T extends { id: number }>(
   );
   const profileId = rows[0]?.feature_key ? parseNextUploadProfileId(rows[0].feature_key) : null;
   return profileId ? profiles.find((profile) => profile.id === profileId) || null : null;
+}
+
+async function hasNextUploadTargetProfile(env: Env, lineUserId: string) {
+  const userId = await getOrCreateDefaultUser(env, lineUserId);
+  const rows = await supabaseFetch<Array<{ feature_key: string }>>(
+    env,
+    `user_feature_flags?user_id=eq.${userId}&feature_key=like.${LINE_NEXT_UPLOAD_PROFILE_PREFIX}*&enabled=eq.true&select=feature_key&limit=1`,
+  );
+  return Boolean(rows[0]?.feature_key);
 }
 
 function resolveProfileFromSelectionText<T extends { display_name: string }>(profiles: T[], incomingText: string): T | null {
@@ -489,7 +513,7 @@ async function prepareUploadByText(env: Env, event: LineEvent, incomingText: str
   if (profiles.length === 1) {
     const profile = profiles[0];
     await setNextUploadTargetProfile(env, userId, profile.id);
-    await replyText(env, event.replyToken, `好。\n這次存到【${profile.display_name}】。\n請上傳照片。`, uploadPhotoQuickReply());
+    await replyText(env, event.replyToken, `好。\n這次存到【${profile.display_name}】。\n請上傳照片，或直接貼上文字。`, uploadPhotoQuickReply());
     return true;
   }
 
@@ -514,7 +538,7 @@ async function prepareUploadForProfile(env: Env, lineUserId: string, targetProfi
   await pushText(
     env,
     lineUserId,
-    `好。\n這次存到【${targetProfile.display_name}】。\n請上傳照片。`,
+    `好。\n這次存到【${targetProfile.display_name}】。\n請上傳照片，或直接貼上文字。`,
     uploadPhotoQuickReply(),
   );
 }
@@ -528,7 +552,7 @@ async function replyDefaultUploadHelp(env: Env, event: LineEvent) {
     await replyText(
       env,
       event.replyToken,
-      "可以拍照傳我。\n我會幫您整理。",
+      "可以拍照或貼文字給我。\n我會幫您整理。",
       { items: [lineUriQuickReply("打開 Care WEDO", "https://care.wedopr.com")] },
     );
     return;
@@ -540,7 +564,7 @@ async function replyDefaultUploadHelp(env: Env, event: LineEvent) {
     await replyText(
       env,
       event.replyToken,
-      `可以拍照傳我。\n這次存到【${profile.display_name}】。`,
+      `可以拍照或貼文字給我。\n這次存到【${profile.display_name}】。`,
       uploadPhotoQuickReply(),
     );
     return;
@@ -549,9 +573,41 @@ async function replyDefaultUploadHelp(env: Env, event: LineEvent) {
   await replyText(
     env,
     event.replyToken,
-    "可以拍照傳我。\n請先選家人。",
+    "可以拍照或貼文字給我。\n請先選家人。",
     prepareUploadProfileQuickReply(profiles),
   );
+}
+
+function buildReassignQuickReply(
+  profiles: Array<{ id: number; display_name: string }>,
+  savedProfileName: string,
+  appointmentIds: string,
+  medicationIds: string,
+) {
+  if (profiles.length <= 1 || (!appointmentIds && !medicationIds)) return undefined;
+
+  const otherProfiles = profiles.filter(p => p.display_name !== savedProfileName).slice(0, 5);
+  if (!otherProfiles.length) return undefined;
+
+  return {
+    items: otherProfiles.map(p => {
+      const actionData = new URLSearchParams();
+      actionData.set("action", "reassign");
+      actionData.set("p", String(p.id));
+      if (appointmentIds) actionData.set("a", appointmentIds);
+      if (medicationIds) actionData.set("m", medicationIds);
+
+      return {
+        type: "action",
+        action: {
+          type: "postback",
+          label: `改到${p.display_name}`.slice(0, 20),
+          data: actionData.toString().slice(0, 300),
+          displayText: `這是 ${p.display_name} 的紀錄`
+        }
+      };
+    })
+  };
 }
 
 /** 處理圖片 OCR（背景執行，用 Push API 回傳結果） */
@@ -594,33 +650,9 @@ async function processImageOCR(env: Env, event: LineEvent) {
 
     const reply = formatResultSummary(parsedData, saved.profileName);
 
-    let quickReply = undefined;
     const aptIds = saved.appointment_ids.join(",");
     const medIds = saved.medication_ids.join(",");
-    
-    if (profiles.length > 1 && (aptIds.length > 0 || medIds.length > 0)) {
-      const otherProfiles = profiles.filter(p => p.display_name !== saved.profileName).slice(0, 5); // LINE limit is 13, but let's take 5
-      
-      quickReply = {
-        items: otherProfiles.map(p => {
-          const actionData = new URLSearchParams();
-          actionData.set("action", "reassign");
-          actionData.set("p", String(p.id));
-          if (aptIds) actionData.set("a", aptIds);
-          if (medIds) actionData.set("m", medIds);
-
-          return {
-            type: "action",
-            action: {
-              type: "postback",
-              label: `改到${p.display_name}`.slice(0, 20),
-              data: actionData.toString().slice(0, 300), // Ensure max 300 chars
-              displayText: `這是 ${p.display_name} 的紀錄`
-            }
-          };
-        })
-      };
-    }
+    const quickReply = buildReassignQuickReply(profiles, saved.profileName, aptIds, medIds);
 
     await pushText(env, lineUserId, reply, summaryQuickReply(quickReply));
     const familySummary = `家人上傳了【${saved.profileName}】的資料。\n已整理好。\n\n${reply}`;
@@ -642,6 +674,75 @@ async function processImageOCR(env: Env, event: LineEvent) {
     });
     const msg = error instanceof Error ? error.message : "未知錯誤";
     await pushText(env, lineUserId, `這張看不清楚。\n請再拍一次。\n\n${msg}`);
+  }
+}
+
+/** 處理 LINE 貼上的文字資料（背景執行，用 Push API 回傳結果） */
+async function processTextOCR(env: Env, event: LineEvent, incomingText: string) {
+  const lineUserId = event.source.userId;
+  const startedAt = Date.now();
+  try {
+    if (incomingText.trim().length > 12000) {
+      throw new Error("文字太長了，請先保留看診、用藥或提醒相關段落。");
+    }
+
+    logEvent("line.text_ocr_started", {
+      line_user_suffix: lineUserId.slice(-4),
+      text_length: incomingText.trim().length,
+    });
+    const userId = await getOrCreateDefaultUser(env, lineUserId);
+    const profiles = await getAccessibleProfiles(env, userId);
+    const nextUploadTarget = await getNextUploadTargetProfile(env, userId, profiles);
+    const parsedData = await parseMedicalText(env, incomingText);
+    const saved = nextUploadTarget
+      ? await saveParsedDataToSelectedProfile(env, parsedData, lineUserId, nextUploadTarget.id)
+      : await saveParsedData(env, parsedData, lineUserId);
+
+    if (nextUploadTarget) {
+      await clearNextUploadTargetProfile(env, userId);
+    }
+
+    if (saved.needsProfileSelection && saved.pendingDocumentId) {
+      await pushText(
+        env,
+        lineUserId,
+        "這段資料要存給誰？",
+        pendingProfileQuickReply(saved.pendingDocumentId, profiles),
+      );
+      logEvent("line.text_ocr_pending_profile_selection", {
+        line_user_suffix: lineUserId.slice(-4),
+        profile_count: profiles.length,
+        pending_document_id: saved.pendingDocumentId,
+        duration_ms: Date.now() - startedAt,
+      });
+      return;
+    }
+
+    const reply = formatResultSummary(parsedData, saved.profileName);
+    const aptIds = saved.appointment_ids.join(",");
+    const medIds = saved.medication_ids.join(",");
+    const quickReply = buildReassignQuickReply(profiles, saved.profileName, aptIds, medIds);
+
+    await pushText(env, lineUserId, reply, summaryQuickReply(quickReply));
+    const familySummary = `家人上傳了【${saved.profileName}】的資料。\n已整理好。\n\n${reply}`;
+    const uploadSummaryCount = await notifyUploadSummaryRecipients(env, saved.groupId, lineUserId, familySummary);
+    logEvent("line.text_ocr_completed", {
+      line_user_suffix: lineUserId.slice(-4),
+      appointment_count: parsedData.appointments?.length || 0,
+      medication_count: parsedData.medications?.length || 0,
+      profile_count: profiles.length,
+      has_quick_reply: Boolean(quickReply),
+      upload_summary_count: uploadSummaryCount,
+      preselected_profile: Boolean(nextUploadTarget),
+      duration_ms: Date.now() - startedAt,
+    });
+  } catch (error) {
+    logError("line.text_ocr_failed", error, {
+      line_user_suffix: lineUserId.slice(-4),
+      duration_ms: Date.now() - startedAt,
+    });
+    const msg = error instanceof Error ? error.message : "未知錯誤";
+    await pushText(env, lineUserId, `這段文字我暫時整理不了。\n請再貼一次重點段落。\n\n${msg}`);
   }
 }
 
@@ -801,7 +902,16 @@ async function handleEvent(env: Env, event: LineEvent, waitUntil: (promise: Prom
   }
 
   const incomingText = event.message?.text || "";
-  if (incomingText && await assignPendingOcrByText(env, event, incomingText, waitUntil)) return;
+  const isMedicalTextUpload = incomingText ? looksLikeMedicalTextUpload(incomingText) : false;
+  const hasPreparedUploadTarget = incomingText && !isMedicalTextUpload && looksLikePreparedTextUpload(incomingText)
+    ? await hasNextUploadTargetProfile(env, event.source.userId)
+    : false;
+  if (incomingText && !isMedicalTextUpload && !hasPreparedUploadTarget && await assignPendingOcrByText(env, event, incomingText, waitUntil)) return;
+  if (incomingText && (isMedicalTextUpload || hasPreparedUploadTarget)) {
+    await replyText(env, event.replyToken, "收到文字。\n我先幫您整理。");
+    waitUntil(processTextOCR(env, event, incomingText));
+    return;
+  }
   if (incomingText && await prepareUploadByText(env, event, incomingText)) return;
 
   if (incomingText.includes("網址") || incomingText.toLowerCase().includes("url")) {
