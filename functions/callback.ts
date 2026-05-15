@@ -402,6 +402,39 @@ async function prepareUploadForProfile(env: Env, lineUserId: string, targetProfi
   );
 }
 
+async function replyDefaultUploadHelp(env: Env, event: LineEvent) {
+  if (!event.replyToken) return;
+
+  const userId = await getOrCreateDefaultUser(env, event.source.userId);
+  const profiles = await getAccessibleProfiles(env, userId);
+  if (profiles.length === 0) {
+    await replyText(
+      env,
+      event.replyToken,
+      `${DEFAULT_RECIPIENT}，您可以直接把醫院單子拍照傳給我。\n我會幫您整理成看診、領藥和吃藥提醒。`,
+    );
+    return;
+  }
+
+  if (profiles.length === 1) {
+    const profile = profiles[0];
+    await setNextUploadTargetProfile(env, userId, profile.id);
+    await replyText(
+      env,
+      event.replyToken,
+      `${DEFAULT_RECIPIENT}，您可以直接把醫院單子拍照傳給我。\n這次我會先存到【${profile.display_name}】。`,
+    );
+    return;
+  }
+
+  await replyText(
+    env,
+    event.replyToken,
+    `${DEFAULT_RECIPIENT}，您可以直接把醫院單子拍照傳給我。\n我會幫您整理成看診、領藥和吃藥提醒。\n\n如果這次要上傳，請先點下面的姓名標籤。`,
+    prepareUploadProfileQuickReply(profiles),
+  );
+}
+
 /** 處理圖片 OCR（背景執行，用 Push API 回傳結果） */
 async function processImageOCR(env: Env, event: LineEvent) {
   const lineUserId = event.source.userId;
@@ -652,12 +685,12 @@ async function handleEvent(env: Env, event: LineEvent, waitUntil: (promise: Prom
   if (incomingText && await assignPendingOcrByText(env, event, incomingText, waitUntil)) return;
   if (incomingText && await prepareUploadByText(env, event, incomingText)) return;
 
-  const reply =
-    incomingText.includes("網址") || incomingText.toLowerCase().includes("url")
-      ? "這裡可以看完整清單：https://care.wedopr.com"
-      : `${DEFAULT_RECIPIENT}，您可以直接把醫院單子拍照傳給我。\n我會幫您整理成看診、領藥和吃藥提醒。`;
+  if (incomingText.includes("網址") || incomingText.toLowerCase().includes("url")) {
+    await replyText(env, event.replyToken, "這裡可以看完整清單：https://care.wedopr.com");
+    return;
+  }
 
-  await replyText(env, event.replyToken, reply);
+  await replyDefaultUploadHelp(env, event);
 }
 
 export const onRequestGet: PagesFunction = async () => {

@@ -62,3 +62,12 @@ test("LINE OCR can preselect a care profile before the next image upload", () =>
   assert.match(callback, /saveParsedDataToSelectedProfile/);
   assert.match(ocr, /export async function saveParsedDataToSelectedProfile/);
 });
+
+test("LINE default upload helper also shows care profile name labels", () => {
+  const callback = readProjectFile("functions/callback.ts");
+  const defaultHelper = callback.slice(callback.indexOf("async function replyDefaultUploadHelp"));
+
+  assert.match(defaultHelper, /prepareUploadProfileQuickReply\(profiles\)/);
+  assert.match(defaultHelper, /請先點下面的姓名標籤/);
+  assert.match(callback, /await replyDefaultUploadHelp\(env,\s*event\)/);
+});
