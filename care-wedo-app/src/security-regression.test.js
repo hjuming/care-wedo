@@ -232,11 +232,16 @@ test("Family invite card keeps copy actions elder-friendly on mobile", () => {
 
 test("Medication records expose schedule fields for elder-friendly medicine instructions", () => {
   const schema = readProjectFile("supabase/schema.sql");
+  const migration = readProjectFile("supabase/migration_phase51_medication_schedule_columns.sql");
   const shared = readProjectFile("functions/_shared/supabase.ts");
   assert.match(schema, /time_slot text/);
   assert.match(schema, /meal_timing text/);
   assert.match(schema, /scheduled_time text/);
   assert.match(schema, /taken_status text/);
+  assert.match(migration, /alter table public\.medications/);
+  assert.match(migration, /add column if not exists time_slot text/);
+  assert.match(migration, /add column if not exists meal_timing text/);
+  assert.match(migration, /add column if not exists scheduled_time text/);
   assert.match(shared, /time_slot:\s*row\.time_slot/);
   assert.match(shared, /meal_timing:\s*row\.meal_timing/);
   assert.match(shared, /scheduled_time:\s*row\.scheduled_time/);

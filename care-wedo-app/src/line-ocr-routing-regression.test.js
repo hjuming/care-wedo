@@ -25,6 +25,17 @@ test("LINE OCR matches parsed patient identity before saving records", () => {
   assert.match(callback, /pending_profile_selection/);
 });
 
+test("LINE pending OCR assignment accepts LINE display text and replies with the parsed summary", () => {
+  const callback = readProjectFile("functions/callback.ts");
+
+  assert.match(callback, /resolveProfileFromSelectionText/);
+  assert.match(callback, /normalizedText\.includes\(normalizedName\)/);
+  assert.match(callback, /event\.type === "postback" && event\.postback\?\.data/);
+  assert.doesNotMatch(callback, /event\.type === "postback" && event\.postback\?\.data && event\.replyToken/);
+  assert.match(callback, /sendAssignmentReply/);
+  assert.match(callback, /formatResultSummary\(saved\.parsed/);
+});
+
 test("LINE OCR profile reassignment keeps group and profile scope consistent", () => {
   const callback = readProjectFile("functions/callback.ts");
   const reassign = callback.slice(callback.indexOf("async function reassignRecordsToProfile"));

@@ -113,13 +113,14 @@ export function getMedicationSchedule(medication = {}) {
 }
 
 function inferMedicationSlots(medication = {}) {
-  const text = [
-    medication.time_slot,
-    medication.scheduled_time,
-    medication.frequency,
-    medication.reminder_text,
-    medication.meal_timing,
-  ].filter(Boolean).join(" ");
+  const text = medication.time_slot
+    ? String(medication.time_slot)
+    : [
+      medication.scheduled_time,
+      medication.frequency,
+      medication.reminder_text,
+      medication.meal_timing,
+    ].filter(Boolean).join(" ");
   const lowerText = text.toLowerCase();
   const compactText = text.replace(/[、,，/／;；\s]+/g, "");
   const slots = new Set();

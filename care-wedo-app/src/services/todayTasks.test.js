@@ -237,3 +237,21 @@ test("groupMedicationsBySchedule supports shorthand and clock-time slots", () =>
   assert.deepEqual(bySlot.evening, [1]);
   assert.deepEqual(bySlot.bedtime, [3]);
 });
+
+test("groupMedicationsBySchedule lets an explicit medication time slot override OCR text", () => {
+  const groups = groupMedicationsBySchedule([
+    {
+      id: 1,
+      name: "手動改早上的藥",
+      time_slot: "morning",
+      frequency: "晚餐後",
+      reminder_text: "睡前服用",
+      active: true,
+    },
+  ]);
+
+  const bySlot = Object.fromEntries(groups.map((group) => [group.slot, group.medicationIds]));
+  assert.deepEqual(bySlot.morning, [1]);
+  assert.deepEqual(bySlot.evening, []);
+  assert.deepEqual(bySlot.bedtime, []);
+});

@@ -24,6 +24,7 @@ export type SavedLineOcrData = {
   profileName: string;
   groupId: number | null;
   profileId: number | null;
+  parsed?: ParsedMedicalData;
   pendingDocumentId?: number | null;
   needsProfileSelection?: boolean;
   matchedBy?: "patient_identity" | null;
@@ -487,7 +488,7 @@ export async function savePendingParsedDataToProfile(
     }),
   });
 
-  return saved;
+  return { ...saved, parsed: document.ai_summary };
 }
 
 export async function saveParsedData(env: Env, parsed: ParsedMedicalData, lineUserId?: string): Promise<SavedLineOcrData> {

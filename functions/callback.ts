@@ -204,6 +204,44 @@ function normalizeProfileAnswer(value: string) {
     .toLowerCase();
 }
 
+function resolveProfileFromSelectionText<T extends { display_name: string }>(profiles: T[], incomingText: string): T | null {
+  const normalizedText = normalizeProfileAnswer(incomingText);
+  const matches = profiles.filter((profile) => {
+    const normalizedName = normalizeProfileAnswer(profile.display_name);
+    return normalizedName && (normalizedText === normalizedName || normalizedText.includes(normalizedName));
+  });
+  return matches.length === 1 ? matches[0] : null;
+}
+
+async function sendTextWithFallback(env: Env, event: LineEvent, text: string) {
+  if (event.replyToken) {
+    try {
+      await replyText(env, event.replyToken, text);
+      return;
+    } catch (error) {
+      logError("line.reply_failed_fallback_to_push", error, {
+        line_user_suffix: event.source.userId.slice(-4),
+      });
+    }
+  }
+
+  await pushText(env, event.source.userId, text);
+}
+
+async function sendAssignmentReply(
+  env: Env,
+  event: LineEvent,
+  saved: Awaited<ReturnType<typeof savePendingParsedDataToProfile>>,
+) {
+  const reply = saved.parsed
+    ? formatResultSummary(saved.parsed, saved.profileName)
+    : `已經幫您存入【${saved.profileName}】的紀錄中。想看完整清單或修改，請點這裡：https://care.wedopr.com`;
+
+  await sendTextWithFallback(env, event, reply);
+  const familySummary = `家人剛上傳了一筆 ${saved.profileName} 的照護資料，已經歸類完成。\n\n${reply}`;
+  await notifyUploadSummaryRecipients(env, saved.groupId, event.source.userId, familySummary);
+}
+
 async function notifyUploadSummaryRecipients(env: Env, groupId: number | null, uploaderLineUserId: string, text: string) {
   if (!groupId) return 0;
 
@@ -225,8 +263,7 @@ async function notifyUploadSummaryRecipients(env: Env, groupId: number | null, u
 async function assignPendingOcrByText(env: Env, event: LineEvent, incomingText: string) {
   const userId = await getOrCreateDefaultUser(env, event.source.userId);
   const profiles = await getAccessibleProfiles(env, userId);
-  const normalizedText = normalizeProfileAnswer(incomingText);
-  const targetProfile = profiles.find((profile) => normalizeProfileAnswer(profile.display_name) === normalizedText);
+  const targetProfile = resolveProfileFromSelectionText(profiles, incomingText);
   if (!targetProfile) return false;
 
   const documents = await supabaseFetch<Array<{ id: number }>>(
@@ -234,7 +271,7 @@ async function assignPendingOcrByText(env: Env, event: LineEvent, incomingText: 
     `care_documents?uploaded_by_user_id=eq.${userId}&status=eq.pending_profile_selection&select=id&order=captured_at.desc.nullslast,created_at.desc&limit=1`,
   );
   const documentId = documents[0]?.id;
-  if (!documentId || !event.replyToken) return false;
+  if (!documentId) return false;
 
   try {
     const saved = await savePendingParsedDataToProfile(env, documentId, event.source.userId, targetProfile.id);
@@ -245,9 +282,7 @@ async function assignPendingOcrByText(env: Env, event: LineEvent, incomingText: 
       appointment_count: saved.appointment_ids.length,
       medication_count: saved.medication_ids.length,
     });
-    await replyText(env, event.replyToken, `已經幫您存入【${saved.profileName}】的紀錄中。想看完整清單或修改，請點這裡：https://care.wedopr.com`);
-    const familySummary = `家人剛上傳了一筆 ${saved.profileName} 的照護資料，已經歸類完成。\n\n想看完整清單或修改，請點這裡：https://care.wedopr.com`;
-    await notifyUploadSummaryRecipients(env, saved.groupId, event.source.userId, familySummary);
+    await sendAssignmentReply(env, event, saved);
     return true;
   } catch (err) {
     logError("line.pending_ocr_assign_failed", err, {
@@ -255,7 +290,7 @@ async function assignPendingOcrByText(env: Env, event: LineEvent, incomingText: 
       document_id: documentId,
       target_profile_id: targetProfile.id,
     });
-    await replyText(env, event.replyToken, `抱歉，歸類時發生錯誤，請稍後再試。`);
+    await sendTextWithFallback(env, event, `抱歉，歸類時發生錯誤，請稍後再試。`);
     return true;
   }
 }
@@ -406,7 +441,7 @@ async function reassignRecordsToProfile(
 }
 
 async function handleEvent(env: Env, event: LineEvent, waitUntil: (promise: Promise<any>) => void) {
-  if (event.type === "postback" && event.postback?.data && event.replyToken) {
+  if (event.type === "postback" && event.postback?.data) {
     const params = new URLSearchParams(event.postback.data);
     if (params.get("action") === "assign_pending_ocr") {
       const documentId = Number(params.get("d"));
@@ -424,16 +459,14 @@ async function handleEvent(env: Env, event: LineEvent, waitUntil: (promise: Prom
           appointment_count: saved.appointment_ids.length,
           medication_count: saved.medication_ids.length,
         });
-        await replyText(env, event.replyToken, `已經幫您存入【${saved.profileName}】的紀錄中。想看完整清單或修改，請點這裡：https://care.wedopr.com`);
-        const familySummary = `家人剛上傳了一筆 ${saved.profileName} 的照護資料，已經歸類完成。\n\n想看完整清單或修改，請點這裡：https://care.wedopr.com`;
-        await notifyUploadSummaryRecipients(env, saved.groupId, event.source.userId, familySummary);
+        await sendAssignmentReply(env, event, saved);
       } catch (err) {
         logError("line.pending_ocr_assign_failed", err, {
           line_user_suffix: event.source.userId.slice(-4),
           document_id: documentId,
           target_profile_id: targetProfileId,
         });
-        await replyText(env, event.replyToken, `抱歉，歸類時發生錯誤，請稍後再試。`);
+        await sendTextWithFallback(env, event, `抱歉，歸類時發生錯誤，請稍後再試。`);
       }
       return;
     }
