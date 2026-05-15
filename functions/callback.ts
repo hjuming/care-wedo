@@ -26,8 +26,8 @@ type LineWebhookBody = {
 };
 
 const encoder = new TextEncoder();
-const DEFAULT_RECIPIENT = "親愛的家人";
-const ASSIGNMENT_ACK_TEXT = `${DEFAULT_RECIPIENT}，收到，我正在把這張單子存到您選的照護對象。\n\n整理好後，我會再回報摘要給您。`;
+const DEFAULT_RECIPIENT = "爸爸／媽媽";
+const ASSIGNMENT_ACK_TEXT = "收到。\n我來存檔。";
 const LINE_NEXT_UPLOAD_PROFILE_PREFIX = "line_next_upload_profile:";
 
 function timingSafeEqual(a: string, b: string) {
@@ -141,44 +141,116 @@ async function fetchLineContent(env: Env, messageId: string): Promise<string> {
   return btoa(binary);
 }
 
-/** 將解析結果格式化成易讀的摘要 */
+function takeFirstText(...values: unknown[]) {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
+}
+
+function formatLineDate(value: unknown) {
+  const text = takeFirstText(value);
+  const match = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (!match) return text;
+  const [, year, month, day] = match;
+  const weekday = ["日", "一", "二", "三", "四", "五", "六"][new Date(`${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}T00:00:00+08:00`).getDay()];
+  return `${Number(month)}/${Number(day)}（${weekday}）`;
+}
+
+function formatLineTime(value: unknown) {
+  const text = takeFirstText(value);
+  const match = text.match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return text;
+  const hour = Number(match[1]);
+  const minute = match[2];
+  const period = hour < 12 ? "上午" : "下午";
+  const displayHour = hour % 12 || 12;
+  return `${period} ${displayHour}:${minute}`;
+}
+
+function formatLineDateTime(date?: unknown, time?: unknown) {
+  return [formatLineDate(date), formatLineTime(time)].filter(Boolean).join(" ");
+}
+
+function isRefillAppointment(apt: Record<string, any>) {
+  const type = takeFirstText(apt.type);
+  return type === "refill_reminder" || takeFirstText(apt.department, apt.notes, apt.reminder_text).includes("領藥");
+}
+
+function appendVisitSummary(lines: string[], apt: Record<string, any>) {
+  const dateTime = formatLineDateTime(apt.date, apt.time);
+  if (dateTime) lines.push(dateTime);
+
+  const place = [apt.hospital, apt.location].map((value) => takeFirstText(value)).filter(Boolean).join(" ");
+  if (place) lines.push(place);
+
+  const department = takeFirstText(apt.department);
+  if (department && !department.includes("藥局")) lines.push(department);
+
+  const doctor = takeFirstText(apt.doctor);
+  if (doctor) lines.push(`${doctor}醫師`);
+
+  const number = takeFirstText(apt.number);
+  if (number) lines.push(`號碼：${number}`);
+
+  if (apt.fasting_required) lines.push(`要空腹：${apt.fasting_hours || 8} 小時`);
+}
+
+function appendRefillSummary(lines: string[], appointments: Array<Record<string, any>>) {
+  const labels = ["第一次領藥", "第二次領藥", "第三次領藥"];
+  appointments.slice(0, 3).forEach((apt, index) => {
+    lines.push(labels[index] || `第 ${index + 1} 次領藥`);
+    const dateTime = formatLineDateTime(apt.date, apt.time);
+    if (dateTime) lines.push(dateTime);
+
+    if (index === 0) {
+      const place = [apt.hospital, apt.location].map((value) => takeFirstText(value)).filter(Boolean).join(" ");
+      if (place) lines.push(place);
+      const number = takeFirstText(apt.number);
+      if (number) lines.push(`號碼：${number}`);
+    }
+    lines.push("");
+  });
+}
+
+function appendBringCard(lines: string[]) {
+  lines.push("");
+  lines.push("請記得帶：健保卡");
+}
+
+/** 將解析結果格式化成長輩友善摘要 */
 function formatResultSummary(parsed: import("./_shared/medical_ocr").ParsedMedicalData, profileName: string): string {
-  const lines: string[] = [`${DEFAULT_RECIPIENT}，我幫您把單子整理好了。\n`];
+  const lines: string[] = [];
+  const appointments = parsed.appointments || [];
+  const refillAppointments = appointments.filter(isRefillAppointment);
+  const visitAppointment = appointments.find((apt) => !isRefillAppointment(apt));
 
-  if (parsed.appointments?.length) {
-    lines.push(`要記得的時間（${parsed.appointments.length} 筆）：`);
-    for (const apt of parsed.appointments) {
-      const parts: string[] = [];
-      if (apt.date) parts.push(apt.time ? `${apt.date} ${apt.time}` : apt.date);
-      if (apt.hospital) parts.push(apt.hospital);
-      if (apt.department) parts.push(apt.department);
-      if (apt.doctor) parts.push(`${apt.doctor}醫師`);
-      if (apt.number) parts.push(`${apt.number}號`);
-      lines.push(`• ${parts.join(" ｜ ")}`);
-      if (apt.location) lines.push(`  地點：${apt.location}`);
-      if (apt.fasting_required) lines.push(`  記得：前 ${apt.fasting_hours || 8} 小時先不要吃東西。`);
-      if (apt.reminder_text) lines.push(`  ${apt.reminder_text}`);
-    }
+  if (refillAppointments.length) {
+    lines.push(`${DEFAULT_RECIPIENT}，請記得領藥：`);
     lines.push("");
+    appendRefillSummary(lines, refillAppointments);
+    appendBringCard(lines);
+  } else if (visitAppointment) {
+    lines.push(`${DEFAULT_RECIPIENT}，這是下次看診提醒：`);
+    lines.push("");
+    appendVisitSummary(lines, visitAppointment);
+    appendBringCard(lines);
+  } else if (parsed.medications?.length) {
+    lines.push(`${DEFAULT_RECIPIENT}，藥袋已整理好：`);
+    lines.push("");
+    lines.push(`藥：${parsed.medications.length} 筆`);
+    lines.push("請照藥袋時間吃。");
   }
 
-  if (parsed.medications?.length) {
-    lines.push(`藥的提醒（${parsed.medications.length} 筆）：`);
-    for (const med of parsed.medications) {
-      const parts: string[] = [];
-      if (med.name) parts.push(med.name);
-      if (med.dosage) parts.push(med.dosage);
-      if (med.frequency) parts.push(med.frequency);
-      lines.push(`• ${parts.join(" ｜ ")}`);
-      if (med.purpose) lines.push(`  用來：${med.purpose}`);
-      if (med.warnings) lines.push(`  注意：${med.warnings}`);
-      if (med.reminder_text) lines.push(`  ${med.reminder_text}`);
-    }
+  if (parsed.medications?.length && appointments.length) {
     lines.push("");
+    lines.push(`藥：${parsed.medications.length} 筆，已放進吃藥頁。`);
   }
 
-  lines.push(`💡 這筆資料已存入【${profileName}】的紀錄中。`);
-  lines.push("想看完整清單或修改，請點這裡：https://care.wedopr.com");
+  if (lines.length === 0) lines.push(`${DEFAULT_RECIPIENT}，資料已整理好。`);
+  lines.push("");
+  lines.push(`已存入【${profileName}】。`);
+  lines.push("https://care.wedopr.com");
   return lines.join("\n");
 }
 
@@ -200,6 +272,48 @@ function pendingProfileQuickReply(documentId: number, profiles: Array<{ id: numb
         },
       };
     }),
+  };
+}
+
+function lineTextQuickReply(label: string, text: string) {
+  return {
+    type: "action",
+    action: { type: "message", label, text },
+  };
+}
+
+function lineUriQuickReply(label: string, uri: string) {
+  return {
+    type: "action",
+    action: { type: "uri", label, uri },
+  };
+}
+
+function uploadPhotoQuickReply() {
+  return {
+    items: [
+      { type: "action", action: { type: "camera", label: "拍照" } },
+      { type: "action", action: { type: "cameraRoll", label: "選照片" } },
+      lineTextQuickReply("重新選人", "我要上傳"),
+    ],
+  };
+}
+
+function afterSummaryQuickReply() {
+  return {
+    items: [
+      lineTextQuickReply("再傳一張", "我要上傳"),
+      lineUriQuickReply("看清單", "https://care.wedopr.com"),
+    ],
+  };
+}
+
+function summaryQuickReply(extraQuickReply?: { items?: any[] }) {
+  return {
+    items: [
+      ...(extraQuickReply?.items || []),
+      ...afterSummaryQuickReply().items,
+    ].slice(0, 13),
   };
 }
 
@@ -290,10 +404,10 @@ async function pushAssignmentSummary(
 ) {
   const reply = saved.parsed
     ? formatResultSummary(saved.parsed, saved.profileName)
-    : `已經幫您存入【${saved.profileName}】的紀錄中。想看完整清單或修改，請點這裡：https://care.wedopr.com`;
+    : `已存入【${saved.profileName}】。\nhttps://care.wedopr.com`;
 
-  await pushText(env, lineUserId, reply);
-  const familySummary = `家人剛上傳了一筆 ${saved.profileName} 的照護資料，已經歸類完成。\n\n${reply}`;
+  await pushText(env, lineUserId, reply, summaryQuickReply());
+  const familySummary = `家人上傳了【${saved.profileName}】的資料。\n已整理好。\n\n${reply}`;
   await notifyUploadSummaryRecipients(env, saved.groupId, lineUserId, familySummary);
 }
 
@@ -320,7 +434,7 @@ async function completePendingOcrAssignment(
       document_id: documentId,
       target_profile_id: targetProfileId,
     });
-    await pushText(env, lineUserId, `抱歉，歸類時發生錯誤，請稍後再試。`);
+    await pushText(env, lineUserId, "暫時存不了。\n請稍後再試。");
   }
 }
 
@@ -366,21 +480,23 @@ async function prepareUploadByText(env: Env, event: LineEvent, incomingText: str
   const userId = await getOrCreateDefaultUser(env, event.source.userId);
   const profiles = await getAccessibleProfiles(env, userId);
   if (profiles.length === 0) {
-    await replyText(env, event.replyToken, `${DEFAULT_RECIPIENT}，請先到 Care WEDO 建立照護對象，再把醫院單子拍照傳給我。`);
+    await replyText(env, event.replyToken, "請先建立家人資料。", {
+      items: [lineUriQuickReply("打開 Care WEDO", "https://care.wedopr.com")],
+    });
     return true;
   }
 
   if (profiles.length === 1) {
     const profile = profiles[0];
     await setNextUploadTargetProfile(env, userId, profile.id);
-    await replyText(env, event.replyToken, `${DEFAULT_RECIPIENT}，了解，這次我會先存到【${profile.display_name}】。\n\n請您現在上傳藥袋、處方箋或預約單照片。`);
+    await replyText(env, event.replyToken, `好。\n這次存到【${profile.display_name}】。\n請上傳照片。`, uploadPhotoQuickReply());
     return true;
   }
 
   await replyText(
     env,
     event.replyToken,
-    `${DEFAULT_RECIPIENT}，這次要先存到哪位照護對象？\n\n請點下面的姓名標籤，選好後我會再請您上傳照片。`,
+    "這次要存給誰？",
     prepareUploadProfileQuickReply(profiles),
   );
   return true;
@@ -398,7 +514,8 @@ async function prepareUploadForProfile(env: Env, lineUserId: string, targetProfi
   await pushText(
     env,
     lineUserId,
-    `${DEFAULT_RECIPIENT}，了解，這次我會先存到【${targetProfile.display_name}】。\n\n請您現在上傳藥袋、處方箋或預約單照片。`,
+    `好。\n這次存到【${targetProfile.display_name}】。\n請上傳照片。`,
+    uploadPhotoQuickReply(),
   );
 }
 
@@ -411,7 +528,8 @@ async function replyDefaultUploadHelp(env: Env, event: LineEvent) {
     await replyText(
       env,
       event.replyToken,
-      `${DEFAULT_RECIPIENT}，您可以直接把醫院單子拍照傳給我。\n我會幫您整理成看診、領藥和吃藥提醒。`,
+      "可以拍照傳我。\n我會幫您整理。",
+      { items: [lineUriQuickReply("打開 Care WEDO", "https://care.wedopr.com")] },
     );
     return;
   }
@@ -422,7 +540,8 @@ async function replyDefaultUploadHelp(env: Env, event: LineEvent) {
     await replyText(
       env,
       event.replyToken,
-      `${DEFAULT_RECIPIENT}，您可以直接把醫院單子拍照傳給我。\n這次我會先存到【${profile.display_name}】。`,
+      `可以拍照傳我。\n這次存到【${profile.display_name}】。`,
+      uploadPhotoQuickReply(),
     );
     return;
   }
@@ -430,7 +549,7 @@ async function replyDefaultUploadHelp(env: Env, event: LineEvent) {
   await replyText(
     env,
     event.replyToken,
-    `${DEFAULT_RECIPIENT}，您可以直接把醫院單子拍照傳給我。\n我會幫您整理成看診、領藥和吃藥提醒。\n\n如果這次要上傳，請先點下面的姓名標籤。`,
+    "可以拍照傳我。\n請先選家人。",
     prepareUploadProfileQuickReply(profiles),
   );
 }
@@ -461,7 +580,7 @@ async function processImageOCR(env: Env, event: LineEvent) {
       await pushText(
         env,
         lineUserId,
-        `${DEFAULT_RECIPIENT}，我已經看完這張單子，但還不確定要存到哪位照護對象。\n\n請點下面按鈕選擇，選好後我才會正式存入資料庫。`,
+        "這張要存給誰？",
         pendingProfileQuickReply(saved.pendingDocumentId, profiles),
       );
       logEvent("line.ocr_pending_profile_selection", {
@@ -494,7 +613,7 @@ async function processImageOCR(env: Env, event: LineEvent) {
             type: "action",
             action: {
               type: "postback",
-              label: p.display_name,
+              label: `改到${p.display_name}`.slice(0, 20),
               data: actionData.toString().slice(0, 300), // Ensure max 300 chars
               displayText: `這是 ${p.display_name} 的紀錄`
             }
@@ -503,8 +622,8 @@ async function processImageOCR(env: Env, event: LineEvent) {
       };
     }
 
-    await pushText(env, lineUserId, reply, quickReply);
-    const familySummary = `家人剛上傳了一筆 ${saved.profileName} 的照護資料。\n\n${reply}`;
+    await pushText(env, lineUserId, reply, summaryQuickReply(quickReply));
+    const familySummary = `家人上傳了【${saved.profileName}】的資料。\n已整理好。\n\n${reply}`;
     const uploadSummaryCount = await notifyUploadSummaryRecipients(env, saved.groupId, lineUserId, familySummary);
     logEvent("line.ocr_completed", {
       line_user_suffix: lineUserId.slice(-4),
@@ -522,7 +641,7 @@ async function processImageOCR(env: Env, event: LineEvent) {
       duration_ms: Date.now() - startedAt,
     });
     const msg = error instanceof Error ? error.message : "未知錯誤";
-    await pushText(env, lineUserId, `${DEFAULT_RECIPIENT}，這張照片我暫時看不清楚。\n\n可以再拍一次嗎？盡量讓整張單子平放、字清楚一點。\n\n系統訊息：${msg}`);
+    await pushText(env, lineUserId, `這張看不清楚。\n請再拍一次。\n\n${msg}`);
   }
 }
 
@@ -603,14 +722,14 @@ async function handleEvent(env: Env, event: LineEvent, waitUntil: (promise: Prom
             line_user_suffix: event.source.userId.slice(-4),
             target_profile_id: targetProfileId,
           });
-          await pushText(env, event.source.userId, `抱歉，暫時無法設定上傳對象，請稍後再試。`);
+          await pushText(env, event.source.userId, "暫時不能選。\n請稍後再試。");
         }));
       } catch (err) {
         logError("line.prepare_ocr_upload_failed", err, {
           line_user_suffix: event.source.userId.slice(-4),
           target_profile_id: targetProfileId,
         });
-        waitUntil(pushText(env, event.source.userId, `抱歉，暫時無法設定上傳對象，請稍後再試。`));
+        waitUntil(pushText(env, event.source.userId, "暫時不能選。\n請稍後再試。"));
       }
       return;
     }
@@ -631,7 +750,7 @@ async function handleEvent(env: Env, event: LineEvent, waitUntil: (promise: Prom
           document_id: documentId,
           target_profile_id: targetProfileId,
         });
-        waitUntil(pushText(env, event.source.userId, `抱歉，歸類時發生錯誤，請稍後再試。`));
+        waitUntil(pushText(env, event.source.userId, "暫時存不了。\n請稍後再試。"));
       }
       return;
     }
@@ -652,7 +771,7 @@ async function handleEvent(env: Env, event: LineEvent, waitUntil: (promise: Prom
           appointment_count: appointmentIds.length,
           medication_count: medicationIds.length,
         });
-        await replyText(env, event.replyToken, `沒問題，已經幫您歸類好了！`);
+        await replyText(env, event.replyToken, "已改好了。");
       } catch (err) {
         logError("line.reassign_failed", err, {
           line_user_suffix: event.source.userId.slice(-4),
@@ -660,7 +779,7 @@ async function handleEvent(env: Env, event: LineEvent, waitUntil: (promise: Prom
           appointment_count: appointmentIds.length,
           medication_count: medicationIds.length,
         });
-        await replyText(env, event.replyToken, `抱歉，歸類時發生錯誤，請稍後再試。`);
+        await replyText(env, event.replyToken, "暫時改不了。\n請稍後再試。");
       }
       return;
     }
@@ -674,7 +793,7 @@ async function handleEvent(env: Env, event: LineEvent, waitUntil: (promise: Prom
       message_id_suffix: event.message.id.slice(-4),
     });
     // 1. 立即回覆「解析中」讓使用者安心
-    await replyText(env, event.replyToken, `${DEFAULT_RECIPIENT}，收到照片了。\n我正在幫您看單子，等一下整理好給您。`);
+    await replyText(env, event.replyToken, "收到照片。\n我先幫您看。");
 
     // 2. 背景處理 OCR，完成後用 Push API 推送結果
     waitUntil(processImageOCR(env, event));
@@ -726,7 +845,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, waitUnti
       await replyText(
         env,
         firstImage.replyToken,
-        `${DEFAULT_RECIPIENT}，我收到好幾張照片。\n為了看得更準，建議一次傳一張。\n\n我先幫您看第一張。`,
+        "收到好幾張照片。\n我先看第一張。",
       );
     }
     waitUntil(processImageOCR(env, firstImage));

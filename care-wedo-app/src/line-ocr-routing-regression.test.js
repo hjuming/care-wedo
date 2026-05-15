@@ -36,7 +36,7 @@ test("LINE pending OCR assignment accepts LINE display text and replies with the
   assert.match(callback, /waitUntil\(pushText\(env,\s*event\.source\.userId,\s*ASSIGNMENT_ACK_TEXT\)\)/);
   assert.match(callback, /waitUntil\(completePendingOcrAssignment/);
   assert.match(callback, /pushAssignmentSummary/);
-  assert.match(callback, /pushText\(env,\s*lineUserId,\s*reply\)/);
+  assert.match(callback, /pushText\(env,\s*lineUserId,\s*reply,\s*summaryQuickReply/);
   assert.match(callback, /formatResultSummary\(saved\.parsed/);
 });
 
@@ -68,6 +68,20 @@ test("LINE default upload helper also shows care profile name labels", () => {
   const defaultHelper = callback.slice(callback.indexOf("async function replyDefaultUploadHelp"));
 
   assert.match(defaultHelper, /prepareUploadProfileQuickReply\(profiles\)/);
-  assert.match(defaultHelper, /請先點下面的姓名標籤/);
+  assert.match(defaultHelper, /請先選家人/);
   assert.match(callback, /await replyDefaultUploadHelp\(env,\s*event\)/);
+});
+
+test("LINE elder-friendly copy stays short and uses tap labels", () => {
+  const callback = readProjectFile("functions/callback.ts");
+
+  assert.match(callback, /爸爸／媽媽/);
+  assert.match(callback, /請記得帶：健保卡/);
+  assert.match(callback, /uploadPhotoQuickReply/);
+  assert.match(callback, /cameraRoll/);
+  assert.match(callback, /再傳一張/);
+  assert.match(callback, /看清單/);
+  assert.doesNotMatch(callback, /我會幫您整理成看診、領藥和吃藥提醒/);
+  assert.doesNotMatch(callback, /處方箋或預約單照片/);
+  assert.doesNotMatch(callback, /用來：|注意：|要記得的時間|藥的提醒/);
 });
