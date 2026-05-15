@@ -29,7 +29,17 @@ test("landing page copy matches elder-friendly beta positioning", () => {
   assert.match(app, /完整歷史紀錄與健康時間線/);
   assert.match(app, /PLAN_TIERS/);
   assert.match(app, /Family Pro/);
+  assert.match(app, /功能規劃/);
+  assert.match(app, /超級版/);
+  assert.match(app, /推薦方案/);
+  assert.match(app, /家人協作/);
+  assert.match(app, /10筆\/月/);
+  assert.match(app, /測試期間所有帳號開放 Family Pro，一起守護長輩健康/);
   assert.match(app, /PlanDetailsModal/);
+  assert.doesNotMatch(app, /目前規劃/);
+  assert.doesNotMatch(app, /圖片解析 \/ 月/);
+  assert.doesNotMatch(app, /家人帳號/);
+  assert.doesNotMatch(app, /家庭專業/);
   assert.doesNotMatch(app, /無限版本/);
   assert.doesNotMatch(app, /Care Team/);
   assert.match(app, /回饋意見/);

@@ -380,10 +380,10 @@ const FREE_FEATURES = [
 ];
 
 const PLAN_TIERS = [
-  { name: "Free", label: "Free 免費", ocr: 10, members: 1, recipients: 1 },
-  { name: "Family Basic", label: "Family Basic 家庭基礎", ocr: 30, members: 2, recipients: 1 },
-  { name: "Family Plus", label: "Family Plus 家庭進階", ocr: 50, members: 5, recipients: 2 },
-  { name: "Family Pro", label: "Family Pro 家庭專業", ocr: 100, members: 8, recipients: 4 },
+  { name: "Free", label: "免費版", ocr: "10筆/月", members: "1位", recipients: "1位" },
+  { name: "Family Basic", label: "基礎版", ocr: "30筆/月", members: "2位", recipients: "1位" },
+  { name: "Family Plus", label: "進階版", ocr: "50筆/月", members: "5位", recipients: "2位" },
+  { name: "Family Pro", label: "超級版", ocr: "100筆/月", members: "8位", recipients: "4位", featured: true },
 ];
 
 const LANDING_FAQS = [
@@ -457,16 +457,22 @@ function PlanTierTable() {
     <div className="plan-tier-table" role="table" aria-label="Care WEDO 方案級距">
       <div className="plan-tier-row plan-tier-head" role="row">
         <strong>方案</strong>
-        <strong>圖片解析 / 月</strong>
-        <strong>家人帳號</strong>
+        <strong>圖片解析</strong>
+        <strong>家人協作</strong>
         <strong>照護對象</strong>
       </div>
       {PLAN_TIERS.map((tier) => (
         <div className="plan-tier-row" role="row" key={tier.name}>
-          <span>{tier.label}</span>
-          <span>{tier.ocr} 筆</span>
-          <span>{tier.members} 位</span>
-          <span>{tier.recipients} 位</span>
+          <span className="plan-tier-name">
+            <span className="plan-tier-english">{tier.name}</span>
+            <span className="plan-tier-local">
+              {tier.label}
+              {tier.featured && <span className="plan-tier-star" aria-label="推薦方案">★</span>}
+            </span>
+          </span>
+          <span>{tier.ocr}</span>
+          <span>{tier.members}</span>
+          <span>{tier.recipients}</span>
         </div>
       ))}
     </div>
@@ -480,13 +486,13 @@ function PlanDetailsModal({ onClose }) {
         <div className="modal-header">
           <div>
             <p className="modal-kicker">Family Pro 方案</p>
-            <h2 id="plan-details-title">目前規劃</h2>
+            <h2 id="plan-details-title">功能規劃</h2>
           </div>
           <button type="button" className="btn-close" onClick={onClose} aria-label="關閉">×</button>
         </div>
         <div className="modal-body">
           <PlanTierTable />
-          <p className="helper-copy">測試期間所有測試帳號暫時開放 Family Pro。正式價格與額度會依回饋調整。</p>
+          <p className="helper-copy">測試期間所有帳號開放 Family Pro，一起守護長輩健康，目前暫未規劃收費方式，請家人們不吝指教。</p>
         </div>
       </div>
     </div>
