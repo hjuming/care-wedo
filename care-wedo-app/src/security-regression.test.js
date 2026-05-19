@@ -383,6 +383,26 @@ test("Morning reminders target today's appointments while evening fasting target
   assert.match(eveningHandler, /fetchFastingAppointments\(env,\s*targetDate\)/);
 });
 
+test("Appointment calendar export is an authenticated ICS endpoint", () => {
+  const source = readProjectFile("functions/api/appointments/[id]/calendar.ics.ts");
+  assert.match(source, /text\/calendar;\s*charset=utf-8/);
+  assert.match(source, /Content-Disposition/);
+  assert.match(source, /BEGIN:VCALENDAR/);
+  assert.match(source, /VERSION:2\.0/);
+  assert.match(source, /UID:care-wedo-appointment-/);
+  assert.match(source, /getUserMemberships/);
+  assert.match(source, /group_id\.in/);
+  assert.match(source, /status=neq\.deleted/);
+});
+
+test("Future appointment cards expose a calendar file export action", () => {
+  const source = readProjectFile("care-wedo-app/src/App.jsx");
+  const calendarView = source.slice(source.indexOf("function CalendarView"), source.indexOf("const MEDICATION_SLOT_OPTIONS"));
+  assert.match(source, /downloadAppointmentCalendarFile/);
+  assert.match(calendarView, /onAddToCalendar/);
+  assert.match(calendarView, />\s*加入行事曆\s*</);
+});
+
 test("LINE postback reassignment validates source user access before updating records", () => {
   const source = readProjectFile("functions/callback.ts");
   assert.match(source, /getUserMemberships/);

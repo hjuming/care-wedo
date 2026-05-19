@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildDashboardRequest, isAuthFailureMessage } from "./api.js";
+import { buildAppointmentCalendarRequest, buildDashboardRequest, isAuthFailureMessage } from "./api.js";
 
 test("buildDashboardRequest returns the dashboard endpoint without identity data in demo mode", () => {
   assert.deepEqual(buildDashboardRequest("/api"), {
@@ -34,6 +34,17 @@ test("buildDashboardRequest can scope dashboard data to one care profile", () =>
 test("buildDashboardRequest can scope dashboard data to one family group", () => {
   assert.deepEqual(buildDashboardRequest("/api", { idToken: "token.123", profileId: 42, groupId: 7 }), {
     url: "/api/dashboard?profile_id=42&group_id=7",
+    init: {
+      headers: {
+        Authorization: "Bearer token.123",
+      },
+    },
+  });
+});
+
+test("buildAppointmentCalendarRequest targets an authenticated ICS download", () => {
+  assert.deepEqual(buildAppointmentCalendarRequest("/api", 42, { idToken: "token.123" }), {
+    url: "/api/appointments/42/calendar.ics",
     init: {
       headers: {
         Authorization: "Bearer token.123",

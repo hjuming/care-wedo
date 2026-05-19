@@ -24,6 +24,20 @@ export function buildDashboardRequest(apiBase = API_BASE, identity = {}) {
   };
 }
 
+export function buildAppointmentCalendarRequest(apiBase = API_BASE, appointmentId, identity = {}) {
+  const init = {};
+  if (identity.idToken) {
+    init.headers = {
+      Authorization: `Bearer ${identity.idToken}`,
+    };
+  }
+
+  return {
+    url: `${apiBase}/appointments/${encodeURIComponent(appointmentId)}/calendar.ics`,
+    init,
+  };
+}
+
 export function isAuthFailureMessage(message = "") {
   return /請先登入|登入失敗|unauthorized|auth_required|id[ _-]?token|token|oauth|line/i.test(String(message || ""));
 }
@@ -356,6 +370,62 @@ export async function createAppointment(payload, { idToken }) {
     throw new Error(error.error || "無法新增提醒");
   }
   return response.json();
+}
+
+function filenameFromContentDisposition(header, fallback) {
+  const match = String(header || "").match(/filename="?([^";]+)"?/i);
+  return match?.[1] || fallback;
+}
+
+async function shareCalendarFileIfAvailable(blob, filename) {
+  if (
+    typeof navigator === "undefined"
+    || typeof File === "undefined"
+    || typeof navigator.canShare !== "function"
+    || typeof navigator.share !== "function"
+  ) {
+    return false;
+  }
+
+  const file = new File([blob], filename, { type: "text/calendar" });
+  if (!navigator.canShare({ files: [file] })) return false;
+
+  try {
+    await navigator.share({
+      files: [file],
+      title: "Care WEDO 行事曆",
+    });
+    return true;
+  } catch (error) {
+    if (error?.name === "AbortError") return true;
+    return false;
+  }
+}
+
+export async function downloadAppointmentCalendarFile(id, { idToken } = {}) {
+  const { url, init } = buildAppointmentCalendarRequest(API_BASE, id, { idToken });
+  const response = await fetch(url, init);
+  if (!response.ok) {
+    const error = await response.json().catch(async () => ({ error: await response.text() }));
+    throw new Error(error.error || "無法產生行事曆檔");
+  }
+
+  const blob = await response.blob();
+  const filename = filenameFromContentDisposition(
+    response.headers.get("Content-Disposition"),
+    `care-wedo-appointment-${id}.ics`,
+  );
+
+  if (await shareCalendarFileIfAvailable(blob, filename)) return;
+
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
 }
 
 /**

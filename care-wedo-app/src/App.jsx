@@ -6,7 +6,7 @@ import LoginSetup from "./components/LoginSetup";
 import MobileBottomNav from "./components/MobileBottomNav";
 import OcrResult from "./components/OcrResult";
 import { patientData, medicines, timeline as initialTimeline } from "./data/patient";
-import { confirmOcrDocument, createAppointment, fetchDashboard, joinGroup, markMedicationSlotStatus, ocrAnalyze, ocrAnalyzeText, patchAppointment, patchMedication, updateActiveProfilePreference, updateFamilyNotes, updateProfile, updateProfileOrder } from "./services/api";
+import { confirmOcrDocument, createAppointment, downloadAppointmentCalendarFile, fetchDashboard, joinGroup, markMedicationSlotStatus, ocrAnalyze, ocrAnalyzeText, patchAppointment, patchMedication, updateActiveProfilePreference, updateFamilyNotes, updateProfile, updateProfileOrder } from "./services/api";
 import { buildLiffEntryUrl, buildLineAppLiffFallbackUrl, initLineIdentity, loginWithLine, logoutLineIdentity, resetCareWedoSessionAndReturnHome, shouldOpenLiffEntryUrl } from "./services/liff";
 import { trackError, trackEvent } from "./services/telemetry";
 import { buildTodayTasks, formatTaipeiTodayLabel, groupMedicationsBySchedule, hasSameDayTasks } from "./services/todayTasks";
@@ -1642,6 +1642,25 @@ function DashboardApp() {
     await loadDashboard(identity, activeProfileId, activeGroupId);
   }
 
+  async function handleAddAppointmentToCalendar(appointment) {
+    if (!appointment?.id || String(appointment.id).startsWith("demo-")) return;
+
+    try {
+      await downloadAppointmentCalendarFile(appointment.id, { idToken: identity.idToken });
+      trackEvent("frontend.calendar_export", {
+        appointmentId: appointment.id,
+        profileId: appointment.profile_id,
+        type: appointment.type,
+      });
+    } catch (err) {
+      trackError("frontend.calendar_export", err, {
+        appointmentId: appointment.id,
+        profileId: appointment.profile_id,
+      });
+      window.alert("無法產生行事曆檔，請稍後再試。");
+    }
+  }
+
   function handleProfileChange(profileId) {
     const profileGroupId = careProfiles.find((profile) => profile.id === profileId)?.group_id || activeGroupId;
     trackEvent("frontend.profile_switch", { profileId, groupId: profileGroupId });
@@ -1853,6 +1872,7 @@ function DashboardApp() {
               onUpload={handleUploadClick}
               onAddReminder={() => setShowManualReminder(true)}
               onEditAppointment={handleEditAppointment}
+              onAddToCalendar={handleAddAppointmentToCalendar}
             />
           )}
 
@@ -3131,7 +3151,7 @@ function OverviewView({
   );
 }
 
-function CalendarView({ appointments, onUpload, onAddReminder, onEditAppointment }) {
+function CalendarView({ appointments, onUpload, onAddReminder, onEditAppointment, onAddToCalendar }) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const futureAppointments = useMemo(
     () => appointments.filter((apt) => apt.status !== "completed" && isDateTodayOrFuture(apt.date)),
@@ -3209,9 +3229,14 @@ function CalendarView({ appointments, onUpload, onAddReminder, onEditAppointment
         </div>
         {futureAppointments.length ? futureAppointments.map((apt) => (
           <article key={apt.id} id={`event-${apt.date}`} className="event-row">
-            <button type="button" className="card-corner-edit" onClick={() => onEditAppointment(apt)} aria-label={`編輯 ${apt.title || apt.department || "提醒"}`}>
-              編輯
-            </button>
+            <div className="event-card-actions">
+              <button type="button" className="card-corner-edit" onClick={() => onEditAppointment(apt)} aria-label={`編輯 ${apt.title || apt.department || "提醒"}`}>
+                編輯
+              </button>
+              <button type="button" className="card-corner-calendar" onClick={() => onAddToCalendar?.(apt)} aria-label={`加入 ${apt.title || apt.department || "提醒"} 到行事曆`}>
+                加入行事曆
+              </button>
+            </div>
             <div className="event-type">{typeIcon(apt.type)}</div>
             <div>
               <p className="event-date">{formatDateLabel(apt.date, apt.time)}</p>

@@ -2700,13 +2700,21 @@ input:focus-visible {
   display: grid;
   grid-template-columns: 54px minmax(0, 1fr);
   gap: 14px;
-  padding: 16px 96px 16px 16px;
+  padding: 16px 150px 16px 16px;
 }
 
-.card-corner-edit {
+.event-card-actions {
   position: absolute;
   top: 14px;
   right: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.card-corner-edit,
+.card-corner-calendar {
   min-height: 42px;
   border: 1px solid rgba(94, 143, 154, 0.32);
   border-radius: 999px;
@@ -2719,7 +2727,9 @@ input:focus-visible {
 }
 
 .card-corner-edit:hover,
-.card-corner-edit:focus-visible {
+.card-corner-edit:focus-visible,
+.card-corner-calendar:hover,
+.card-corner-calendar:focus-visible {
   background: var(--primary-soft);
   border-color: var(--primary);
 }
@@ -5856,12 +5866,18 @@ button:disabled,
   }
 
   .event-row {
-    padding: 72px 16px 16px;
+    padding: 88px 16px 16px;
   }
 
-  .card-corner-edit {
+  .event-card-actions {
     top: 16px;
     right: 16px;
+    left: 16px;
+    justify-content: flex-end;
+  }
+
+  .card-corner-edit,
+  .card-corner-calendar {
     min-height: 48px;
     padding: 10px 18px;
     font-size: 16px;
