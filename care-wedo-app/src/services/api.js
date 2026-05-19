@@ -4,6 +4,8 @@
  */
 
 const API_BASE = import.meta.env?.VITE_API_BASE || "/api";
+const CARE_WEDO_URL = "https://care.wedopr.com";
+const TAIPEI_OFFSET_HOURS = 8;
 
 export function buildDashboardRequest(apiBase = API_BASE, identity = {}) {
   const init = {};
@@ -36,6 +38,168 @@ export function buildAppointmentCalendarRequest(apiBase = API_BASE, appointmentI
     url: `${apiBase}/appointments/${encodeURIComponent(appointmentId)}/calendar.ics`,
     init,
   };
+}
+
+function appointmentTypeLabel(type) {
+  if (type === "family_note") return "家庭提醒";
+  if (type === "inspection") return "檢查";
+  if (type === "refill_reminder") return "領藥";
+  if (type === "medication") return "用藥";
+  if (type === "measurement") return "量測";
+  if (type === "document") return "文件";
+  if (type === "rehab") return "復健";
+  if (type === "exercise") return "運動";
+  if (type === "other" || type === "reminder") return "提醒";
+  return "回診提醒";
+}
+
+function escapeIcsText(value = "") {
+  return String(value)
+    .replace(/\\/g, "\\\\")
+    .replace(/\r?\n/g, "\\n")
+    .replace(/;/g, "\\;")
+    .replace(/,/g, "\\,");
+}
+
+function foldIcsLine(line) {
+  const maxLength = 75;
+  if (line.length <= maxLength) return line;
+
+  const chunks = [];
+  let remaining = line;
+  while (remaining.length > maxLength) {
+    chunks.push(remaining.slice(0, maxLength));
+    remaining = remaining.slice(maxLength);
+  }
+  chunks.push(remaining);
+  return chunks.join("\r\n ");
+}
+
+function buildIcs(lines) {
+  return `${lines.map(foldIcsLine).join("\r\n")}\r\n`;
+}
+
+function parseDateParts(value) {
+  const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const [, yearText, monthText, dayText] = match;
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    date.getUTCFullYear() !== year
+    || date.getUTCMonth() + 1 !== month
+    || date.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  return { year, month, day };
+}
+
+function parseTimeParts(value) {
+  const text = String(value || "").trim().replace(/：/g, ":").replace(/\s+/g, "");
+  const match = text.match(/^(上午|下午|晚上|早上)?(\d{1,2}):(\d{2})/);
+  if (!match) return null;
+
+  let hour = Number(match[2]);
+  const minute = Number(match[3]);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute) || hour > 23 || minute > 59) return null;
+
+  const meridiem = match[1] || "";
+  if ((meridiem === "下午" || meridiem === "晚上") && hour < 12) hour += 12;
+  if ((meridiem === "上午" || meridiem === "早上") && hour === 12) hour = 0;
+
+  return { hour, minute };
+}
+
+function formatIcsDate(parts) {
+  return `${parts.year}${String(parts.month).padStart(2, "0")}${String(parts.day).padStart(2, "0")}`;
+}
+
+function nextCalendarDate(parts) {
+  const date = new Date(Date.UTC(parts.year, parts.month - 1, parts.day + 1));
+  return {
+    year: date.getUTCFullYear(),
+    month: date.getUTCMonth() + 1,
+    day: date.getUTCDate(),
+  };
+}
+
+function formatUtcIcsDateTime(date) {
+  return date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+}
+
+function buildAppointmentSummary(appointment, profileName = "") {
+  const title = appointment?.title
+    || appointment?.department
+    || appointment?.hospital
+    || appointmentTypeLabel(appointment?.type);
+  return `Care WEDO：${[profileName, title].filter(Boolean).join(" ")}`;
+}
+
+function buildAppointmentDescription(appointment = {}) {
+  const lines = [
+    appointment.department && `科別：${appointment.department}`,
+    appointment.doctor && `醫師：${appointment.doctor}`,
+    appointment.number && `號碼：${appointment.number}`,
+    appointment.fasting_required && `請記得空腹，前 ${appointment.fasting_hours || 8} 小時先不要吃東西。`,
+    appointment.notes || appointment.reminder_text,
+    "",
+    `Care WEDO：${CARE_WEDO_URL}`,
+  ];
+  return lines.filter((line) => line !== null && line !== undefined && line !== "").join("\n");
+}
+
+function calendarFilename(id) {
+  const safeId = String(id || "local").replace(/[^a-z0-9_-]+/gi, "-").replace(/^-+|-+$/g, "") || "local";
+  return `care-wedo-appointment-${safeId}.ics`;
+}
+
+export function buildLocalAppointmentCalendarFile(appointment, { profileName = "" } = {}) {
+  const dateParts = parseDateParts(appointment?.date);
+  if (!dateParts) throw new Error("行程日期格式不完整，無法產生行事曆檔。");
+
+  const timeParts = parseTimeParts(appointment?.time);
+  const lines = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Care WEDO//Appointment Export//ZH-TW",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    "BEGIN:VEVENT",
+    `UID:care-wedo-appointment-${appointment?.id || "local"}@care.wedopr.com`,
+    `DTSTAMP:${formatUtcIcsDateTime(new Date())}`,
+    `SUMMARY:${escapeIcsText(buildAppointmentSummary(appointment, profileName))}`,
+  ];
+
+  if (timeParts) {
+    const start = new Date(Date.UTC(
+      dateParts.year,
+      dateParts.month - 1,
+      dateParts.day,
+      timeParts.hour - TAIPEI_OFFSET_HOURS,
+      timeParts.minute,
+    ));
+    const end = new Date(start.getTime() + 60 * 60 * 1000);
+    lines.push(`DTSTART:${formatUtcIcsDateTime(start)}`);
+    lines.push(`DTEND:${formatUtcIcsDateTime(end)}`);
+  } else {
+    lines.push(`DTSTART;VALUE=DATE:${formatIcsDate(dateParts)}`);
+    lines.push(`DTEND;VALUE=DATE:${formatIcsDate(nextCalendarDate(dateParts))}`);
+  }
+
+  const location = appointment?.location || appointment?.hospital || "";
+  if (location) lines.push(`LOCATION:${escapeIcsText(location)}`);
+
+  lines.push(`DESCRIPTION:${escapeIcsText(buildAppointmentDescription(appointment))}`);
+  lines.push(`URL:${CARE_WEDO_URL}`);
+  lines.push("STATUS:CONFIRMED");
+  lines.push("TRANSP:OPAQUE");
+  lines.push("END:VEVENT");
+  lines.push("END:VCALENDAR");
+
+  return buildIcs(lines);
 }
 
 export function isAuthFailureMessage(message = "") {
@@ -367,7 +531,7 @@ export async function createAppointment(payload, { idToken }) {
   });
   if (!response.ok) {
     const error = await response.json().catch(async () => ({ error: await response.text() }));
-    throw new Error(error.error || "無法新增提醒");
+    throw new Error(error.error || "無法新增排程");
   }
   return response.json();
 }
@@ -416,16 +580,39 @@ export async function downloadAppointmentCalendarFile(id, { idToken } = {}) {
     `care-wedo-appointment-${id}.ics`,
   );
 
+  await saveCalendarBlob(blob, filename);
+}
+
+async function saveCalendarBlob(blob, filename) {
   if (await shareCalendarFileIfAvailable(blob, filename)) return;
+
+  if (
+    typeof document === "undefined"
+    || typeof window === "undefined"
+    || typeof URL === "undefined"
+    || typeof URL.createObjectURL !== "function"
+  ) {
+    throw new Error("目前瀏覽器無法下載行事曆檔");
+  }
 
   const objectUrl = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = objectUrl;
   link.download = filename;
   document.body.appendChild(link);
-  link.click();
+  if ("download" in link) {
+    link.click();
+  } else {
+    window.open(objectUrl, "_blank", "noopener,noreferrer");
+  }
   link.remove();
   window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+}
+
+export async function downloadLocalAppointmentCalendarFile(appointment, options = {}) {
+  const ics = buildLocalAppointmentCalendarFile(appointment, options);
+  const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
+  await saveCalendarBlob(blob, calendarFilename(appointment?.id));
 }
 
 /**

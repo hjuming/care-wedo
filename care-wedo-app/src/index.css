@@ -2734,6 +2734,27 @@ input:focus-visible {
   border-color: var(--primary);
 }
 
+.event-edit-action {
+  grid-column: 1 / -1;
+  justify-self: end;
+  min-height: 38px;
+  border: 1px solid rgba(94, 143, 154, 0.22);
+  border-radius: 999px;
+  background: rgba(221, 235, 237, 0.42);
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 7px 14px;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.event-edit-action:hover,
+.event-edit-action:focus-visible {
+  background: var(--primary-soft);
+  border-color: rgba(94, 143, 154, 0.38);
+  color: var(--primary-dark);
+}
+
 .event-type {
   width: 54px;
   height: 54px;
@@ -5624,7 +5645,7 @@ button:disabled,
   grid-template-columns: minmax(190px, 220px) minmax(0, 1fr);
   gap: 18px;
   align-items: start;
-  padding: 28px 112px 26px 28px;
+  padding: 28px;
   border: 1px solid var(--card-border);
   border-radius: 16px;
   background: var(--card-bg);
@@ -5638,6 +5659,27 @@ button:disabled,
 .elder-task-card.is-done {
   background: var(--success-transparent);
   border-color: rgba(39, 174, 96, 0.35);
+}
+
+.elder-task-edit-action {
+  grid-column: 1 / -1;
+  justify-self: end;
+  min-height: 38px;
+  border: 1px solid rgba(94, 143, 154, 0.22);
+  border-radius: 999px;
+  background: rgba(221, 235, 237, 0.42);
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 7px 14px;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.elder-task-edit-action:hover,
+.elder-task-edit-action:focus-visible {
+  background: var(--primary-soft);
+  border-color: rgba(94, 143, 154, 0.38);
+  color: var(--primary-dark);
 }
 
 .elder-task-time {
@@ -5685,7 +5727,7 @@ button:disabled,
 .elder-task-actions {
   display: flex;
   grid-column: 2;
-  justify-self: end;
+  justify-self: start;
   flex-direction: row;
   flex-wrap: wrap;
   align-items: center;
@@ -5862,7 +5904,7 @@ button:disabled,
   .elder-task-card {
     grid-template-columns: 1fr;
     gap: 12px;
-    padding: 72px 18px 18px;
+    padding: 22px 18px;
   }
 
   .event-row {
@@ -5881,6 +5923,18 @@ button:disabled,
     min-height: 48px;
     padding: 10px 18px;
     font-size: 16px;
+  }
+
+  .event-edit-action {
+    min-height: 40px;
+    padding: 8px 16px;
+    font-size: 15px;
+  }
+
+  .elder-task-edit-action {
+    min-height: 40px;
+    padding: 8px 16px;
+    font-size: 15px;
   }
 
   .elder-task-time {

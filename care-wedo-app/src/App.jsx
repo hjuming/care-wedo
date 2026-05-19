@@ -6,7 +6,7 @@ import LoginSetup from "./components/LoginSetup";
 import MobileBottomNav from "./components/MobileBottomNav";
 import OcrResult from "./components/OcrResult";
 import { patientData, medicines, timeline as initialTimeline } from "./data/patient";
-import { confirmOcrDocument, createAppointment, downloadAppointmentCalendarFile, fetchDashboard, joinGroup, markMedicationSlotStatus, ocrAnalyze, ocrAnalyzeText, patchAppointment, patchMedication, updateActiveProfilePreference, updateFamilyNotes, updateProfile, updateProfileOrder } from "./services/api";
+import { confirmOcrDocument, createAppointment, downloadAppointmentCalendarFile, downloadLocalAppointmentCalendarFile, fetchDashboard, joinGroup, markMedicationSlotStatus, ocrAnalyze, ocrAnalyzeText, patchAppointment, patchMedication, updateActiveProfilePreference, updateFamilyNotes, updateProfile, updateProfileOrder } from "./services/api";
 import { buildLiffEntryUrl, buildLineAppLiffFallbackUrl, initLineIdentity, loginWithLine, logoutLineIdentity, resetCareWedoSessionAndReturnHome, shouldOpenLiffEntryUrl } from "./services/liff";
 import { trackError, trackEvent } from "./services/telemetry";
 import { buildTodayTasks, formatTaipeiTodayLabel, groupMedicationsBySchedule, hasSameDayTasks } from "./services/todayTasks";
@@ -1643,14 +1643,30 @@ function DashboardApp() {
   }
 
   async function handleAddAppointmentToCalendar(appointment) {
-    if (!appointment?.id || String(appointment.id).startsWith("demo-")) return;
+    if (!appointment?.id) return;
 
     try {
-      await downloadAppointmentCalendarFile(appointment.id, { idToken: identity.idToken });
+      let exportMode = "api";
+      if (!identity.idToken || String(appointment.id).startsWith("demo-")) {
+        await downloadLocalAppointmentCalendarFile(appointment, { profileName: selectedProfile?.display_name || patient.name });
+        exportMode = "local";
+      } else {
+        try {
+          await downloadAppointmentCalendarFile(appointment.id, { idToken: identity.idToken });
+        } catch (error) {
+          trackError("frontend.calendar_export_api_fallback", error, {
+            appointmentId: appointment.id,
+            profileId: appointment.profile_id,
+          });
+          await downloadLocalAppointmentCalendarFile(appointment, { profileName: selectedProfile?.display_name || patient.name });
+          exportMode = "local_fallback";
+        }
+      }
       trackEvent("frontend.calendar_export", {
         appointmentId: appointment.id,
         profileId: appointment.profile_id,
         type: appointment.type,
+        exportMode,
       });
     } catch (err) {
       trackError("frontend.calendar_export", err, {
@@ -2768,7 +2784,7 @@ function ManualReminderModal({ mode = "create", initialAppointment = null, onClo
         fasting_hours: formData.fasting_required ? formData.fasting_hours : null,
       });
     } catch (err) {
-      setError(err.message || "新增提醒失敗");
+      setError(err.message || "新增排程失敗");
     } finally {
       setSaving(false);
     }
@@ -2793,7 +2809,7 @@ function ManualReminderModal({ mode = "create", initialAppointment = null, onClo
     <div className="modal-overlay">
       <div className="modal-content manual-reminder-modal">
         <div className="modal-header">
-          <h2>{mode === "edit" ? "編輯提醒" : "新增提醒"}</h2>
+          <h2>{mode === "edit" ? "編輯排程" : "新增排程"}</h2>
           <button type="button" onClick={onClose} className="btn-close">✕</button>
         </div>
         <form onSubmit={handleSubmit}>
@@ -3024,11 +3040,6 @@ function OverviewView({
               const isDone = locallyDoneTaskIds.has(task.id) || task.status === "completed";
               return (
                 <article key={task.id} className={`elder-task-card ${isDone ? "is-done" : ""} ${task.needsReview ? "needs-review" : ""}`}>
-                  {task.kind === "appointment" && (
-                    <button type="button" className="card-corner-edit" onClick={() => onEditAppointment(task.sourceId)} aria-label={`編輯 ${task.title}`}>
-                      編輯
-                    </button>
-                  )}
                   <div className="elder-task-time">
                     {!task.isToday && task.dateLabel && <span className="elder-task-date">{task.dateLabel}</span>}
                     {task.time}
@@ -3048,6 +3059,11 @@ function OverviewView({
                       問家人
                     </button>
                   </div>
+                  {task.kind === "appointment" && (
+                    <button type="button" className="elder-task-edit-action" onClick={() => onEditAppointment(task.sourceId)} aria-label={`編輯 ${task.title}`}>
+                      編輯
+                    </button>
+                  )}
                 </article>
               );
             })}
@@ -3057,7 +3073,7 @@ function OverviewView({
             <div className="empty-guide-actions">
               <button type="button" className="primary-action" onClick={onOpenCalendar}>查看未來行程</button>
               <button type="button" className="secondary-action" onClick={onUpload}>拍照上傳</button>
-              <button type="button" className="secondary-action" onClick={onAddReminder}>新增提醒</button>
+              <button type="button" className="secondary-action" onClick={onAddReminder}>新增排程</button>
             </div>
           </div>
         ) : (
@@ -3066,7 +3082,7 @@ function OverviewView({
             description="可以先拍一張看診單或藥袋，Care WEDO 會幫你整理成今天要做的事。"
             primaryLabel="拍照上傳"
             onPrimary={onUpload}
-            secondaryLabel="新增提醒"
+            secondaryLabel="新增排程"
             onSecondary={onAddReminder}
           />
         )}
@@ -3143,7 +3159,7 @@ function OverviewView({
           <p className="empty-state">Care WEDO 會整理成今日或未來照護提醒。</p>
           <div className="inline-action-row">
             <button type="button" className="inline-action" onClick={onUpload}>拍照上傳</button>
-            <button type="button" className="inline-action secondary-inline" onClick={onAddReminder}>新增提醒</button>
+            <button type="button" className="inline-action secondary-inline" onClick={onAddReminder}>新增排程</button>
           </div>
         </article>
       </section>
@@ -3225,14 +3241,11 @@ function CalendarView({ appointments, onUpload, onAddReminder, onEditAppointment
       <section className="event-list" aria-label="看診和領藥清單">
         <div className="inline-action-row event-list-actions">
           <button type="button" className="secondary-action" onClick={onUpload}>拍照上傳</button>
-          <button type="button" className="primary-action" onClick={onAddReminder}>新增提醒</button>
+          <button type="button" className="primary-action" onClick={onAddReminder}>新增排程</button>
         </div>
         {futureAppointments.length ? futureAppointments.map((apt) => (
           <article key={apt.id} id={`event-${apt.date}`} className="event-row">
             <div className="event-card-actions">
-              <button type="button" className="card-corner-edit" onClick={() => onEditAppointment(apt)} aria-label={`編輯 ${apt.title || apt.department || "提醒"}`}>
-                編輯
-              </button>
               <button type="button" className="card-corner-calendar" onClick={() => onAddToCalendar?.(apt)} aria-label={`加入 ${apt.title || apt.department || "提醒"} 到行事曆`}>
                 加入行事曆
               </button>
@@ -3245,6 +3258,9 @@ function CalendarView({ appointments, onUpload, onAddReminder, onEditAppointment
               {apt.location && <p className="location-line">地點：{apt.location}</p>}
               {apt.notes && <p className="soft-note">{apt.notes}</p>}
             </div>
+            <button type="button" className="event-edit-action" onClick={() => onEditAppointment(apt)} aria-label={`編輯 ${apt.title || apt.department || "提醒"}`}>
+              編輯
+            </button>
           </article>
         )) : (
           <EmptyGuide
@@ -3252,7 +3268,7 @@ function CalendarView({ appointments, onUpload, onAddReminder, onEditAppointment
             description="你可以從看診單照片開始，或手動新增下一次回診日期。建立後，家人也能一起同步查看。"
             primaryLabel="上傳看診單"
             onPrimary={onUpload}
-            secondaryLabel="新增看診提醒"
+            secondaryLabel="新增排程"
             onSecondary={onAddReminder}
           />
         )}

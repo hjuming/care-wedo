@@ -202,6 +202,23 @@ test("Care reminder detail text is highlighted on cards", () => {
   assert.match(css, /box-decoration-break:\s*clone/);
 });
 
+test("Today task edit action is tucked into the lower-right corner", () => {
+  const app = readProjectFile("care-wedo-app/src/App.jsx");
+  const css = readProjectFile("care-wedo-app/src/index.css");
+  const overviewView = app.slice(app.indexOf("function OverviewView"), app.indexOf("function CalendarView"));
+  const todayTaskCard = overviewView.slice(
+    overviewView.indexOf('<article key={task.id}'),
+    overviewView.indexOf("</article>"),
+  );
+  const editRule = css.slice(css.indexOf(".elder-task-edit-action"), css.indexOf(".elder-task-time"));
+
+  assert.match(todayTaskCard, /elder-task-actions[\s\S]*elder-task-edit-action/);
+  assert.match(editRule, /grid-column:\s*1 \/ -1/);
+  assert.match(editRule, /justify-self:\s*end/);
+  assert.doesNotMatch(editRule, /position:\s*absolute/);
+  assert.doesNotMatch(todayTaskCard, /card-corner-edit/);
+});
+
 test("Records page defaults to future arrangements and loads history on demand", () => {
   const app = readProjectFile("care-wedo-app/src/App.jsx");
   const css = readProjectFile("care-wedo-app/src/index.css");
@@ -399,8 +416,14 @@ test("Future appointment cards expose a calendar file export action", () => {
   const source = readProjectFile("care-wedo-app/src/App.jsx");
   const calendarView = source.slice(source.indexOf("function CalendarView"), source.indexOf("const MEDICATION_SLOT_OPTIONS"));
   assert.match(source, /downloadAppointmentCalendarFile/);
+  assert.match(source, /downloadLocalAppointmentCalendarFile/);
   assert.match(calendarView, /onAddToCalendar/);
   assert.match(calendarView, />\s*加入行事曆\s*</);
+  assert.match(calendarView, /event-card-actions[\s\S]*card-corner-calendar/);
+  assert.doesNotMatch(calendarView.slice(calendarView.indexOf('<div className="event-card-actions"'), calendarView.indexOf('<div className="event-type">')), /card-corner-edit/);
+  assert.match(calendarView, /event-type[\s\S]*event-edit-action/);
+  assert.match(calendarView, />\s*新增排程\s*</);
+  assert.doesNotMatch(calendarView, />\s*新增提醒\s*</);
 });
 
 test("LINE postback reassignment validates source user access before updating records", () => {

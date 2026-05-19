@@ -101,13 +101,13 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     }
 
     if (!rows?.[0]) {
-      return Response.json({ error: "新增提醒失敗" }, { status: 500 });
+      return Response.json({ error: "新增排程失敗" }, { status: 500 });
     }
 
     return Response.json({ success: true, appointment: serializeAppointment(rows[0]) });
   } catch (error) {
     return Response.json(
-      { error: error instanceof Error ? error.message : "新增提醒失敗" },
+      { error: error instanceof Error ? error.message : "新增排程失敗" },
       { status: 500 },
     );
   }
