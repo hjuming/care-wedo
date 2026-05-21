@@ -184,7 +184,31 @@
       /* Hide loading state once React mounts */
       #root:not(:empty) + .app-loading-fallback { display: none; }
     </style>
-  </head>
+  
+  <!-- WEDO roll-up Google Tag Manager -->
+  <script>
+    (function(w,d,s,l,i){
+      w[l]=w[l]||[];
+      if (w.__WEDO_ROLLUP_GTM__) return;
+      w.__WEDO_ROLLUP_GTM__=true;
+      w[l].push({
+        event:'wedo_rollup_context',
+        rollup_property:'WEDOPR',
+        project_name:'Care WEDO',
+        project_host:w.location.hostname,
+        project_scope:'project',
+        page_path:w.location.pathname+w.location.search,
+        page_location:w.location.href
+      });
+      w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});
+      var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';
+      j.async=true;
+      j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;
+      f.parentNode.insertBefore(j,f);
+    })(window,document,'script','dataLayer','GTM-TNM3J7XS');
+  </script>
+  <!-- End WEDO roll-up Google Tag Manager -->
+</head>
   <body>
     <div id="root"></div>
     <noscript>

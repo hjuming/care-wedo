@@ -311,3 +311,10 @@ P2：
 - OCR 低信心欄位人工確認。
 
 詳見 [`DEVELOPMENT_PLAN.md`](./DEVELOPMENT_PLAN.md)。
+
+## Analytics / WEDO Roll-up Tracking
+
+- `care-wedo-app` 保留 Care WEDO 自有 GA4：`G-21LHKNX5C1`。
+- 另於 Vite 入口加裝 WEDO roll-up GTM：`GTM-TNM3J7XS`，用於 `*.wedopr.com` 集團級流量彙總。
+- 後續新增公開 HTML 入口時，請同步加入 `wedo_rollup_context`，並帶入 `project_name: 'Care WEDO'`。
+- 不要在本專案直接重複安裝 WEDO 主站 GA4 measurement `G-GX3PDLKCNC`；主站目的地由 GTM 容器管理。
