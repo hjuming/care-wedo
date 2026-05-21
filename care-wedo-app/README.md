@@ -20,6 +20,20 @@ React 19 + Vite 前端，搭配 Cloudflare Pages Functions 與 Supabase。
 - 方案區塊：界定 Free 與 Family Pro 規劃。
 - 回饋區塊：使用 EmailJS 收集試用意見。
 
+## SEO / 社交分享設定
+
+- 首頁與 SPA 子路徑共用同一組 OG / Twitter meta。
+- 社交分享圖：`/assets/images/og-care-wedo.jpg`。
+- 圖片規格：1200x630 JPEG，符合 Facebook / LINE / X 常見 large preview 比例。
+- `robots.txt` 明確允許 `facebookexternalhit`、`Facebot`、`meta-externalagent`、`Twitterbot`、`LinkedInBot`、`Slackbot-LinkExpanding`、`WhatsApp`、`TelegramBot`。
+- `_headers` 對分享圖設定 `X-Robots-Tag: all`，避免 crawler 誤判圖片不可索引。
+
+### 2026-05-17 Facebook Debugger 修復紀錄
+
+- 原症狀：Facebook Sharing Debugger 對首頁與 `/terms` 抓取回 403，提示可能被 `robots.txt` 擋住，預覽圖片無法顯示。
+- 修復：OG/Twitter image 從 PNG 改為 1200x630 JPG，新增 Meta crawler allow 規則，分享圖加 `X-Robots-Tag: all`。
+- 驗證：`npm test` 97/97 passed、`npm run build` 成功、Cloudflare Pages 已部署，Facebook Debugger 重新抓取後回應碼 200 並正常顯示圖片。
+
 ## EmailJS 回饋表單
 
 需要以下 Vite 環境變數：

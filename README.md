@@ -1,6 +1,6 @@
 # Care WEDO 醫療照護小管家
 
-> **當前版本：V1.0 Beta（2026-05-15）**
+> **當前版本：V1.0 Beta（2026-05-17）**
 > **正式站**：https://care.wedopr.com
 > **狀態**：LINE 實機流程已進入測試期；測試期間一般測試帳號開放 Family Pro 權限。
 
@@ -145,7 +145,35 @@ https://care.wedopr.com
 - 測試期間一般測試帳號開放 Family Pro 權限。
 - 新增意見回饋區塊，透過 EmailJS 收集使用者建議。
 - 社交分享、SEO、AIO/GEO 基礎已補齊：OG/Twitter meta、JSON-LD、FAQPage、`robots.txt`、`sitemap.xml`、`llms.txt`。
-- 所有路徑先共用 `/assets/images/og-care-wedo.png` 作為社交分享圖片。
+- 所有路徑共用 `/assets/images/og-care-wedo.jpg` 作為社交分享圖片；圖片為 1200x630 JPEG，符合 Facebook / LINE / X 常見 large preview 規格。
+- 2026-05-17 已修復 Facebook Debugger 抓取 403 與預覽圖不顯示問題：`robots.txt` 明確允許 `facebookexternalhit`、`Facebot`、`meta-externalagent`，OG/Twitter meta 改指向 JPG，並對分享圖加上 `X-Robots-Tag: all`。
+
+### 8. 社交分享修復紀錄（2026-05-17）
+
+**症狀**
+
+- Facebook Sharing Debugger 抓取 `https://care.wedopr.com/` 與 `/terms` 回應 403。
+- Debugger 顯示可能被 `robots.txt` 擋住，連結預覽只顯示網域與標題，沒有圖片。
+
+**修復內容**
+
+- 新增標準尺寸分享圖：`care-wedo-app/public/assets/images/og-care-wedo.jpg`（1200x630 JPEG）。
+- `care-wedo-app/index.html` 的 `og:image`、`og:image:secure_url`、`twitter:image` 改指向 JPG。
+- `care-wedo-app/public/robots.txt` 增加 `meta-externalagent` / `Meta-ExternalAgent` allow 規則。
+- `care-wedo-app/public/_headers` 對 JPG 分享圖設定 `X-Robots-Tag: all`。
+- `care-wedo-app/src/seo-aio-regression.test.js` 加入回歸測試，鎖定 JPG、尺寸與 crawler allow 規則。
+
+**部署與驗證**
+
+- 測試：`npm test` 97/97 passed。
+- 建置：`npm run build` 成功。
+- 部署：`npx wrangler@4 pages deploy care-wedo-app/dist --project-name=care-wedo --branch=main`。
+- 線上驗證：Facebook Debugger 回應碼 200，連結預覽圖片正常顯示。
+
+**Cloudflare 注意事項**
+
+- Cloudflare Managed robots.txt 可能會在正式站 `robots.txt` 前置插入 AI crawler 規則；若日後再次出現 Meta / Facebook crawler 被擋，請檢查 Cloudflare Dashboard 的 `Security > Bots > Instruct AI bot traffic with robots.txt`。
+- 目前程式層已明確允許社交預覽 crawler，若要修改 Cloudflare Bot Management，需要具備 Bot Management Write 權限的 Cloudflare API token。
 
 ---
 
@@ -250,6 +278,7 @@ npm run build
 ```bash
 cd /Users/hjuming/網站專案/care-wedo
 set -a; source .env; set +a
+npm --prefix care-wedo-app run build
 npx wrangler pages deploy care-wedo-app/dist --project-name=care-wedo --branch=main
 ```
 

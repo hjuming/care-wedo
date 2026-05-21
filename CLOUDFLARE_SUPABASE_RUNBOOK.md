@@ -1,7 +1,7 @@
 # Care WEDO — Cloudflare + Supabase 部署 Runbook
 
 > **版本**：V1.0 Beta Candidate  
-> **最後更新**：2026-05-13  
+> **最後更新**：2026-05-17
 > **部署方式**：GitHub Actions + wrangler v4（Cloudflare 原生 CI 已停用，見下方說明）
 
 ---
@@ -200,6 +200,45 @@ Authentication error [code: 10000]
 
 ---
 
+### 問題 5：Facebook / Meta 社交預覽圖無法顯示
+
+**日期**：2026-05-17
+
+**症狀**：
+
+- Facebook Sharing Debugger 抓取 `https://care.wedopr.com/` 與 `https://care.wedopr.com/terms` 回應 403。
+- Debugger 提示可能被 `robots.txt` 擋住，連結預覽沒有圖片。
+
+**根本原因**：
+
+- Cloudflare Managed robots.txt 會在正式站 `robots.txt` 前面插入 Managed content，其中包含 `User-agent: meta-externalagent` / `Disallow: /`。
+- 專案原本的社交分享圖為 PNG 且尺寸不是標準 1200x630；雖然可被直接讀取，但社交平台預覽穩定性較差。
+
+**程式層修復**：
+
+1. 新增 `care-wedo-app/public/assets/images/og-care-wedo.jpg`，規格為 1200x630 JPEG。
+2. `care-wedo-app/index.html` 將 `og:image`、`og:image:secure_url`、`twitter:image` 改為 JPG。
+3. `care-wedo-app/public/robots.txt` 明確允許 `meta-externalagent` 與 `Meta-ExternalAgent`。
+4. `care-wedo-app/public/_headers` 對 JPG 分享圖設定 `X-Robots-Tag: all`。
+5. `care-wedo-app/src/seo-aio-regression.test.js` 加入回歸測試，避免日後退回 PNG 或漏掉 crawler 規則。
+
+**驗證結果**：
+
+- `npm test`：97/97 passed。
+- `npm run build`：成功。
+- Cloudflare Pages deploy：成功，deployment URL 為 `https://4ea17039.care-wedo.pages.dev`。
+- `curl -A 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)' https://care.wedopr.com/assets/images/og-care-wedo.jpg -I` 回 `200 image/jpeg`。
+- Facebook Sharing Debugger 重新抓取後回應碼 200，預覽圖片正常顯示。
+
+**Cloudflare Dashboard 後續檢查**：
+
+- 若未來再次出現 Facebook Debugger 403，先檢查 Cloudflare Dashboard：
+  - `Security > Bots > Instruct AI bot traffic with robots.txt`
+  - 若此功能開啟，Cloudflare 仍可能前置插入 `meta-externalagent Disallow: /`。
+- 若要透過 API 修改，需要 Cloudflare API token 具備 Bot Management Write 權限；只具備 Pages deploy 權限的 token 無法讀寫 `/zones/{zone_id}/bot_management`。
+
+---
+
 ## 上線驗收清單
 
 ### 前置設定
@@ -212,6 +251,8 @@ Authentication error [code: 10000]
 
 - [ ] `GET /api/health` 回應 `{"status":"ok"}`
 - [ ] 首頁 `https://care.wedopr.com/` 正常開啟（Landing Page）
+- [ ] Facebook Sharing Debugger 抓取首頁回應 200，且連結預覽顯示 `og-care-wedo.jpg`
+- [ ] `https://care.wedopr.com/assets/images/og-care-wedo.jpg` 回應 `200 image/jpeg`
 - [ ] `https://care.wedopr.com/app` 未登入時導向 `/login`
 - [ ] `https://care.wedopr.com/login` 頁面可正常顯示
 - [ ] `https://care.wedopr.com/privacy` 頁面可正常顯示

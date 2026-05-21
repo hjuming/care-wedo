@@ -11,17 +11,20 @@ function readProjectFile(path) {
 
 test("site has complete social sharing metadata with the shared Care WEDO image", () => {
   const html = readProjectFile("index.html");
-  const imagePath = resolve(root, "public/assets/images/og-care-wedo.png");
+  const imagePath = resolve(root, "public/assets/images/og-care-wedo.jpg");
 
   assert.equal(existsSync(imagePath), true);
   assert.match(html, /<link rel="canonical" href="https:\/\/care\.wedopr\.com\/" \/>/);
-  assert.match(html, /property="og:image" content="https:\/\/care\.wedopr\.com\/assets\/images\/og-care-wedo\.png"/);
+  assert.match(html, /property="og:image" content="https:\/\/care\.wedopr\.com\/assets\/images\/og-care-wedo\.jpg"/);
+  assert.match(html, /property="og:image:type" content="image\/jpeg"/);
+  assert.match(html, /property="og:image:width" content="1200"/);
+  assert.match(html, /property="og:image:height" content="630"/);
   assert.match(html, /property="og:title" content="Care WEDO｜陪你照顧最重要的人"/);
   assert.match(html, /property="og:description" content="從「一個人」升級到「一家人」。長輩用 LINE 傳照片，系統整理看診、用藥與提醒，家人同步掌握。"/);
   assert.match(html, /name="twitter:card" content="summary_large_image"/);
   assert.match(html, /name="twitter:title" content="Care WEDO｜陪你照顧最重要的人"/);
   assert.match(html, /name="twitter:description" content="從「一個人」升級到「一家人」。長輩用 LINE 傳照片，系統整理看診、用藥與提醒，家人同步掌握。"/);
-  assert.match(html, /name="twitter:image" content="https:\/\/care\.wedopr\.com\/assets\/images\/og-care-wedo\.png"/);
+  assert.match(html, /name="twitter:image" content="https:\/\/care\.wedopr\.com\/assets\/images\/og-care-wedo\.jpg"/);
   assert.match(html, /name="description" content="Care WEDO 陪你照顧最重要的人。從「一個人」升級到「一家人」/);
   assert.match(html, /max-image-preview:large/);
 });
@@ -52,6 +55,7 @@ test("robots, sitemap, and llms files expose crawl and answer-layer context", ()
 
   assert.match(robots, /User-agent: facebookexternalhit\nAllow: \//);
   assert.match(robots, /User-agent: Facebot\nAllow: \//);
+  assert.match(robots, /User-agent: meta-externalagent\nAllow: \//);
   assert.match(robots, /User-agent: Twitterbot\nAllow: \//);
   assert.match(robots, /User-agent: LinkedInBot\nAllow: \//);
   assert.match(robots, /Sitemap: https:\/\/care\.wedopr\.com\/sitemap\.xml/);
@@ -61,6 +65,7 @@ test("robots, sitemap, and llms files expose crawl and answer-layer context", ()
   assert.match(llms, /Care WEDO 是給長輩與家人的 LINE 醫療照護小管家/);
   assert.match(llms, /Family Pro/);
   assert.match(headers, /\/assets\/\*\n\s+Cache-Control: public, max-age=31536000, immutable/);
+  assert.match(headers, /\/assets\/images\/og-care-wedo\.jpg\n\s+Cache-Control: public, max-age=31536000, immutable\n\s+X-Robots-Tag: all/);
   assert.match(headers, /\/robots\.txt\n\s+Cache-Control: public, max-age=300, must-revalidate/);
   assert.match(headers, /\/features\n\s+Cache-Control: no-store/);
   assert.doesNotMatch(headers, /\/\*\n\s+Cache-Control: no-store/);
