@@ -152,6 +152,38 @@ test("Medication view groups medicines by time and keeps one calm taken action",
   assert.doesNotMatch(medicationView, /尚未記錄/);
 });
 
+test("Medication view exposes an A4-friendly doctor summary", () => {
+  const source = readProjectFile("care-wedo-app/src/App.jsx");
+  const css = readProjectFile("care-wedo-app/src/index.css");
+  const medicationArea = source.slice(source.indexOf("function MedicationSummarySheet"), source.indexOf("function appointmentTimeValue"));
+
+  assert.match(medicationArea, /給醫生看/);
+  assert.match(medicationArea, /用藥總表/);
+  assert.match(medicationArea, /藥品全名/);
+  assert.match(medicationArea, /用途/);
+  assert.match(medicationArea, /劑量/);
+  assert.match(medicationArea, /服用時間/);
+  assert.match(medicationArea, /medicationSummarySource/);
+  assert.match(css, /\.medicine-summary-sheet/);
+  assert.match(css, /@media print/);
+});
+
+test("Version A pricing is visible without wiring live payments", () => {
+  const app = readProjectFile("care-wedo-app/src/App.jsx");
+  const css = readProjectFile("care-wedo-app/src/index.css");
+
+  assert.match(app, /baseCircleMonthly:\s*30/);
+  assert.match(app, /extraCollaboratorMonthly:\s*10/);
+  assert.match(app, /extraRecipientMonthly:\s*30/);
+  assert.match(app, /estimateCareCirclePrice/);
+  assert.match(app, /本月費用預估/);
+  assert.match(app, /照護圈升級 \$30\/月/);
+  assert.match(app, /Care@wedopr\.com/);
+  assert.doesNotMatch(app, /checkout|paymentIntent|信用卡付款/);
+  assert.match(css, /\.billing-estimate-panel/);
+  assert.match(css, /\.pricing-example-band/);
+});
+
 test("Ask family opens an editable branded copy modal instead of a browser prompt", () => {
   const source = readProjectFile("care-wedo-app/src/App.jsx");
   const css = readProjectFile("care-wedo-app/src/index.css");

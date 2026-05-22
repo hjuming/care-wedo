@@ -12,7 +12,7 @@ function readProjectFile(path) {
 test("landing page copy matches elder-friendly beta positioning", () => {
   const app = readProjectFile("care-wedo-app/src/App.jsx");
 
-  assert.match(app, /測試期間開放 Family Pro/);
+  assert.match(app, /系統測試期間，所有帳號開放 Family Pro 體驗/);
   assert.match(app, /陪你照顧/);
   assert.match(app, /第一次使用 Care WEDO/);
   assert.match(app, /先綁定 LINE/);
@@ -21,7 +21,7 @@ test("landing page copy matches elder-friendly beta positioning", () => {
   assert.match(app, /兩分鐘完成綁定/);
   assert.match(app, /不會操作就問小管家/);
   assert.match(app, /資料完整保存，LINE 只講重點/);
-  assert.match(app, /Free \/ Family Pro/);
+  assert.match(app, /Free \/ 照護圈升級/);
   assert.match(app, /plan-name-trigger/);
   assert.match(app, /side-footer-action/);
   assert.match(app, /href="https:\/\/care\.wedopr\.com\/"/);
@@ -29,27 +29,27 @@ test("landing page copy matches elder-friendly beta positioning", () => {
   assert.doesNotMatch(app, /查看方案規劃/);
   assert.match(app, /10 筆\/月/);
   assert.match(app, /100 筆\/月/);
-  assert.match(app, /家庭群組/);
-  assert.match(app, /8 位/);
-  assert.match(app, /4 位/);
+  assert.match(app, /照護圈升級/);
+  assert.match(app, /\+\$10\/人\/月/);
+  assert.match(app, /\+\$30\/人\/月/);
   assert.match(app, /完整歷史紀錄與健康時間線/);
   assert.match(app, /PLAN_TIERS/);
-  assert.match(app, /Family Pro/);
-  assert.match(app, /功能規劃/);
-  assert.match(app, /超級版/);
+  assert.match(app, /版本 A 收費方式/);
+  assert.match(app, /Care Circle/);
+  assert.match(app, /Care@wedopr\.com/);
   assert.match(app, /推薦方案/);
-  assert.match(app, /家人協作/);
-  assert.match(app, /10筆\/月/);
-  assert.match(app, /系統測試期間，所有帳號開放 Family Pro 體驗，一起守護家人健康/);
-  assert.match(app, /家庭群組協作/);
-  assert.match(app, /家庭成員數量/);
-  assert.match(app, /家人共同協作/);
+  assert.match(app, /一起照護的人/);
+  assert.match(app, /資料怎麼保存/);
+  assert.match(app, /系統測試期間，所有帳號開放 Family Pro 體驗/);
+  assert.match(app, /照護圈協作/);
   assert.match(app, /PlanDetailsModal/);
   assert.doesNotMatch(app, /目前規劃/);
   assert.doesNotMatch(app, /圖片解析 \/ 月/);
   assert.doesNotMatch(app, /家人帳號/);
   assert.doesNotMatch(app, /家庭專業/);
   assert.doesNotMatch(app, /無限版本/);
+  assert.doesNotMatch(app, /Family Basic/);
+  assert.doesNotMatch(app, /Family Plus/);
   assert.doesNotMatch(app, /Care Team/);
   assert.match(app, /回饋意見/);
   assert.match(app, /sendFeedbackEmail/);
