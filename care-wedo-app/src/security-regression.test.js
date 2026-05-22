@@ -178,10 +178,31 @@ test("Version A pricing is visible without wiring live payments", () => {
   assert.match(app, /estimateCareCirclePrice/);
   assert.match(app, /本月費用預估/);
   assert.match(app, /照護圈升級 \$30\/月/);
+  assert.match(app, /每位照護對象 100 筆\/月/);
+  assert.match(app, /保留最近 30 天/);
+  assert.match(app, /LINE Pay/);
   assert.match(app, /Care@wedopr\.com/);
   assert.doesNotMatch(app, /checkout|paymentIntent|信用卡付款/);
   assert.match(css, /\.billing-estimate-panel/);
   assert.match(css, /\.pricing-example-band/);
+});
+
+test("OCR quota limit opens a plan upgrade prompt instead of a raw error", () => {
+  const app = readProjectFile("care-wedo-app/src/App.jsx");
+  const css = readProjectFile("care-wedo-app/src/index.css");
+
+  assert.match(app, /function isQuotaLimitMessage/);
+  assert.match(app, /quotaUpgradePrompt/);
+  assert.match(app, /本月免費整理額度已用完/);
+  assert.match(app, /showQuotaUpgradePrompt\(message, "image_upload"\)/);
+  assert.match(app, /showQuotaUpgradePrompt\(message, "text_upload"\)/);
+  assert.match(app, /查看方案/);
+  assert.match(app, /先不要保存/);
+  assert.match(app, /聯絡客服/);
+  assert.match(app, /Care@wedopr\.com/);
+  assert.match(css, /\.quota-upgrade-modal/);
+  assert.match(css, /\.quota-upgrade-options/);
+  assert.match(css, /\.quota-upgrade-actions/);
 });
 
 test("Ask family opens an editable branded copy modal instead of a browser prompt", () => {

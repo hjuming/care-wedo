@@ -262,6 +262,10 @@ const CARE_WEDO_PRICING = {
   paidMonthlyOcrLimit: 100,
 };
 
+function isQuotaLimitMessage(message = "") {
+  return /本月.*(免費|AI).*?(次數|整理).*?用完|整理額度已用完|超過使用次數限制|升級(家庭|付費)方案|quota/i.test(String(message || ""));
+}
+
 function setAvatarName(avatarUrl, name) {
   if (!avatarUrl) return "";
   const cleanName = encodeURIComponent((name || "照護對象頭像").trim().slice(0, 80));
@@ -406,21 +410,21 @@ const LANDING_PAGE_ENTRIES = [
 const FREE_FEATURES = [
   ["LINE 照護小管家", true, true],
   ["上傳前選擇照護對象", true, true],
-  ["看診單、藥袋、預約單 AI 解析", "10 筆/月", "100 筆/月"],
+  ["看診單、藥袋、預約單 AI 解析", "10 筆/月", "每位照護對象 100 筆/月"],
   ["長輩友善短提醒", true, true],
   ["給醫生看的用藥總表", true, true],
-  ["吃藥提醒與資料保存", "未來提醒", "完整保存"],
+  ["吃藥提醒與資料保存", "保留最近 30 天；不開放歷史查詢", "完整保存與查詢"],
   ["照護圈協作", false, "可邀請家人"],
   ["照護對象", "1 位", "可加購"],
   ["一起照護的人", "不含協作者", "可加購"],
   ["今日照護與未來行程", true, true],
-  ["完整歷史紀錄與健康時間線", false, "完整保存"],
+  ["完整歷史紀錄與健康時間線", false, "完整保存與查詢"],
   ["正式版月費訂閱", "$0", "$30 起"],
 ];
 
 const PLAN_TIERS = [
-  { name: "Free", label: "免費版", price: "$0/月", copy: "1 位照護對象、每月 10 筆 AI 整理、可看未來提醒。", featured: false },
-  { name: "Care Circle", label: "照護圈升級", price: "$30/月", copy: "完整歷史紀錄、100 筆/月 AI 整理，可邀請 1 位家人一起照護。", featured: true },
+  { name: "Free", label: "免費版", price: "$0/月", copy: "1 位照護對象、每月 10 筆 AI 整理，可看未來提醒；最近 30 天資料會保存但不開放歷史查詢。", featured: false },
+  { name: "Care Circle", label: "照護圈升級", price: "$30/月", copy: "完整歷史紀錄、每位照護對象 100 筆/月 AI 整理，可邀請 1 位家人一起照護。", featured: true },
   { name: "Helper", label: "增加一起照護的人", price: "+$10/人/月", copy: "可協助上傳、編輯、查看照護資料；不可變更付款與成員權限。" },
   { name: "Care Recipient", label: "增加照護對象", price: "+$30/人/月", copy: "每增加一位爸爸、媽媽、自己或其他照護對象，加收資料保存費。" },
 ];
@@ -440,7 +444,7 @@ const LANDING_FAQS = [
   },
   {
     question: "Free 和 Family Pro 差在哪裡？",
-    answer: "測試期間一般測試帳號開放 Family Pro。正式版會保留 Free 體驗；Family Pro 提供較高解析額度、家庭協作、多位照護對象與完整保存。",
+    answer: "測試期間一般測試帳號開放 Family Pro。正式版會保留 Free 體驗；Free 可保存最近 30 天資料但不開放歷史查詢，照護圈升級提供每位照護對象 100 筆/月整理額度、家庭協作、多位照護對象與完整保存。",
   },
   {
     question: "長輩一定要會用系統嗎？",
@@ -531,9 +535,54 @@ function PlanDetailsModal({ onClose }) {
           <PlanTierTable />
           <div className="pricing-note-card">
             <strong>版本 A 收費方向</strong>
-            <p>免費可以先照顧 1 位家人。正式收費後，需要完整歷史紀錄或邀請家人一起照護時，照護圈升級每月 $30 起。</p>
+            <p>免費可以先照顧 1 位家人，最近 30 天資料會保存但不開放歷史查詢。正式收費後，需要完整歷史紀錄或邀請家人一起照護時，照護圈升級每月 $30 起。</p>
           </div>
           <p className="helper-copy">系統測試期間，所有帳號開放 Family Pro 體驗，正式收費前會再次公告。付款與資料問題可聯絡 <a href={`mailto:${CARE_WEDO_SUPPORT_EMAIL}`}>{CARE_WEDO_SUPPORT_EMAIL}</a>。</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function QuotaUpgradeModal({ onClose, onViewPlans }) {
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content quota-upgrade-modal" role="dialog" aria-modal="true" aria-labelledby="quota-upgrade-title" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-header">
+          <div>
+            <p className="modal-kicker">整理額度</p>
+            <h2 id="quota-upgrade-title">本月免費整理額度已用完</h2>
+          </div>
+          <button type="button" className="btn-close" onClick={onClose} aria-label="關閉">×</button>
+        </div>
+        <div className="modal-body">
+          <div className="quota-upgrade-hero">
+            <strong>升級照護圈後可以繼續保存新資料，並查看完整歷史紀錄。</strong>
+            <p>測試期間尚未正式收費，正式收費前會再次通知。也可以下個月再繼續使用免費整理額度。</p>
+          </div>
+          <div className="quota-upgrade-options" aria-label="版本 A 收費方式">
+            <article>
+              <span>照護圈升級</span>
+              <strong>$30/月</strong>
+              <p>包含 1 位一起照護的人。</p>
+            </article>
+            <article>
+              <span>整理額度</span>
+              <strong>100 筆/月</strong>
+              <p>每位照護對象各自計算。</p>
+            </article>
+            <article>
+              <span>增加照護對象</span>
+              <strong>+$30/人/月</strong>
+              <p>每多照顧一位家人加一份保存空間。</p>
+            </article>
+          </div>
+          <p className="helper-copy">Free 會保留最近 30 天資料，但歷史查詢與完整保存是付費功能。付款方式將優先支援 LINE Pay，其次評估藍新、綠界與 Stripe。</p>
+          <div className="quota-upgrade-actions">
+            <button type="button" className="primary-action" onClick={onViewPlans}>查看方案</button>
+            <button type="button" className="secondary-action" onClick={onClose}>先不要保存</button>
+            <a className="inline-action" href={`mailto:${CARE_WEDO_SUPPORT_EMAIL}`}>聯絡客服</a>
+          </div>
         </div>
       </div>
     </div>
@@ -554,7 +603,7 @@ function estimateCareCirclePrice({ careProfiles = [], collaborators = [] } = {})
       extraCollaborators: 0,
       extraRecipients: 0,
       label: "目前可用 Free",
-      note: "需要完整歷史紀錄或邀請家人一起照護時，可升級照護圈。",
+      note: "Free 會保留最近 30 天資料但不開放歷史查詢；需要完整歷史紀錄或邀請家人一起照護時，可升級照護圈。",
     };
   }
 
@@ -831,18 +880,18 @@ function LandingPage({ variant = "home" }) {
 
       <section className="landing-section plan-section" id="plans">
         <div className="section-kicker">Free / 照護圈升級</div>
-        <h2>先免費使用，需要完整保存再升級。</h2>
+        <h2>先免費使用，需要查歷史再升級。</h2>
         <div className="plan-cards">
           <article className="plan-card">
             <span>Free</span>
             <h3>$0/月</h3>
-            <p>適合先試用。可照顧 1 位家人，每月 10 筆 AI 整理，查看接下來的提醒。</p>
+            <p>適合先試用。可照顧 1 位家人，每月 10 筆 AI 整理，查看接下來的提醒；最近 30 天資料會保存但不開放歷史查詢。</p>
             <a href="https://lin.ee/xzbyyvf" target="_blank" rel="noopener noreferrer">LINE 照護小管家</a>
           </article>
           <article className="plan-card featured-plan">
             <button type="button" className="plan-name-trigger" onClick={() => setShowPlanDetails(true)}>版本 A 收費方式</button>
             <h3>照護圈升級 $30/月</h3>
-            <p>適合長期照顧父母、長輩或慢性病家人。完整保存歷史紀錄，可邀請家人一起照護。</p>
+            <p>適合長期照顧父母、長輩或慢性病家人。完整保存歷史紀錄，每位照護對象 100 筆/月整理額度，可邀請 1 位家人一起照護。</p>
             <LineLoginAction loggingIn={loggingIn} label="建立家庭協作" onLogin={handleLineLogin} />
           </article>
         </div>
@@ -860,7 +909,7 @@ function LandingPage({ variant = "home" }) {
           <article>
             <span>客服與資料問題</span>
             <strong>{CARE_WEDO_SUPPORT_EMAIL}</strong>
-            <p>正式收費前會清楚公告；測試期間仍開放 Family Pro 體驗。</p>
+            <p>付款方式將優先支援 LINE Pay；正式收費前會清楚公告。</p>
           </article>
         </div>
         <p className="plan-beta-note">系統測試期間，所有帳號開放 Family Pro 體驗；正式收費前會再次通知。</p>
@@ -884,7 +933,7 @@ function LandingPage({ variant = "home" }) {
           <div>
             <p className="panel-eyebrow">資料怎麼保存</p>
             <h3>我們保存整理後的重要文字資料。</h3>
-            <p>Care WEDO 使用雲端資料庫保存照護資料，並規劃定期備份。若資料有問題、需要匯出或刪除，可聯絡客服信箱。</p>
+            <p>Care WEDO 使用雲端資料庫保存照護資料，並規劃定期備份。Free 會保留最近 30 天資料，但歷史查詢與完整保存是付費功能；若資料有問題、需要匯出或刪除，可聯絡客服信箱。</p>
           </div>
           <a href={`mailto:${CARE_WEDO_SUPPORT_EMAIL}`}>{CARE_WEDO_SUPPORT_EMAIL}</a>
         </div>
@@ -1129,6 +1178,7 @@ function DashboardApp() {
   const [scanning, setScanning] = useState(false);
   const [ocrData, setOcrData] = useState(null);
   const [ocrError, setOcrError] = useState(null);
+  const [quotaUpgradePrompt, setQuotaUpgradePrompt] = useState(null);
   const [showUploadGuide, setShowUploadGuide] = useState(false);
   const [scanStep, setScanStep] = useState(null);
   const [dashboard, setDashboard] = useState(null);
@@ -1493,10 +1543,17 @@ function DashboardApp() {
     }
   }
 
+  function showQuotaUpgradePrompt(message, source) {
+    setOcrError(null);
+    setQuotaUpgradePrompt({ message: message || "本月免費整理額度已用完", source });
+    trackEvent("frontend.quota_upgrade_prompt", { source });
+  }
+
   async function handleFilesSelected(files) {
     setScanning(true);
     setOcrError(null);
     setOcrData(null);
+    setQuotaUpgradePrompt(null);
 
     try {
       const result = await ocrAnalyze(files, {
@@ -1507,14 +1564,24 @@ function DashboardApp() {
         setOcrData({ data: result.data, saved: result.saved });
         await loadDashboard(identity, activeProfileId, activeGroupId);
       } else {
-        setOcrError(result.error || "解析失敗");
+        const message = result.error || "解析失敗";
+        if (isQuotaLimitMessage(message)) {
+          showQuotaUpgradePrompt(message, "image_upload");
+        } else {
+          setOcrError(message);
+        }
       }
     } catch (err) {
       trackError("frontend.ocr", err, {
         fileCount: files.length,
         profileId: activeProfileId,
       });
-      setOcrError(err.message);
+      const message = err instanceof Error ? err.message : String(err || "解析失敗");
+      if (isQuotaLimitMessage(message)) {
+        showQuotaUpgradePrompt(message, "image_upload");
+      } else {
+        setOcrError(message);
+      }
     } finally {
       setScanning(false);
     }
@@ -1531,6 +1598,7 @@ function DashboardApp() {
     setScanning(true);
     setOcrError(null);
     setOcrData(null);
+    setQuotaUpgradePrompt(null);
 
     try {
       const result = await ocrAnalyzeText(sourceText, {
@@ -1541,14 +1609,24 @@ function DashboardApp() {
         setOcrData({ data: result.data, saved: result.saved });
         await loadDashboard(identity, activeProfileId, activeGroupId);
       } else {
-        setOcrError(result.error || "解析失敗");
+        const message = result.error || "解析失敗";
+        if (isQuotaLimitMessage(message)) {
+          showQuotaUpgradePrompt(message, "text_upload");
+        } else {
+          setOcrError(message);
+        }
       }
     } catch (err) {
       trackError("frontend.ocr_text", err, {
         textLength: sourceText.length,
         profileId: activeProfileId,
       });
-      setOcrError(err.message);
+      const message = err instanceof Error ? err.message : String(err || "解析失敗");
+      if (isQuotaLimitMessage(message)) {
+        showQuotaUpgradePrompt(message, "text_upload");
+      } else {
+        setOcrError(message);
+      }
     } finally {
       setScanning(false);
     }
@@ -2082,6 +2160,16 @@ function DashboardApp() {
 
       {showPlanDetails && (
         <PlanDetailsModal onClose={() => setShowPlanDetails(false)} />
+      )}
+
+      {quotaUpgradePrompt && (
+        <QuotaUpgradeModal
+          onClose={() => setQuotaUpgradePrompt(null)}
+          onViewPlans={() => {
+            setQuotaUpgradePrompt(null);
+            setShowPlanDetails(true);
+          }}
+        />
       )}
 
       <MobileBottomNav
@@ -3956,7 +4044,7 @@ function SettingsView({
           <article>
             <span>照護圈升級</span>
             <strong>{priceEstimate.base ? `$${priceEstimate.base}` : "$0"}</strong>
-            <small>完整歷史紀錄與較高整理額度</small>
+            <small>完整歷史紀錄與每位照護對象 100 筆/月整理額度</small>
           </article>
           <article>
             <span>增加一起照護的人</span>

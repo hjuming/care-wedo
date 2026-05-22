@@ -29,6 +29,10 @@ test("landing page copy matches elder-friendly beta positioning", () => {
   assert.doesNotMatch(app, /查看方案規劃/);
   assert.match(app, /10 筆\/月/);
   assert.match(app, /100 筆\/月/);
+  assert.match(app, /每位照護對象 100 筆\/月/);
+  assert.match(app, /保留最近 30 天/);
+  assert.match(app, /不開放歷史查詢/);
+  assert.match(app, /LINE Pay/);
   assert.match(app, /照護圈升級/);
   assert.match(app, /\+\$10\/人\/月/);
   assert.match(app, /\+\$30\/人\/月/);
