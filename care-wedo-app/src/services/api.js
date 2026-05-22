@@ -202,6 +202,38 @@ export function buildLocalAppointmentCalendarFile(appointment, { profileName = "
   return buildIcs(lines);
 }
 
+export function buildGoogleCalendarEventUrl(appointment, { profileName = "" } = {}) {
+  const url = new URL("https://calendar.google.com/calendar/render");
+  url.searchParams.set("action", "TEMPLATE");
+  url.searchParams.set("text", buildAppointmentSummary(appointment, profileName));
+
+  const dateParts = parseDateParts(appointment?.date);
+  if (dateParts) {
+    const timeParts = parseTimeParts(appointment?.time);
+    if (timeParts) {
+      const start = new Date(Date.UTC(
+        dateParts.year,
+        dateParts.month - 1,
+        dateParts.day,
+        timeParts.hour - TAIPEI_OFFSET_HOURS,
+        timeParts.minute,
+      ));
+      const end = new Date(start.getTime() + 60 * 60 * 1000);
+      url.searchParams.set("dates", `${formatUtcIcsDateTime(start)}/${formatUtcIcsDateTime(end)}`);
+    } else {
+      url.searchParams.set("dates", `${formatIcsDate(dateParts)}/${formatIcsDate(nextCalendarDate(dateParts))}`);
+    }
+  }
+
+  const details = buildAppointmentDescription(appointment);
+  if (details) url.searchParams.set("details", details);
+
+  const location = appointment?.location || appointment?.hospital || "";
+  if (location) url.searchParams.set("location", location);
+
+  return url.toString();
+}
+
 export function isAuthFailureMessage(message = "") {
   return /請先登入|登入失敗|unauthorized|auth_required|id[ _-]?token|token|oauth|line/i.test(String(message || ""));
 }

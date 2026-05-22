@@ -219,6 +219,20 @@ test("Today task edit action is tucked into the lower-right corner", () => {
   assert.doesNotMatch(todayTaskCard, /card-corner-edit/);
 });
 
+test("Logged-in dashboard exposes a clear care context header", () => {
+  const app = readProjectFile("care-wedo-app/src/App.jsx");
+  const css = readProjectFile("care-wedo-app/src/index.css");
+
+  assert.match(app, /<CareContextHeader/);
+  assert.match(app, /function CareContextHeader/);
+  assert.match(app, /正在照護/);
+  assert.match(app, /照護圈/);
+  assert.match(app, /一起照護的人/);
+  assert.match(app, /登入者/);
+  assert.match(css, /\.care-context-header/);
+  assert.match(css, /\.today-main-actions/);
+});
+
 test("Records page defaults to future arrangements and loads history on demand", () => {
   const app = readProjectFile("care-wedo-app/src/App.jsx");
   const css = readProjectFile("care-wedo-app/src/index.css");
@@ -417,8 +431,12 @@ test("Future appointment cards expose a calendar file export action", () => {
   const calendarView = source.slice(source.indexOf("function CalendarView"), source.indexOf("const MEDICATION_SLOT_OPTIONS"));
   assert.match(source, /downloadAppointmentCalendarFile/);
   assert.match(source, /downloadLocalAppointmentCalendarFile/);
+  assert.match(source, /buildGoogleCalendarEventUrl/);
   assert.match(calendarView, /onAddToCalendar/);
   assert.match(calendarView, />\s*加入行事曆\s*</);
+  assert.match(calendarView, />\s*加入 Google 行事曆\s*</);
+  assert.match(calendarView, />\s*Apple \/ 手機行事曆\s*</);
+  assert.match(calendarView, />\s*複製提醒文字\s*</);
   assert.match(calendarView, /event-card-actions[\s\S]*card-corner-calendar/);
   assert.doesNotMatch(calendarView.slice(calendarView.indexOf('<div className="event-card-actions"'), calendarView.indexOf('<div className="event-type">')), /card-corner-edit/);
   assert.match(calendarView, /event-type[\s\S]*event-edit-action/);

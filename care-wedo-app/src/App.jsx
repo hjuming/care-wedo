@@ -6,7 +6,7 @@ import LoginSetup from "./components/LoginSetup";
 import MobileBottomNav from "./components/MobileBottomNav";
 import OcrResult from "./components/OcrResult";
 import { patientData, medicines, timeline as initialTimeline } from "./data/patient";
-import { confirmOcrDocument, createAppointment, downloadAppointmentCalendarFile, downloadLocalAppointmentCalendarFile, fetchDashboard, joinGroup, markMedicationSlotStatus, ocrAnalyze, ocrAnalyzeText, patchAppointment, patchMedication, updateActiveProfilePreference, updateFamilyNotes, updateProfile, updateProfileOrder } from "./services/api";
+import { buildGoogleCalendarEventUrl, confirmOcrDocument, createAppointment, downloadAppointmentCalendarFile, downloadLocalAppointmentCalendarFile, fetchDashboard, joinGroup, markMedicationSlotStatus, ocrAnalyze, ocrAnalyzeText, patchAppointment, patchMedication, updateActiveProfilePreference, updateFamilyNotes, updateProfile, updateProfileOrder } from "./services/api";
 import { buildLiffEntryUrl, buildLineAppLiffFallbackUrl, initLineIdentity, loginWithLine, logoutLineIdentity, resetCareWedoSessionAndReturnHome, shouldOpenLiffEntryUrl } from "./services/liff";
 import { trackError, trackEvent } from "./services/telemetry";
 import { buildTodayTasks, formatTaipeiTodayLabel, groupMedicationsBySchedule, hasSameDayTasks } from "./services/todayTasks";
@@ -70,18 +70,18 @@ function calculateAge(profile) {
 
 const SECTIONS = [
   { id: "overview", label: "今日照護", mobileLabel: "今天", icon: "⌂", color: "#315F68" },
-  { id: "calendar", label: "未來行程", mobileLabel: "未來", icon: "□", color: "#5E8F9A" },
-  { id: "records", label: "查詢紀錄", mobileLabel: "查詢", icon: "≡", color: "#B97832" },
-  { id: "meds", label: "吃藥紀錄", mobileLabel: "吃藥", icon: "○", color: "#4F7D5A" },
-  { id: "settings", label: "家人協作", mobileLabel: "家人", icon: "⚙", color: "#315F68" },
+  { id: "calendar", label: "照護排程", mobileLabel: "排程", icon: "□", color: "#5E8F9A" },
+  { id: "records", label: "照護紀錄", mobileLabel: "紀錄", icon: "≡", color: "#B97832" },
+  { id: "meds", label: "用藥管理", mobileLabel: "用藥", icon: "○", color: "#4F7D5A" },
+  { id: "settings", label: "照護圈", mobileLabel: "照護圈", icon: "⚙", color: "#315F68" },
 ];
 
 const MOBILE_SECTIONS = [
   { id: "overview", label: "今日照護", mobileLabel: "今天", icon: "⌂" },
-  { id: "calendar", label: "未來行程", mobileLabel: "未來", icon: "□" },
-  { id: "records", label: "查詢紀錄", mobileLabel: "查詢", icon: "≡" },
-  { id: "meds", label: "吃藥紀錄", mobileLabel: "吃藥", icon: "○" },
-  { id: "settings", label: "家人協作", mobileLabel: "家人", icon: "⚙" },
+  { id: "calendar", label: "照護排程", mobileLabel: "排程", icon: "□" },
+  { id: "records", label: "照護紀錄", mobileLabel: "紀錄", icon: "≡" },
+  { id: "meds", label: "用藥管理", mobileLabel: "用藥", icon: "○" },
+  { id: "settings", label: "照護圈", mobileLabel: "照護圈", icon: "⚙" },
 ];
 
 function typeLabel(type) {
@@ -158,6 +158,20 @@ function formatDateLabel(value, time = "") {
   
   const base = `${yyyy}/${mm}/${dd} (${dayName})`;
   return time ? `${base} ${time}` : base;
+}
+
+function buildCalendarReminderCopy(appointment = {}, careName = "") {
+  const title = appointment.title || appointment.department || typeLabel(appointment.type);
+  const place = [appointment.hospital, appointment.doctor && `${appointment.doctor}醫師`, appointment.number && `${appointment.number}號`].filter(Boolean).join(" ｜ ");
+  return [
+    careName && `${careName} 的照護排程`,
+    formatDateLabel(appointment.date, appointment.time),
+    title,
+    place,
+    appointment.location && `地點：${appointment.location}`,
+    appointment.notes || appointment.reminder_text,
+    "已存入 Care WEDO。",
+  ].filter(Boolean).join("\n");
 }
 
 function normalizeAppointment(apt, index) {
@@ -1335,6 +1349,7 @@ function DashboardApp() {
     appointments,
   }), [appointments, todayDate]);
   const showContactDock = !IS_PROD || isPersonalMode;
+  const collaborators = dashboard?.collaborators || dashboard?.members || [];
 
   useEffect(() => {
     setFamilyNotes(dashboard?.family_notes || []);
@@ -1832,6 +1847,19 @@ function DashboardApp() {
         </aside>
 
         <section className="content-area" data-active-section={activeSection}>
+          <CareContextHeader
+            identity={identity}
+            patient={patient}
+            selectedProfile={selectedProfile}
+            groups={groups}
+            activeGroupId={activeGroupId}
+            activeGroupName={activeGroup?.name || dashboard?.active_group_name}
+            collaborators={collaborators}
+            onGroupChange={handleGroupChange}
+            onOpenProfile={() => setShowEditProfile(true)}
+            onOpenFamily={() => openSection("settings")}
+          />
+
           {activeSection !== "overview" && activeSection !== "settings" && (
             <div className="toolbar">
               <SectionHeading section={SECTIONS.find(s => s.id === activeSection)} />
@@ -1861,18 +1889,8 @@ function DashboardApp() {
               nextAppointment={nextAppointment}
               urgentItems={urgentItems}
               familyNotes={familyNotes}
-              groups={groups}
-              activeGroup={activeGroup}
-              activeGroupId={activeGroupId}
               hasCareData={hasCareData}
-              patient={patient}
-              selectedProfile={selectedProfile}
               onOpenCalendar={() => openSection("calendar")}
-              onOpenRecords={() => openSection("records")}
-              onOpenMeds={() => openSection("meds")}
-              onOpenFamily={() => openSection("settings")}
-              onOpenProfile={() => setShowEditProfile(true)}
-              onGroupChange={handleGroupChange}
               onEditFamilyNotes={() => setShowFamilyNotesEditor(true)}
               onUpload={handleUploadClick}
               onAddReminder={() => setShowManualReminder(true)}
@@ -1885,6 +1903,7 @@ function DashboardApp() {
           {activeSection === "calendar" && (
             <CalendarView
               appointments={appointments}
+              careName={selectedProfile?.display_name || patient.name}
               onUpload={handleUploadClick}
               onAddReminder={() => setShowManualReminder(true)}
               onEditAppointment={handleEditAppointment}
@@ -1959,7 +1978,7 @@ function DashboardApp() {
 
       {showFamilyNotesEditor && (
         <FamilyNotesModal
-          groupName={activeGroup?.name || dashboard?.active_group_name || "家庭群組"}
+          groupName={activeGroup?.name || dashboard?.active_group_name || "照護圈"}
           notes={familyNotes}
           onClose={() => setShowFamilyNotesEditor(false)}
           onSave={handleFamilyNotesChange}
@@ -2005,7 +2024,7 @@ function DashboardApp() {
           lineUrl: CARE_WEDO_LINE_URL,
           available: true,
         }}
-        collaborators={dashboard?.collaborators || dashboard?.members || []}
+        collaborators={collaborators}
         context={activeSection}
         onAskFamily={handleAskFamily}
       />
@@ -2183,7 +2202,7 @@ function groupProfilesForSwitcher(profiles = [], groups = []) {
     .filter((group) => profilesByGroupId.has(group.id))
     .map((group) => ({
       id: group.id,
-      name: group.name || "家庭群組",
+      name: group.name || "照護圈",
       profiles: profilesByGroupId.get(group.id),
     }));
 
@@ -2192,7 +2211,7 @@ function groupProfilesForSwitcher(profiles = [], groups = []) {
     .filter(([groupId]) => groupId === "ungrouped" || !knownGroupIds.has(groupId))
     .map(([groupId, groupProfiles]) => ({
       id: groupId,
-      name: groupId === "ungrouped" ? "未分組" : "家庭群組",
+      name: groupId === "ungrouped" ? "未分組" : "照護圈",
       profiles: groupProfiles,
     }));
 
@@ -2209,7 +2228,7 @@ function ProfileSwitcher({ profiles, groups = [], activeProfileId, onChange, onR
   if (!profiles.length) {
     return (
       <div className="profile-switcher empty">
-        <p className="panel-eyebrow">正在看的資料</p>
+        <p className="panel-eyebrow">正在照護</p>
         <strong>照護對象</strong>
         <span>之後可加入家人、自己或其他需要照護的人。</span>
       </div>
@@ -2269,7 +2288,7 @@ function ProfileSwitcher({ profiles, groups = [], activeProfileId, onChange, onR
 
   return (
     <div className="profile-switcher">
-      <p className="panel-eyebrow">正在看的資料</p>
+      <p className="panel-eyebrow">正在照護</p>
       <div className="profile-options" role="listbox" aria-label="切換照護對象">
         {sections.map((section) => (
           <section key={section.id} className="profile-group-section">
@@ -2324,12 +2343,12 @@ function ProfileSwitcher({ profiles, groups = [], activeProfileId, onChange, onR
   );
 }
 
-function GroupBadge({ groups = [], activeGroupId, activeGroupName, onChange }) {
+function GroupBadge({ groups = [], activeGroupId, activeGroupName, onChange, fallbackLabel = "照護圈" }) {
   const [open, setOpen] = useState(false);
-  const label = activeGroupName || groups.find((group) => group.id === activeGroupId)?.name || "家庭群組";
+  const label = activeGroupName || groups.find((group) => group.id === activeGroupId)?.name || fallbackLabel;
 
   if (!groups.length) {
-    return <span className="group-context-badge">{label}</span>;
+    return <span className="group-context-badge static">{label}</span>;
   }
 
   return (
@@ -2344,7 +2363,7 @@ function GroupBadge({ groups = [], activeGroupId, activeGroupName, onChange }) {
         {label}
       </button>
       {open && (
-        <div className="group-context-menu" role="listbox" aria-label="切換家庭群組">
+        <div className="group-context-menu" role="listbox" aria-label="切換照護圈">
           {groups.map((group) => (
             <button
               key={group.id}
@@ -2355,12 +2374,90 @@ function GroupBadge({ groups = [], activeGroupId, activeGroupName, onChange }) {
                 onChange?.(group.id);
               }}
             >
-              {group.name || "家庭群組"}
+              {group.name || "照護圈"}
             </button>
           ))}
         </div>
       )}
     </div>
+  );
+}
+
+function collaboratorRoleLabel(role = "") {
+  if (role === "admin" || role === "owner") return "管理者";
+  if (role === "caregiver") return "照護者";
+  return "家人";
+}
+
+function CareContextHeader({
+  identity,
+  patient,
+  selectedProfile,
+  groups = [],
+  activeGroupId,
+  activeGroupName,
+  collaborators = [],
+  onGroupChange,
+  onOpenProfile,
+  onOpenFamily,
+}) {
+  const careName = selectedProfile?.display_name || patient?.name || "照護對象";
+  const careTitle = getCareTodayTitle(selectedProfile, careName);
+  const careMeta = [patient?.dept, patient?.age].filter(Boolean).join("・") || selectedProfile?.notes || "照護資料";
+  const loginName = identity?.profile?.displayName || identity?.profile?.display_name || (identity?.status === "demo" ? "範例帳號" : "LINE 帳號");
+  const normalizedCollaborators = useMemo(() => collaborators
+    .map(normalizeCollaborator)
+    .filter((item) => item.displayName)
+    .sort((a, b) => {
+      if (a.role === "admin" && b.role !== "admin") return -1;
+      if (b.role === "admin" && a.role !== "admin") return 1;
+      return a.displayName.localeCompare(b.displayName, "zh-Hant");
+    }), [collaborators]);
+  const collaboratorPreview = normalizedCollaborators.slice(0, 2);
+  const collaboratorSummary = normalizedCollaborators.length
+    ? `${normalizedCollaborators.length} 人`
+    : "尚未邀請";
+
+  return (
+    <section className="care-context-header" aria-label={careTitle}>
+      <div className="care-context-main">
+        <button type="button" className="care-context-avatar" onClick={onOpenProfile} aria-label={`編輯 ${careName} 的照護資料`}>
+          <img src={selectedProfile?.avatar_url || aiAvatar} alt={`${careName} 頭像`} />
+        </button>
+        <div className="care-context-copy">
+          <p className="care-context-eyebrow">正在照護</p>
+          <h2>{careName}</h2>
+          <p className="care-context-meta">{careMeta}</p>
+        </div>
+      </div>
+
+      <div className="care-context-details" aria-label="目前帳號與照護圈">
+        <div className="care-context-item">
+          <span className="care-context-label">照護圈</span>
+          <GroupBadge
+            groups={groups}
+            activeGroupId={activeGroupId}
+            activeGroupName={activeGroupName}
+            onChange={onGroupChange}
+            fallbackLabel="尚未建立照護圈"
+          />
+        </div>
+        <button type="button" className="care-context-item care-context-family-button" onClick={onOpenFamily}>
+          <span className="care-context-label">一起照護的人</span>
+          <strong>{collaboratorSummary}</strong>
+          {collaboratorPreview.length > 0 && (
+            <span className="care-context-helper">
+              {collaboratorPreview.map((item) => `${item.displayName}・${collaboratorRoleLabel(item.role)}`).join("、")}
+            </span>
+          )}
+        </button>
+        <div className="care-context-item">
+          <span className="care-context-label">登入者</span>
+          <strong>{loginName}</strong>
+          <span className="care-context-helper">{identity?.status === "demo" ? "範例畫面" : "目前帳號"}</span>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -2971,18 +3068,8 @@ function OverviewView({
   nextAppointment,
   urgentItems,
   familyNotes,
-  groups,
-  activeGroup,
-  activeGroupId,
   hasCareData,
-  patient,
-  selectedProfile,
   onOpenCalendar,
-  onOpenRecords,
-  onOpenMeds,
-  onOpenFamily,
-  onOpenProfile,
-  onGroupChange,
   onEditFamilyNotes,
   onUpload,
   onAddReminder,
@@ -2991,8 +3078,6 @@ function OverviewView({
   onAskFamily,
 }) {
   const [locallyDoneTaskIds, setLocallyDoneTaskIds] = useState(() => new Set());
-  const careName = selectedProfile?.display_name || patient?.name || "照護對象";
-  const careTitle = getCareTodayTitle(selectedProfile, careName);
 
   function handlePrimaryAction(task) {
     setLocallyDoneTaskIds((prev) => new Set(prev).add(task.id));
@@ -3003,27 +3088,19 @@ function OverviewView({
 
   return (
     <div className="today-care-view">
-      <section className="care-subject-header" aria-label={`${careName} 的照護頁`}>
-        <button type="button" className="care-avatar care-avatar-primary" onClick={onOpenProfile} aria-label={`開啟 ${careName} 的照護資料`}>
-          <img src={selectedProfile?.avatar_url || aiAvatar} alt={`${careName} 頭像`} />
-        </button>
-        <div>
-          <h3>{careTitle}</h3>
-          <p>{todayLabel.date}</p>
-        </div>
-        <GroupBadge
-          groups={groups}
-          activeGroupId={activeGroupId}
-          activeGroupName={activeGroup?.name}
-          onChange={onGroupChange}
-        />
-      </section>
-
       <section className="today-hero-panel">
         <div className="today-count-block">
-          <span>{todayTasks.length ? (hasTodayCareTasks ? `今天有 ${todayTasks.length} 件事` : "最近下一筆照護事項") : "今天沒有新的照護事項"}</span>
-          <p>{todayTasks.length ? (hasTodayCareTasks ? "照時間慢慢做就好。" : "今天沒有新事項，先幫你接上最近的下一筆。") : "可以查看未來行程，或新增一筆提醒。"}</p>
+          <span className="today-date-text">{todayLabel.date}</span>
+          <strong>{todayTasks.length ? (hasTodayCareTasks ? `今天有 ${todayTasks.length} 件事` : "最近下一筆照護事項") : "今天沒有新的照護事項"}</strong>
+          <p>{todayTasks.length ? (hasTodayCareTasks ? "照時間慢慢做就好。" : "今天沒有新事項，先幫你接上最近的下一筆。") : "可以查看照護排程，或新增一筆提醒。"}</p>
         </div>
+        <div className="today-main-actions" aria-label="今天常用操作">
+          <button type="button" className="primary-action" onClick={onUpload}>拍照上傳</button>
+          <button type="button" className="secondary-action" onClick={onAddReminder}>新增排程</button>
+        </div>
+      </section>
+
+      <section className="today-search-panel" aria-label="照護資料搜尋">
         <SearchField
           value={searchQuery}
           onChange={onSearchChange}
@@ -3071,44 +3148,15 @@ function OverviewView({
         ) : hasCareData ? (
           <div className="today-empty-card">
             <div className="empty-guide-actions">
-              <button type="button" className="primary-action" onClick={onOpenCalendar}>查看未來行程</button>
-              <button type="button" className="secondary-action" onClick={onUpload}>拍照上傳</button>
-              <button type="button" className="secondary-action" onClick={onAddReminder}>新增排程</button>
+              <button type="button" className="primary-action" onClick={onOpenCalendar}>查看照護排程</button>
             </div>
           </div>
         ) : (
           <EmptyGuide
             title="今天還沒有照護事項。"
             description="可以先拍一張看診單或藥袋，Care WEDO 會幫你整理成今天要做的事。"
-            primaryLabel="拍照上傳"
-            onPrimary={onUpload}
-            secondaryLabel="新增排程"
-            onSecondary={onAddReminder}
           />
         )}
-      </section>
-
-      <section className="today-action-grid" aria-label="照護功能入口">
-        <button type="button" className="today-action-tile" onClick={onOpenCalendar}>
-          <span>未來</span>
-          <strong>看未來行程</strong>
-          <small>本週、下週、本月</small>
-        </button>
-        <button type="button" className="today-action-tile" onClick={onOpenRecords}>
-          <span>查詢</span>
-          <strong>找照護紀錄</strong>
-          <small>醫院、診別、醫師</small>
-        </button>
-        <button type="button" className="today-action-tile" onClick={onOpenMeds}>
-          <span>吃藥</span>
-          <strong>看吃藥紀錄</strong>
-          <small>早、中、晚、睡前</small>
-        </button>
-        <button type="button" className="today-action-tile" onClick={onOpenFamily}>
-          <span>家人</span>
-          <strong>照護圈設定</strong>
-          <small>邀請與切換資料</small>
-        </button>
       </section>
 
       <section className="today-support-grid">
@@ -3119,7 +3167,7 @@ function OverviewView({
               <div className="date-badge">{formatDateLabel(nextAppointment.date, nextAppointment.time)}</div>
               <h3>{nextAppointment.title || nextAppointment.department}</h3>
               <p>{[nextAppointment.hospital, nextAppointment.doctor && `${nextAppointment.doctor}醫師`].filter(Boolean).join(" ｜ ")}</p>
-              <button type="button" className="inline-action" onClick={onOpenCalendar}>看看診清單</button>
+              <button type="button" className="inline-action" onClick={onOpenCalendar}>查看排程</button>
             </>
           ) : (
             <p className="empty-state">目前沒有下一次看診安排。</p>
@@ -3152,23 +3200,15 @@ function OverviewView({
             ) : <p className="empty-state">目前沒有特別要擔心的提醒。</p>}
           </div>
         </article>
-
-        <article className="summary-panel wide-panel">
-          <p className="panel-eyebrow">新增照護資料</p>
-          <h3>拍下看診單、檢查單或領藥單</h3>
-          <p className="empty-state">Care WEDO 會整理成今日或未來照護提醒。</p>
-          <div className="inline-action-row">
-            <button type="button" className="inline-action" onClick={onUpload}>拍照上傳</button>
-            <button type="button" className="inline-action secondary-inline" onClick={onAddReminder}>新增排程</button>
-          </div>
-        </article>
       </section>
     </div>
   );
 }
 
-function CalendarView({ appointments, onUpload, onAddReminder, onEditAppointment, onAddToCalendar }) {
+function CalendarView({ appointments, careName = "", onUpload, onAddReminder, onEditAppointment, onAddToCalendar }) {
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [calendarActionAppointment, setCalendarActionAppointment] = useState(null);
+  const [calendarActionNotice, setCalendarActionNotice] = useState("");
   const futureAppointments = useMemo(
     () => appointments.filter((apt) => apt.status !== "completed" && isDateTodayOrFuture(apt.date)),
     [appointments],
@@ -3199,6 +3239,20 @@ function CalendarView({ appointments, onUpload, onAddReminder, onEditAppointment
     const element = document.getElementById(`event-${dateStr}`);
     if (element) {
       element.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }
+
+  function closeCalendarActions() {
+    setCalendarActionAppointment(null);
+    setCalendarActionNotice("");
+  }
+
+  async function handleCopyCalendarReminder(appointment) {
+    try {
+      await copyText(buildCalendarReminderCopy(appointment, careName));
+      setCalendarActionNotice("已複製提醒文字。");
+    } catch {
+      setCalendarActionNotice("複製失敗，請再試一次。");
     }
   }
 
@@ -3246,7 +3300,7 @@ function CalendarView({ appointments, onUpload, onAddReminder, onEditAppointment
         {futureAppointments.length ? futureAppointments.map((apt) => (
           <article key={apt.id} id={`event-${apt.date}`} className="event-row">
             <div className="event-card-actions">
-              <button type="button" className="card-corner-calendar" onClick={() => onAddToCalendar?.(apt)} aria-label={`加入 ${apt.title || apt.department || "提醒"} 到行事曆`}>
+              <button type="button" className="card-corner-calendar" onClick={() => setCalendarActionAppointment(apt)} aria-label={`加入 ${apt.title || apt.department || "提醒"} 到行事曆`}>
                 加入行事曆
               </button>
             </div>
@@ -3273,6 +3327,36 @@ function CalendarView({ appointments, onUpload, onAddReminder, onEditAppointment
           />
         )}
       </section>
+      {calendarActionAppointment && (
+        <div className="calendar-action-backdrop" role="presentation" onClick={closeCalendarActions}>
+          <div className="calendar-action-sheet" role="dialog" aria-modal="true" aria-labelledby="calendar-action-title" onClick={(event) => event.stopPropagation()}>
+            <div>
+              <p className="panel-eyebrow">加入行事曆</p>
+              <h3 id="calendar-action-title">{calendarActionAppointment.title || calendarActionAppointment.department || "照護排程"}</h3>
+              <p>{formatDateLabel(calendarActionAppointment.date, calendarActionAppointment.time)}</p>
+            </div>
+            <div className="calendar-action-options">
+              <a
+                className="calendar-action-choice primary"
+                href={buildGoogleCalendarEventUrl(calendarActionAppointment, { profileName: careName })}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={closeCalendarActions}
+              >
+                加入 Google 行事曆
+              </a>
+              <button type="button" className="calendar-action-choice" onClick={() => { onAddToCalendar?.(calendarActionAppointment); closeCalendarActions(); }}>
+                Apple / 手機行事曆
+              </button>
+              <button type="button" className="calendar-action-choice" onClick={() => handleCopyCalendarReminder(calendarActionAppointment)}>
+                複製提醒文字
+              </button>
+            </div>
+            {calendarActionNotice && <p className="calendar-action-notice">{calendarActionNotice}</p>}
+            <button type="button" className="calendar-action-cancel" onClick={closeCalendarActions}>取消</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -3658,7 +3742,7 @@ function SettingsView({
   return (
     <div className="settings-grid">
       <section className="summary-panel">
-        <p className="panel-eyebrow">家庭群組成員</p>
+        <p className="panel-eyebrow">照護對象</p>
         <div className="care-profile-list">
           {careProfiles.length ? careProfiles.map((profile) => (
             <button
@@ -3671,10 +3755,8 @@ function SettingsView({
             </button>
           )) : (
             <EmptyGuide
-              title="目前還沒有加入其他家人。"
-              description="你可以邀請家人一起管理照護空間，讓提醒、紀錄與重要事項不再只靠一個人記得。"
-              primaryLabel="邀請家人"
-              secondaryLabel="複製邀請碼"
+              title="目前還沒有其他照護對象。"
+              description="可以在下方新增爸爸、媽媽、自己，或其他需要一起管理照護資料的人。"
             />
           )}
         </div>

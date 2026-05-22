@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildAppointmentCalendarRequest, buildDashboardRequest, buildLocalAppointmentCalendarFile, isAuthFailureMessage } from "./api.js";
+import { buildAppointmentCalendarRequest, buildDashboardRequest, buildGoogleCalendarEventUrl, buildLocalAppointmentCalendarFile, isAuthFailureMessage } from "./api.js";
 
 test("buildDashboardRequest returns the dashboard endpoint without identity data in demo mode", () => {
   assert.deepEqual(buildDashboardRequest("/api"), {
@@ -71,6 +71,24 @@ test("buildLocalAppointmentCalendarFile creates an ICS file from visible appoint
   assert.match(ics, /SUMMARY:Care WEDO：示範長輩 復健門診/);
   assert.match(ics, /DTSTART:20260529T013000Z/);
   assert.match(ics, /LOCATION:新北市板橋區文化路一段142號/);
+});
+
+test("buildGoogleCalendarEventUrl creates a prefilled Google Calendar link", () => {
+  const url = new URL(buildGoogleCalendarEventUrl({
+    id: "demo-1",
+    date: "2026-05-29",
+    time: "09:30",
+    title: "復健門診",
+    hospital: "牛牛優動-板橋分院",
+    location: "新北市板橋區文化路一段142號",
+    notes: "記得帶健保卡。",
+  }, { profileName: "示範長輩" }));
+
+  assert.equal(url.origin, "https://calendar.google.com");
+  assert.equal(url.searchParams.get("action"), "TEMPLATE");
+  assert.equal(url.searchParams.get("text"), "Care WEDO：示範長輩 復健門診");
+  assert.equal(url.searchParams.get("dates"), "20260529T013000Z/20260529T023000Z");
+  assert.equal(url.searchParams.get("location"), "新北市板橋區文化路一段142號");
 });
 
 test("isAuthFailureMessage detects stale login and token failures", () => {
