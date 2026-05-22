@@ -46,11 +46,11 @@ export default function TermsPage() {
       </section>
 
       <section className="landing-section legal-section">
-        <h2>3. Free 與 Family Pro</h2>
-        <p>目前系統測試期間，所有測試帳號暫時開放 Family Pro。正式版方案與限制會依 Beta 回饋另行公告。</p>
+        <h2>3. Free 與照護圈升級</h2>
+        <p>目前系統測試期間，所有測試帳號暫時開放照護圈升級體驗。正式收費前會再次公告。</p>
         <ul className="legal-list">
-          <li><strong>Free</strong>：保留 LINE 小管家、基礎 AI 解析與長輩友善短提醒。</li>
-          <li><strong>Family Pro</strong>：提供完整保存、家庭群組、多位照護對象、較高解析額度與健康時間線。</li>
+          <li><strong>Free</strong>：保留 LINE 小管家、每月 10 筆 AI 整理、長輩友善短提醒；最近 30 天資料會保存，但不開放歷史查詢。</li>
+          <li><strong>照護圈升級</strong>：提供完整保存、家庭群組、每位照護對象每月 100 筆整理額度與健康時間線。</li>
           <li>方案可隨時升級，降級或取消請依當時公告之退款政策辦理。</li>
         </ul>
       </section>

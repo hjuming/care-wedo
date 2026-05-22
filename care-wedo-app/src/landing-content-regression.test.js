@@ -12,7 +12,7 @@ function readProjectFile(path) {
 test("landing page copy matches elder-friendly beta positioning", () => {
   const app = readProjectFile("care-wedo-app/src/App.jsx");
 
-  assert.match(app, /系統測試期間，所有帳號開放 Family Pro 體驗/);
+  assert.match(app, /系統測試期間，所有帳號開放照護圈升級體驗/);
   assert.match(app, /陪你照顧/);
   assert.match(app, /第一次使用 Care WEDO/);
   assert.match(app, /先綁定 LINE/);
@@ -44,7 +44,7 @@ test("landing page copy matches elder-friendly beta positioning", () => {
   assert.match(app, /推薦方案/);
   assert.match(app, /一起照護的人/);
   assert.match(app, /資料怎麼保存/);
-  assert.match(app, /系統測試期間，所有帳號開放 Family Pro 體驗/);
+  assert.match(app, /系統測試期間，所有帳號開放照護圈升級體驗/);
   assert.match(app, /照護圈協作/);
   assert.match(app, /PlanDetailsModal/);
   assert.doesNotMatch(app, /目前規劃/);
@@ -55,6 +55,7 @@ test("landing page copy matches elder-friendly beta positioning", () => {
   assert.doesNotMatch(app, /Family Basic/);
   assert.doesNotMatch(app, /Family Plus/);
   assert.doesNotMatch(app, /Care Team/);
+  assert.doesNotMatch(app, /Family Pro/);
   assert.match(app, /回饋意見/);
   assert.match(app, /sendFeedbackEmail/);
   assert.match(app, /name: cleanName/);

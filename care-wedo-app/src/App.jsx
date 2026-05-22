@@ -443,8 +443,8 @@ const LANDING_FAQS = [
     answer: "目前可整理看診單、藥袋、處方箋、領藥資訊、掛號預約單與一般照護提醒。資料會存到對應照護對象底下，方便家人回頭查。",
   },
   {
-    question: "Free 和 Family Pro 差在哪裡？",
-    answer: "測試期間一般測試帳號開放 Family Pro。正式版會保留 Free 體驗；Free 可保存最近 30 天資料但不開放歷史查詢，照護圈升級提供每位照護對象 100 筆/月整理額度、家庭協作、多位照護對象與完整保存。",
+    question: "Free 和照護圈升級差在哪裡？",
+    answer: "測試期間一般測試帳號開放照護圈升級體驗。正式版會保留 Free 體驗；Free 可保存最近 30 天資料但不開放歷史查詢，照護圈升級提供每位照護對象 100 筆/月整理額度、家庭協作、多位照護對象與完整保存。",
   },
   {
     question: "長輩一定要會用系統嗎？",
@@ -464,7 +464,7 @@ const LANDING_FAQS = [
   },
   {
     question: "測試期間需要付費嗎？",
-    answer: "不需要。目前系統測試期間一般測試帳號開放 Family Pro。正式收費方案會在上線前清楚公告。",
+    answer: "不需要。目前系統測試期間一般測試帳號開放照護圈升級體驗。正式收費方案會在上線前清楚公告。",
   },
   {
     question: "家人可以一起看同一份紀錄嗎？",
@@ -526,7 +526,7 @@ function PlanDetailsModal({ onClose }) {
       <div className="modal-content plan-details-modal" role="dialog" aria-modal="true" aria-labelledby="plan-details-title" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
           <div>
-            <p className="modal-kicker">Family Pro 方案</p>
+            <p className="modal-kicker">照護圈升級方案</p>
             <h2 id="plan-details-title">功能規劃</h2>
           </div>
           <button type="button" className="btn-close" onClick={onClose} aria-label="關閉">×</button>
@@ -537,28 +537,39 @@ function PlanDetailsModal({ onClose }) {
             <strong>版本 A 收費方向</strong>
             <p>免費可以先照顧 1 位家人，最近 30 天資料會保存但不開放歷史查詢。正式收費後，需要完整歷史紀錄或邀請家人一起照護時，照護圈升級每月 $30 起。</p>
           </div>
-          <p className="helper-copy">系統測試期間，所有帳號開放 Family Pro 體驗，正式收費前會再次公告。付款與資料問題可聯絡 <a href={`mailto:${CARE_WEDO_SUPPORT_EMAIL}`}>{CARE_WEDO_SUPPORT_EMAIL}</a>。</p>
+          <p className="helper-copy">系統測試期間，所有帳號開放照護圈升級體驗，正式收費前會再次公告。付款與資料問題可聯絡 <a href={`mailto:${CARE_WEDO_SUPPORT_EMAIL}`}>{CARE_WEDO_SUPPORT_EMAIL}</a>。</p>
         </div>
       </div>
     </div>
   );
 }
 
-function QuotaUpgradeModal({ onClose, onViewPlans }) {
+function PlanUpgradeModal({ reason = "quota", onClose, onViewPlans }) {
+  const isHistory = reason === "history";
+  const title = isHistory ? "歷史紀錄是照護圈功能" : "本月免費整理額度已用完";
+  const kicker = isHistory ? "歷史查詢" : "整理額度";
+  const heroTitle = isHistory
+    ? "Free 會保留最近 30 天資料，但不開放歷史查詢。"
+    : "升級照護圈後可以繼續保存新資料，並查看完整歷史紀錄。";
+  const heroCopy = isHistory
+    ? "升級照護圈後，可以查看完整歷史紀錄與健康時間線，家人回診前也比較容易一起確認過去資料。"
+    : "測試期間尚未正式收費，正式收費前會再次通知。也可以下個月再繼續使用免費整理額度。";
+  const secondaryActionLabel = isHistory ? "先看未來安排" : "先不要保存";
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content quota-upgrade-modal" role="dialog" aria-modal="true" aria-labelledby="quota-upgrade-title" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
           <div>
-            <p className="modal-kicker">整理額度</p>
-            <h2 id="quota-upgrade-title">本月免費整理額度已用完</h2>
+            <p className="modal-kicker">{kicker}</p>
+            <h2 id="quota-upgrade-title">{title}</h2>
           </div>
           <button type="button" className="btn-close" onClick={onClose} aria-label="關閉">×</button>
         </div>
         <div className="modal-body">
           <div className="quota-upgrade-hero">
-            <strong>升級照護圈後可以繼續保存新資料，並查看完整歷史紀錄。</strong>
-            <p>測試期間尚未正式收費，正式收費前會再次通知。也可以下個月再繼續使用免費整理額度。</p>
+            <strong>{heroTitle}</strong>
+            <p>{heroCopy}</p>
           </div>
           <div className="quota-upgrade-options" aria-label="版本 A 收費方式">
             <article>
@@ -580,7 +591,7 @@ function QuotaUpgradeModal({ onClose, onViewPlans }) {
           <p className="helper-copy">Free 會保留最近 30 天資料，但歷史查詢與完整保存是付費功能。付款方式將優先支援 LINE Pay，其次評估藍新、綠界與 Stripe。</p>
           <div className="quota-upgrade-actions">
             <button type="button" className="primary-action" onClick={onViewPlans}>查看方案</button>
-            <button type="button" className="secondary-action" onClick={onClose}>先不要保存</button>
+            <button type="button" className="secondary-action" onClick={onClose}>{secondaryActionLabel}</button>
             <a className="inline-action" href={`mailto:${CARE_WEDO_SUPPORT_EMAIL}`}>聯絡客服</a>
           </div>
         </div>
@@ -912,13 +923,13 @@ function LandingPage({ variant = "home" }) {
             <p>付款方式將優先支援 LINE Pay；正式收費前會清楚公告。</p>
           </article>
         </div>
-        <p className="plan-beta-note">系統測試期間，所有帳號開放 Family Pro 體驗；正式收費前會再次通知。</p>
+        <p className="plan-beta-note">系統測試期間，所有帳號開放照護圈升級體驗；正式收費前會再次通知。</p>
 
-        <div className="feature-table" role="table" aria-label="Care WEDO Free 與 Family Pro 功能對照">
+        <div className="feature-table" role="table" aria-label="Care WEDO Free 與照護圈升級功能對照">
           <div className="feature-row table-head" role="row">
             <strong>功能</strong>
             <strong>Free</strong>
-            <strong>Family Pro</strong>
+            <strong>照護圈升級</strong>
           </div>
           {FREE_FEATURES.map(([feature, free, paid]) => (
             <div className="feature-row" role="row" key={feature}>
@@ -1178,7 +1189,7 @@ function DashboardApp() {
   const [scanning, setScanning] = useState(false);
   const [ocrData, setOcrData] = useState(null);
   const [ocrError, setOcrError] = useState(null);
-  const [quotaUpgradePrompt, setQuotaUpgradePrompt] = useState(null);
+  const [planUpgradePrompt, setPlanUpgradePrompt] = useState(null);
   const [showUploadGuide, setShowUploadGuide] = useState(false);
   const [scanStep, setScanStep] = useState(null);
   const [dashboard, setDashboard] = useState(null);
@@ -1400,6 +1411,8 @@ function DashboardApp() {
     label: dashboard.plan.name,
     description: `成員 ${dashboard.plan.max_members} 位・照護對象 ${dashboard.plan.max_recipients} 位`,
   } : null);
+  const planPermissions = dashboard?.plan_permissions || permissionVersion?.capabilities || {};
+  const canViewHistory = planPermissions.can_view_history !== false;
   const selectedProfile = careProfiles.find((profile) => profile.id === activeProfileId)
     || careProfiles.find((profile) => profile.group_id === activeGroupId)
     || careProfiles[0]
@@ -1543,17 +1556,17 @@ function DashboardApp() {
     }
   }
 
-  function showQuotaUpgradePrompt(message, source) {
+  function showPlanUpgradePrompt(reason, source, message = "") {
     setOcrError(null);
-    setQuotaUpgradePrompt({ message: message || "本月免費整理額度已用完", source });
-    trackEvent("frontend.quota_upgrade_prompt", { source });
+    setPlanUpgradePrompt({ reason, message, source });
+    trackEvent("frontend.plan_upgrade_prompt", { reason, source });
   }
 
   async function handleFilesSelected(files) {
     setScanning(true);
     setOcrError(null);
     setOcrData(null);
-    setQuotaUpgradePrompt(null);
+    setPlanUpgradePrompt(null);
 
     try {
       const result = await ocrAnalyze(files, {
@@ -1566,7 +1579,7 @@ function DashboardApp() {
       } else {
         const message = result.error || "解析失敗";
         if (isQuotaLimitMessage(message)) {
-          showQuotaUpgradePrompt(message, "image_upload");
+          showPlanUpgradePrompt("quota", "image_upload", message);
         } else {
           setOcrError(message);
         }
@@ -1578,7 +1591,7 @@ function DashboardApp() {
       });
       const message = err instanceof Error ? err.message : String(err || "解析失敗");
       if (isQuotaLimitMessage(message)) {
-        showQuotaUpgradePrompt(message, "image_upload");
+        showPlanUpgradePrompt("quota", "image_upload", message);
       } else {
         setOcrError(message);
       }
@@ -1598,7 +1611,7 @@ function DashboardApp() {
     setScanning(true);
     setOcrError(null);
     setOcrData(null);
-    setQuotaUpgradePrompt(null);
+    setPlanUpgradePrompt(null);
 
     try {
       const result = await ocrAnalyzeText(sourceText, {
@@ -1611,7 +1624,7 @@ function DashboardApp() {
       } else {
         const message = result.error || "解析失敗";
         if (isQuotaLimitMessage(message)) {
-          showQuotaUpgradePrompt(message, "text_upload");
+          showPlanUpgradePrompt("quota", "text_upload", message);
         } else {
           setOcrError(message);
         }
@@ -1623,7 +1636,7 @@ function DashboardApp() {
       });
       const message = err instanceof Error ? err.message : String(err || "解析失敗");
       if (isQuotaLimitMessage(message)) {
-        showQuotaUpgradePrompt(message, "text_upload");
+        showPlanUpgradePrompt("quota", "text_upload", message);
       } else {
         setOcrError(message);
       }
@@ -1984,7 +1997,7 @@ function DashboardApp() {
           {identity.status === "authenticated" && (
             <div className="side-rail-footer">
               <button type="button" className="side-footer-action" onClick={() => setShowPlanDetails(true)}>
-                Family Pro
+                照護圈升級
               </button>
               <a className="side-footer-action" href="https://care.wedopr.com/">
                 Care WEDO
@@ -2081,6 +2094,8 @@ function DashboardApp() {
               searchQuery={searchQuery}
               onUpload={handleUploadClick}
               onEditRecord={handleEditAppointment}
+              canViewHistory={canViewHistory}
+              onUpgradeRequired={(reason) => showPlanUpgradePrompt(reason, "records_history")}
             />
           )}
 
@@ -2162,11 +2177,12 @@ function DashboardApp() {
         <PlanDetailsModal onClose={() => setShowPlanDetails(false)} />
       )}
 
-      {quotaUpgradePrompt && (
-        <QuotaUpgradeModal
-          onClose={() => setQuotaUpgradePrompt(null)}
+      {planUpgradePrompt && (
+        <PlanUpgradeModal
+          reason={planUpgradePrompt.reason}
+          onClose={() => setPlanUpgradePrompt(null)}
           onViewPlans={() => {
-            setQuotaUpgradePrompt(null);
+            setPlanUpgradePrompt(null);
             setShowPlanDetails(true);
           }}
         />
@@ -3903,16 +3919,26 @@ async function copyText(text) {
   document.body.removeChild(textarea);
 }
 
-function RecordsView({ records, searchQuery, onUpload, onEditRecord }) {
+function RecordsView({ records, searchQuery, onUpload, onEditRecord, canViewHistory = true, onUpgradeRequired }) {
   const [mode, setMode] = useState("future");
   const [copyNotice, setCopyNotice] = useState({ id: null, message: "" });
-  const modeLabel = mode === "history" ? "歷史紀錄" : "未來安排";
+  const activeMode = canViewHistory ? mode : "future";
+  const modeLabel = activeMode === "history" ? "歷史紀錄" : "未來安排";
+
+  function handleModeChange(nextMode) {
+    if (nextMode === "history" && !canViewHistory) {
+      onUpgradeRequired?.("history");
+      return;
+    }
+    setMode(nextMode);
+  }
+
   const grouped = useMemo(() => {
     const today = todayInTaipei();
     const filteredRecords = records
       .filter((record) => record.status !== "deleted")
       .filter((record) => {
-        if (mode === "history") return true;
+        if (activeMode === "history") return true;
         return record.status !== "completed" && isDateTodayOrFuture(record.date, today);
       })
       .filter((record) => matchSearch(record, searchQuery))
@@ -3926,7 +3952,7 @@ function RecordsView({ records, searchQuery, onUpload, onEditRecord }) {
       groups[monthStr].push(record);
     });
     return Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [records, searchQuery, mode]);
+  }, [records, searchQuery, activeMode]);
 
   async function handleCopyReminder(record) {
     try {
@@ -3942,15 +3968,15 @@ function RecordsView({ records, searchQuery, onUpload, onEditRecord }) {
       <div className="record-mode-switch" role="group" aria-label="查詢紀錄模式">
         <button
           type="button"
-          className={mode === "future" ? "active" : ""}
-          onClick={() => setMode("future")}
+          className={activeMode === "future" ? "active" : ""}
+          onClick={() => handleModeChange("future")}
         >
           未來安排
         </button>
         <button
           type="button"
-          className={mode === "history" ? "active" : ""}
-          onClick={() => setMode("history")}
+          className={activeMode === "history" ? "active" : ""}
+          onClick={() => handleModeChange("history")}
         >
           歷史紀錄
         </button>

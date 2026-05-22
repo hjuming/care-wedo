@@ -192,10 +192,11 @@ test("OCR quota limit opens a plan upgrade prompt instead of a raw error", () =>
   const css = readProjectFile("care-wedo-app/src/index.css");
 
   assert.match(app, /function isQuotaLimitMessage/);
-  assert.match(app, /quotaUpgradePrompt/);
+  assert.match(app, /planUpgradePrompt/);
+  assert.match(app, /function PlanUpgradeModal/);
   assert.match(app, /本月免費整理額度已用完/);
-  assert.match(app, /showQuotaUpgradePrompt\(message, "image_upload"\)/);
-  assert.match(app, /showQuotaUpgradePrompt\(message, "text_upload"\)/);
+  assert.match(app, /showPlanUpgradePrompt\("quota", "image_upload", message\)/);
+  assert.match(app, /showPlanUpgradePrompt\("quota", "text_upload", message\)/);
   assert.match(app, /查看方案/);
   assert.match(app, /先不要保存/);
   assert.match(app, /聯絡客服/);
@@ -293,9 +294,17 @@ test("Records page defaults to future arrangements and loads history on demand",
   const recordsView = app.slice(app.indexOf("function RecordsView"), app.indexOf("function SettingsView"));
 
   assert.match(dashboard, /status=neq\.deleted/);
+  assert.match(dashboard, /filterAppointmentsByHistoryAccess/);
+  assert.match(dashboard, /can_view_history/);
+  assert.match(dashboard, /FREE_HISTORY_RETENTION_DAYS\s*=\s*30/);
+  assert.match(dashboard, /fetchAppointments\(env, activeGroupId, activeProfileId, \{ canViewHistory \}\)/);
   assert.match(app, /records=\{allAppointments\}/);
+  assert.match(app, /canViewHistory=\{canViewHistory\}/);
+  assert.match(app, /onUpgradeRequired=\{\(reason\) => showPlanUpgradePrompt\(reason, "records_history"\)\}/);
   assert.match(recordsView, /useState\("future"\)/);
   assert.match(recordsView, /歷史紀錄/);
+  assert.match(recordsView, /canViewHistory = true/);
+  assert.match(recordsView, /onUpgradeRequired\?\.\("history"\)/);
   assert.match(recordsView, /isDateTodayOrFuture\(record\.date,\s*today\)/);
   assert.match(recordsView, /matchSearch\(record,\s*searchQuery\)/);
   assert.match(recordsView, /appointmentTimeValue\(a\)\.localeCompare\(appointmentTimeValue\(b\)\)/);
@@ -401,7 +410,7 @@ test("Family group creation uses a user feature flag, not group plans", () => {
   assert.doesNotMatch(canCreate, /getGroupPlan|plan_id|internal/);
 });
 
-test("Beta family groups default to Family Pro while multiple group access stays user-scoped", () => {
+test("Beta family groups default to the Care Circle plan while multiple group access stays user-scoped", () => {
   const supabase = readProjectFile("functions/_shared/supabase.ts");
   const createGroup = supabase.slice(
     supabase.indexOf("export async function createGroup"),
@@ -410,6 +419,17 @@ test("Beta family groups default to Family Pro while multiple group access stays
 
   assert.match(createGroup, /plan_id:\s*"pro"/);
   assert.doesNotMatch(createGroup, /hasUserFeatureFlag/);
+});
+
+test("Version A plan rows keep legacy plans inactive and price Care Circle at 30", () => {
+  const schema = readProjectFile("supabase/schema.sql");
+  const migration = readProjectFile("supabase/migration_phase52_version_a_plan_limits.sql");
+  const combined = `${schema}\n${migration}`;
+
+  assert.match(combined, /'pro',\s*'照護圈升級',\s*100,\s*2,\s*1,\s*true,\s*30/);
+  assert.match(combined, /'free',\s*'Free',\s*10,\s*1,\s*1,\s*false,\s*0/);
+  assert.match(combined, /where id in \('basic', 'plus', 'team'\)/);
+  assert.match(combined, /is_active = false/);
 });
 
 test("Group settings exposes plan limits before adding care recipients", () => {

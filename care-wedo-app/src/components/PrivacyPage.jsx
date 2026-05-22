@@ -41,7 +41,8 @@ export default function PrivacyPage() {
         <p>您的個人化資料儲存於 Supabase（PostgreSQL）資料庫，伺服器位於雲端。</p>
         <ul className="legal-list">
           <li><strong>測試期間</strong>：全功能免費開放，照護紀錄保留至您主動刪除帳號或申請刪除為止。</li>
-          <li><strong>正式方案</strong>：正式版資料保留與額度規則會在收費功能上線前公告。</li>
+          <li><strong>Free</strong>：正式版會保留最近 30 天資料，但不開放用戶查詢、觀看歷史資料。</li>
+          <li><strong>照護圈升級</strong>：提供完整歷史查詢與長期保存；每位照護對象每月 100 筆 AI 整理額度。</li>
         </ul>
       </section>
 

@@ -750,6 +750,20 @@ const FREE_PLAN_FALLBACK: PlanRow = {
   sort_order: 10,
 };
 
+function resolveMonthlyOcrLimit(plan: PlanRow, recipientCount = 1): number {
+  if (plan.id === "free") return plan.monthly_ocr_limit;
+  return plan.monthly_ocr_limit * Math.max(recipientCount, 1);
+}
+
+async function getGroupRecipientCount(env: Env, groupId: number | null): Promise<number> {
+  if (!groupId) return 1;
+  const profiles = await supabaseFetch<Array<{ id: number }>>(
+    env,
+    `care_profiles?group_id=eq.${groupId}&select=id`,
+  );
+  return Math.max(profiles.length, 1);
+}
+
 /**
  * Fetch the plan for a group.
  * Reads family_groups.plan_id → joins plans table.
@@ -844,16 +858,20 @@ export async function getGroupOcrUsage(env: Env, groupId: number | null): Promis
 export async function checkGroupOcrQuota(env: Env, groupId: number | null): Promise<PlanRow> {
   if (!groupId) return FREE_PLAN_FALLBACK;
 
-  const plan = await getGroupPlan(env, groupId);
-  const used = await getGroupOcrUsage(env, groupId);
+  const [plan, used, recipientCount] = await Promise.all([
+    getGroupPlan(env, groupId),
+    getGroupOcrUsage(env, groupId),
+    getGroupRecipientCount(env, groupId),
+  ]);
+  const monthlyLimit = resolveMonthlyOcrLimit(plan, recipientCount);
 
-  if (used >= plan.monthly_ocr_limit) {
+  if (used >= monthlyLimit) {
     throw new Error(
-      `本月 AI 文件整理次數已用完（${plan.monthly_ocr_limit} 次）。` +
-      (plan.id === "free" ? "升級家庭方案可獲得更多次數。" : ""),
+      `本月 AI 文件整理次數已用完（${monthlyLimit} 次）。` +
+      (plan.id === "free" ? "升級照護圈可獲得更多次數。" : "每位照護對象每月有 100 筆整理額度。"),
     );
   }
-  return plan;
+  return { ...plan, monthly_ocr_limit: monthlyLimit };
 }
 
 /**
@@ -966,7 +984,7 @@ export async function checkGroupMemberLimit(
       ok: false,
       error: "FAMILY_GROUP_REQUIRES_PAID_PLAN",
       message:
-        "家庭共享是付費版功能。升級 Family Basic 後，即可邀請家人共同管理照護資訊。",
+        "家庭共享是照護圈升級功能。升級後，即可邀請家人共同管理照護資訊。",
       plan,
     };
   }

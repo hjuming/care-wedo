@@ -59,18 +59,20 @@ create table if not exists public.plans (
   created_at           timestamptz not null default now()
 );
 
-insert into public.plans (id, name, monthly_ocr_limit, max_members, max_recipients, family_group_enabled, price_monthly_usd, sort_order) values
-  ('free',     'Free',             10,     1,  1,  false,  0,   10),
-  ('basic',    'Family Basic',     30,     2,  1,  true,   1,   20),
-  ('plus',     'Family Plus',      50,     5,  2,  true,   3,   30),
-  ('pro',      'Family Pro',      100,     8,  4,  true,   5,   40),
-  ('team',     'Care Team',       200,    15,  8,  true,  10,   50),
-  ('internal', 'Internal / Test', 99999,  99, 99,  true,   0,  999)
+insert into public.plans (id, name, monthly_ocr_limit, max_members, max_recipients, family_group_enabled, price_monthly_usd, is_active, sort_order) values
+  ('free',     'Free',             10,     1,  1,  false,  0,   true,   10),
+  ('pro',      '照護圈升級',       100,     2,  1,  true,  30,   true,   20),
+  ('basic',    'Legacy Basic',     30,     2,  1,  true,   1,   false, 910),
+  ('plus',     'Legacy Plus',      50,     5,  2,  true,   3,   false, 920),
+  ('team',     'Legacy Team',     200,    15,  8,  true,  10,   false, 930),
+  ('internal', 'Internal / Test', 99999,  99, 99,  true,   0,   true,  999)
 on conflict (id) do update set
   name = excluded.name, monthly_ocr_limit = excluded.monthly_ocr_limit,
   max_members = excluded.max_members, max_recipients = excluded.max_recipients,
   family_group_enabled = excluded.family_group_enabled,
-  price_monthly_usd = excluded.price_monthly_usd, sort_order = excluded.sort_order;
+  price_monthly_usd = excluded.price_monthly_usd,
+  is_active = excluded.is_active,
+  sort_order = excluded.sort_order;
 
 create table if not exists public.family_groups (
   id              bigserial primary key,

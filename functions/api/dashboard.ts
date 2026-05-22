@@ -26,24 +26,49 @@ type Env = {
   LINE_LOGIN_CHANNEL_ID?: string;
 };
 
-function buildPlanUsage(plan: PlanRow, ocrUsed: number) {
-  const remaining = Math.max(plan.monthly_ocr_limit - ocrUsed, 0);
+const FREE_HISTORY_RETENTION_DAYS = 30;
+const PAYMENT_PROVIDER_PRIORITY = ["LINE Pay", "NewebPay", "ECPay", "Stripe"];
+
+function canPlanViewHistory(plan: PlanRow, hasUnlimitedAccess = false) {
+  return hasUnlimitedAccess || plan.id !== "free";
+}
+
+function effectiveMonthlyOcrLimit(plan: PlanRow, recipientCount = 1) {
+  if (plan.id === "free") return plan.monthly_ocr_limit;
+  return plan.monthly_ocr_limit * Math.max(recipientCount, 1);
+}
+
+function buildPlanPermissions(plan: PlanRow, hasUnlimitedAccess = false) {
+  return {
+    can_view_history: canPlanViewHistory(plan, hasUnlimitedAccess),
+    free_history_retention_days: FREE_HISTORY_RETENTION_DAYS,
+    ocr_limit_per_recipient: plan.monthly_ocr_limit,
+    payment_provider_priority: PAYMENT_PROVIDER_PRIORITY,
+  };
+}
+
+function buildPlanUsage(plan: PlanRow, ocrUsed: number, recipientCount = 1, hasUnlimitedAccess = false) {
+  const monthlyLimit = effectiveMonthlyOcrLimit(plan, recipientCount);
+  const remaining = Math.max(monthlyLimit - ocrUsed, 0);
   return {
     plan: {
       id: plan.id,
       name: plan.name,
       monthly_ocr_limit: plan.monthly_ocr_limit,
+      monthly_ocr_limit_per_recipient: plan.monthly_ocr_limit,
+      effective_monthly_ocr_limit: monthlyLimit,
       max_members: plan.max_members,
       max_recipients: plan.max_recipients,
       family_group_enabled: plan.family_group_enabled,
       price_monthly_usd: plan.price_monthly_usd,
     },
+    plan_permissions: buildPlanPermissions(plan, hasUnlimitedAccess),
     usage: {
-      ocr_upload: { used_count: ocrUsed, limit_count: plan.monthly_ocr_limit, remaining_count: remaining },
+      ocr_upload: { used_count: ocrUsed, limit_count: monthlyLimit, remaining_count: remaining },
     },
     // backward-compat aliases
     ocr_used: ocrUsed,
-    ocr_limit: plan.monthly_ocr_limit,
+    ocr_limit: monthlyLimit,
   };
 }
 
@@ -53,6 +78,7 @@ function buildPermissionVersion(plan: PlanRow, hasUnlimitedAccess = false) {
       id: plan.id,
       label: plan.name,
       description: `成員 ${plan.max_members} 位・照護對象 ${plan.max_recipients} 位`,
+      capabilities: buildPlanPermissions(plan, hasUnlimitedAccess),
     };
   }
 
@@ -60,6 +86,7 @@ function buildPermissionVersion(plan: PlanRow, hasUnlimitedAccess = false) {
     id: plan.id,
     label: plan.name,
     description: `成員 ${plan.max_members} 位・照護對象 ${plan.max_recipients} 位`,
+    capabilities: buildPlanPermissions(plan, hasUnlimitedAccess),
   };
 }
 
@@ -187,13 +214,29 @@ async function fetchDashboardMembers(env: Env, groupId: number | null, currentUs
     }));
 }
 
-async function fetchAppointments(env: Env, groupId: number | null, profileId: number | null): Promise<AppointmentRow[]> {
+function filterAppointmentsByHistoryAccess(appointments: AppointmentRow[], canViewHistory: boolean): AppointmentRow[] {
+  if (canViewHistory) return appointments;
+  const today = todayInTaipei();
+  return appointments.filter((appointment) => {
+    if (appointment.type === "family_note") return true;
+    return appointment.status !== "completed" && (!appointment.date || appointment.date >= today);
+  });
+}
+
+async function fetchAppointments(
+  env: Env,
+  groupId: number | null,
+  profileId: number | null,
+  options: { canViewHistory?: boolean } = {},
+): Promise<AppointmentRow[]> {
   if (!groupId) return [];
+  const canViewHistory = options.canViewHistory !== false;
   if (!profileId) {
-    return supabaseFetch<AppointmentRow[]>(
+    const appointments = await supabaseFetch<AppointmentRow[]>(
       env,
       `appointments?group_id=eq.${groupId}&status=neq.deleted&select=*&order=date.asc.nullslast,created_at.desc`,
     );
+    return filterAppointmentsByHistoryAccess(appointments, canViewHistory);
   }
 
   const [profileAppointments, groupFamilyNotes] = await Promise.all([
@@ -207,7 +250,7 @@ async function fetchAppointments(env: Env, groupId: number | null, profileId: nu
     ),
   ]);
 
-  return [...profileAppointments, ...groupFamilyNotes].sort((a, b) => {
+  return filterAppointmentsByHistoryAccess([...profileAppointments, ...groupFamilyNotes], canViewHistory).sort((a, b) => {
     const aDate = a.date || "9999-12-31";
     const bDate = b.date || "9999-12-31";
     const byDate = aDate.localeCompare(bDate);
@@ -331,10 +374,11 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
         getGroupOcrUsage(env, groupId),
         hasUserFeatureFlag(env, userId, MULTIPLE_FAMILY_GROUPS_FEATURE),
       ]);
+      const recipientCount = profiles.filter((profile) => profile.group_id === groupId).length || 1;
       return Response.json({
         ...STATIC_DEMO_DASHBOARD,
         mode: "personal",
-        ...buildPlanUsage(groupPlan, ocrUsed),
+        ...buildPlanUsage(groupPlan, ocrUsed, recipientCount, hasUnlimitedAccess),
         patient: { name: identity.name || "我", age: "", dept: "", diagnoses: [] },
         appointments: [],
         medications: [],
@@ -354,10 +398,19 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     const activeGroupId = selectedProfile.group_id;
     const activeProfileId = selectedProfile.id;
     const activeGroup = groups.find((group) => group.id === activeGroupId) || null;
+    const activeGroupProfileCount = profiles.filter((profile) => profile.group_id === activeGroupId).length || 1;
 
-    // Step 3: Fetch care data scoped to group + profile
+    // Step 3: Fetch group plan first so free accounts never receive hidden history in the client payload.
+    const [groupPlan, ocrUsed, hasUnlimitedAccess] = await Promise.all([
+      getGroupPlan(env, activeGroupId),
+      getGroupOcrUsage(env, activeGroupId),
+      hasUserFeatureFlag(env, userId, MULTIPLE_FAMILY_GROUPS_FEATURE),
+    ]);
+    const canViewHistory = canPlanViewHistory(groupPlan, hasUnlimitedAccess);
+
+    // Step 4: Fetch care data scoped to group + profile
     const [appointments, medications, members] = await Promise.all([
-      fetchAppointments(env, activeGroupId, activeProfileId),
+      fetchAppointments(env, activeGroupId, activeProfileId, { canViewHistory }),
       fetchMedications(env, activeGroupId, activeProfileId),
       fetchDashboardMembers(env, activeGroupId, userId),
     ]);
@@ -373,13 +426,6 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       return label;
     });
 
-    // Step 4: Fetch group plan and OCR usage
-    const [groupPlan, ocrUsed, hasUnlimitedAccess] = await Promise.all([
-      getGroupPlan(env, activeGroupId),
-      getGroupOcrUsage(env, activeGroupId),
-      hasUserFeatureFlag(env, userId, MULTIPLE_FAMILY_GROUPS_FEATURE),
-    ]);
-
     return Response.json({
       patient: {
         name: selectedProfile.display_name || identity.name || "家人",
@@ -388,7 +434,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
         diagnoses: [],
       },
       mode: "personal",
-      ...buildPlanUsage(groupPlan, ocrUsed),
+      ...buildPlanUsage(groupPlan, ocrUsed, activeGroupProfileCount, hasUnlimitedAccess),
       groups,
       active_group_id: activeGroupId,
       active_group_name: activeGroup?.name || "家庭群組",
