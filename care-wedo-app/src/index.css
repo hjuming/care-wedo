@@ -1801,6 +1801,24 @@ input:focus-visible {
   color: var(--text-primary);
 }
 
+.upload-guide-types {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.upload-guide-types span {
+  display: grid;
+  place-items: center;
+  min-height: 44px;
+  border: 1px solid rgba(37, 111, 91, 0.22);
+  border-radius: 12px;
+  background: rgba(37, 111, 91, 0.08);
+  color: var(--primary-dark);
+  font-size: 15px;
+  font-weight: 900;
+}
+
 .upload-guide-tips {
   list-style: none;
   display: grid;
@@ -5346,6 +5364,22 @@ button:disabled,
   color: var(--text-secondary);
 }
 
+.setup-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.setup-actions .primary-action,
+.setup-actions .secondary-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  text-decoration: none;
+}
+
 .group-invite-block {
   display: grid;
   gap: 14px;
@@ -6234,6 +6268,13 @@ button:disabled,
   gap: 12px;
 }
 
+.today-upload-helper {
+  margin: -2px 0 4px;
+  color: var(--text-secondary);
+  font-size: 16px;
+  line-height: 1.5;
+}
+
 .today-main-actions .primary-action,
 .today-main-actions .secondary-action {
   width: 100%;
@@ -6516,6 +6557,11 @@ button:disabled,
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .today-upload-helper {
+    grid-column: 1 / -1;
+    margin: -4px 0 0;
+  }
+
   .care-subject-header {
     flex-direction: column;
     align-items: flex-start;
@@ -6615,6 +6661,11 @@ button:disabled,
 @media (max-width: 420px) {
   .care-context-details,
   .today-main-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .setup-actions,
+  .upload-guide-types {
     grid-template-columns: 1fr;
   }
 

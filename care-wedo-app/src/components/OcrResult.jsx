@@ -74,6 +74,16 @@ export default function OcrResult({ data, onClose, onSaveCorrections, onAskFamil
     );
   }, [parsed]);
 
+  const resultSummary = useMemo(() => {
+    const parts = [];
+    if (draft.appointments.length) parts.push(`${draft.appointments.length} 筆照護提醒`);
+    if (draft.medications.length) parts.push(`${draft.medications.length} 種用藥`);
+    if (parsed?.exams?.length) parts.push(`${parsed.exams.length} 項檢查安排`);
+    return parts.length
+      ? `我先幫你分成 ${parts.join("、")}，確認後才會存進清單。`
+      : "確認後才會放進今日照護、照護排程與用藥清單。";
+  }, [draft.appointments.length, draft.medications.length, parsed?.exams?.length]);
+
   if (!parsed) return null;
 
   async function handleSave() {
@@ -115,7 +125,7 @@ export default function OcrResult({ data, onClose, onSaveCorrections, onAskFamil
           <img src={aiAvatar} alt="健康小管家" />
           <div>
             <p>{editing ? "正在校正內容" : "我幫你看出這些內容，對嗎？"}</p>
-            <span>{editing ? "你可以修正任何不正確的欄位" : "確認後才會放進今日照護、看診與吃藥清單。"}</span>
+            <span>{editing ? "你可以修正任何不正確的欄位" : resultSummary}</span>
           </div>
         </div>
         <div className="ocr-result-actions">

@@ -63,7 +63,7 @@ export default function ScanButton({ scanning, scanned, scanCount, onFilesSelect
           </>
         ) : (
           <>
-            <span>＋</span> 拍照上傳單子
+            <span>＋</span> 拍照新增照護資料
           </>
         )}
       </button>

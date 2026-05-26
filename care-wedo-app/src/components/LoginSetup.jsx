@@ -1,11 +1,17 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export default function LoginSetup({ identity, onSetupComplete }) {
-  const [step, setStep] = useState("check"); // check, setup, success
+  const [step, setStep] = useState("check"); // check, setup, success, error
+  const [retryToken, setRetryToken] = useState(0);
   const [familyName, setFamilyName] = useState("");
   const [careName, setCareName] = useState("家中長輩");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const onSetupCompleteRef = useRef(onSetupComplete);
+
+  useEffect(() => {
+    onSetupCompleteRef.current = onSetupComplete;
+  }, [onSetupComplete]);
 
   useEffect(() => {
     let isMounted = true;
@@ -14,19 +20,22 @@ export default function LoginSetup({ identity, onSetupComplete }) {
         const res = await fetch("/api/me", {
           headers: { Authorization: `Bearer ${identity.idToken}` },
         });
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data.error || "LINE 登入狀態確認失敗，請重新整理後再試一次。");
+        }
         
         if (!isMounted) return;
         if (data.is_first_time) {
           setStep("setup");
         } else {
           setStep("done");
-          if (onSetupComplete) onSetupComplete(data);
+          if (onSetupCompleteRef.current) onSetupCompleteRef.current(data);
         }
       } catch (err) {
         if (!isMounted) return;
-        setError(err.message || "檢查失敗");
-        setStep("setup");
+        setError(err.message || "LINE 登入狀態確認失敗，請重新整理後再試一次。");
+        setStep("error");
       }
     }
 
@@ -36,8 +45,7 @@ export default function LoginSetup({ identity, onSetupComplete }) {
     return () => {
       isMounted = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [identity]);
+  }, [identity?.idToken, retryToken, step]);
 
   async function handleSetup(e) {
     e.preventDefault();
@@ -84,6 +92,37 @@ export default function LoginSetup({ identity, onSetupComplete }) {
     );
   }
 
+  if (step === "error") {
+    return (
+      <div className="setup-overlay">
+        <div className="setup-card">
+          <p className="panel-eyebrow">LINE 狀態確認</p>
+          <h2>先幫你重新確認登入</h2>
+          <p className="helper-copy">
+            系統沒有確認到有效的 LINE 登入狀態，所以先不進入設定流程，避免讓你重複綁定。
+          </p>
+          {error && <p className="error-msg">{error}</p>}
+          <div className="setup-actions">
+            <button
+              type="button"
+              className="primary-action"
+              onClick={() => {
+                setError(null);
+                setStep("check");
+                setRetryToken((value) => value + 1);
+              }}
+            >
+              重新確認
+            </button>
+            <a className="secondary-action" href="/login">
+              回到 LINE 登入
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (step === "success") {
     return (
       <div className="setup-overlay">
@@ -96,7 +135,7 @@ export default function LoginSetup({ identity, onSetupComplete }) {
             className="primary-action"
             onClick={() => {
               setStep("done");
-              if (onSetupComplete) onSetupComplete();
+              if (onSetupCompleteRef.current) onSetupCompleteRef.current();
             }}
           >
             進入應用
@@ -139,7 +178,7 @@ export default function LoginSetup({ identity, onSetupComplete }) {
             <p>
               ✓ 建立後您可邀請家人加入<br/>
               ✓ 所有家人都能查看照護資訊與接收提醒<br/>
-              ✓ 支持多人共同上傳看診單據
+              ✓ 支援多人共同拍照新增照護資料
             </p>
           </div>
 

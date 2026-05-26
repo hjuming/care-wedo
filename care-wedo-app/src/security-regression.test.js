@@ -273,6 +273,30 @@ test("Today task edit action is tucked into the lower-right corner", () => {
   assert.doesNotMatch(todayTaskCard, /card-corner-edit/);
 });
 
+test("Today page makes photo-first care upload the primary action", () => {
+  const app = readProjectFile("care-wedo-app/src/App.jsx");
+  const overviewView = app.slice(app.indexOf("function OverviewView"), app.indexOf("function CalendarView"));
+  const uploadGuide = app.slice(app.indexOf("function UploadGuide"), app.indexOf("function AskFamilyModal"));
+
+  assert.match(overviewView, /今天要照顧的事/);
+  assert.match(overviewView, /拍照新增照護資料/);
+  assert.match(overviewView, /用藥、回診、處方箋、掛號單都從這裡開始。/);
+  assert.match(overviewView, /手動新增提醒/);
+  assert.doesNotMatch(overviewView, /最近下一筆照護事項/);
+  assert.match(uploadGuide, /不用先分類/);
+  assert.match(uploadGuide, /系統會先幫你整理/);
+});
+
+test("LINE setup check does not treat auth check failures as first-time setup", () => {
+  const loginSetup = readProjectFile("care-wedo-app/src/components/LoginSetup.jsx");
+  const catchBlock = loginSetup.slice(loginSetup.indexOf("} catch (err) {"), loginSetup.indexOf("async function handleSetup"));
+
+  assert.match(loginSetup, /if \(!res\.ok\)/);
+  assert.match(loginSetup, /setStep\("error"\)/);
+  assert.match(loginSetup, /避免讓你重複綁定/);
+  assert.doesNotMatch(catchBlock, /setStep\("setup"\)/);
+});
+
 test("Logged-in dashboard exposes a clear care context header", () => {
   const app = readProjectFile("care-wedo-app/src/App.jsx");
   const css = readProjectFile("care-wedo-app/src/index.css");
@@ -513,8 +537,9 @@ test("Future appointment cards expose a calendar file export action", () => {
   assert.match(calendarView, /event-card-actions[\s\S]*card-corner-calendar/);
   assert.doesNotMatch(calendarView.slice(calendarView.indexOf('<div className="event-card-actions"'), calendarView.indexOf('<div className="event-type">')), /card-corner-edit/);
   assert.match(calendarView, /event-type[\s\S]*event-edit-action/);
-  assert.match(calendarView, />\s*新增排程\s*</);
-  assert.doesNotMatch(calendarView, />\s*新增提醒\s*</);
+  assert.match(calendarView, />\s*拍照新增照護資料\s*</);
+  assert.match(calendarView, />\s*手動新增提醒\s*</);
+  assert.doesNotMatch(calendarView, />\s*拍照上傳\s*</);
 });
 
 test("LINE postback reassignment validates source user access before updating records", () => {

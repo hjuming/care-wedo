@@ -2866,20 +2866,26 @@ function UploadGuide({ onConfirm, onTextSubmit, onClose }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>上傳照護單據</h2>
+          <h2>拍照新增照護資料</h2>
           <button type="button" onClick={onClose} className="btn-close">✕</button>
         </div>
         <div className="modal-body upload-guide-body">
           <p className="upload-guide-intro">
-            請拍下<strong>看診單、藥袋、處方箋或提醒單</strong>。
+            不用先分類。請拍下<strong>藥袋、處方箋、掛號單或提醒單</strong>，系統會先幫你整理。
           </p>
+          <div className="upload-guide-types" aria-label="可拍攝的照護資料">
+            <span>藥袋</span>
+            <span>處方箋</span>
+            <span>掛號單</span>
+            <span>提醒單</span>
+          </div>
           <ul className="upload-guide-tips">
             <li>照片文字清楚、盡量拍完整</li>
             <li>盡量避免反光或模糊</li>
             <li>可以一次上傳多張</li>
           </ul>
           <p className="upload-guide-note">
-            Care WEDO 會協助整理出回診時間、用藥資訊與注意事項。
+            上傳後會先顯示整理結果，你可以確認用藥、回診時間與注意事項是否正確。
           </p>
           <label className="upload-text-label" htmlFor="medical-text-upload">也可以直接貼文字</label>
           <textarea
@@ -2893,7 +2899,7 @@ function UploadGuide({ onConfirm, onTextSubmit, onClose }) {
         <div className="modal-footer">
           <button type="button" className="secondary-action" onClick={onClose}>取消</button>
           <button type="button" className="secondary-action" onClick={() => onTextSubmit?.(text)} disabled={!text.trim()}>整理文字</button>
-          <button type="button" className="primary-action" onClick={onConfirm}>拍照或上傳照片</button>
+          <button type="button" className="primary-action" onClick={onConfirm}>開始拍照</button>
         </div>
       </div>
     </div>
@@ -3059,7 +3065,7 @@ function ManualReminderModal({ mode = "create", initialAppointment = null, onClo
         fasting_hours: formData.fasting_required ? formData.fasting_hours : null,
       });
     } catch (err) {
-      setError(err.message || "新增排程失敗");
+      setError(err.message || "新增提醒失敗");
     } finally {
       setSaving(false);
     }
@@ -3084,7 +3090,7 @@ function ManualReminderModal({ mode = "create", initialAppointment = null, onClo
     <div className="modal-overlay">
       <div className="modal-content manual-reminder-modal">
         <div className="modal-header">
-          <h2>{mode === "edit" ? "編輯排程" : "新增排程"}</h2>
+          <h2>{mode === "edit" ? "編輯提醒" : "手動新增提醒"}</h2>
           <button type="button" onClick={onClose} className="btn-close">✕</button>
         </div>
         <form onSubmit={handleSubmit}>
@@ -3269,12 +3275,17 @@ function OverviewView({
       <section className="today-hero-panel">
         <div className="today-count-block">
           <span className="today-date-text">{todayLabel.date}</span>
-          <strong>{todayTasks.length ? (hasTodayCareTasks ? `今天有 ${todayTasks.length} 件事` : "最近下一筆照護事項") : "今天沒有新的照護事項"}</strong>
-          <p>{todayTasks.length ? (hasTodayCareTasks ? "照時間慢慢做就好。" : "今天沒有新事項，先幫你接上最近的下一筆。") : "可以查看照護排程，或新增一筆提醒。"}</p>
+          <strong>今天要照顧的事</strong>
+          <p>
+            {todayTasks.length
+              ? (hasTodayCareTasks ? `今天有 ${todayTasks.length} 件事，照時間慢慢做就好。` : "今天沒有新事項，先幫你接上最近的下一筆。")
+              : "拍藥袋、處方箋、掛號單或提醒單，Care WEDO 會幫你整理。"}
+          </p>
         </div>
         <div className="today-main-actions" aria-label="今天常用操作">
-          <button type="button" className="primary-action" onClick={onUpload}>拍照上傳</button>
-          <button type="button" className="secondary-action" onClick={onAddReminder}>新增排程</button>
+          <button type="button" className="primary-action" onClick={onUpload}>拍照新增照護資料</button>
+          <p className="today-upload-helper">用藥、回診、處方箋、掛號單都從這裡開始。</p>
+          <button type="button" className="secondary-action" onClick={onAddReminder}>手動新增提醒</button>
         </div>
       </section>
 
@@ -3332,7 +3343,7 @@ function OverviewView({
         ) : (
           <EmptyGuide
             title="今天還沒有照護事項。"
-            description="可以先拍一張看診單或藥袋，Care WEDO 會幫你整理成今天要做的事。"
+            description="可以先拍藥袋、處方箋或掛號單，Care WEDO 會自動分類並整理成照護待辦。"
           />
         )}
       </section>
@@ -3472,8 +3483,8 @@ function CalendarView({ appointments, careName = "", onUpload, onAddReminder, on
 
       <section className="event-list" aria-label="看診和領藥清單">
         <div className="inline-action-row event-list-actions">
-          <button type="button" className="secondary-action" onClick={onUpload}>拍照上傳</button>
-          <button type="button" className="primary-action" onClick={onAddReminder}>新增排程</button>
+          <button type="button" className="primary-action" onClick={onUpload}>拍照新增照護資料</button>
+          <button type="button" className="secondary-action" onClick={onAddReminder}>手動新增提醒</button>
         </div>
         {futureAppointments.length ? futureAppointments.map((apt) => (
           <article key={apt.id} id={`event-${apt.date}`} className="event-row">
@@ -3497,10 +3508,10 @@ function CalendarView({ appointments, careName = "", onUpload, onAddReminder, on
         )) : (
           <EmptyGuide
             title="目前還沒有看診提醒。"
-            description="你可以從看診單照片開始，或手動新增下一次回診日期。建立後，家人也能一起同步查看。"
-            primaryLabel="上傳看診單"
+            description="可以先拍掛號單、處方箋或提醒單，Care WEDO 會幫你整理下一次回診、檢查或領藥時間。"
+            primaryLabel="拍照新增照護資料"
             onPrimary={onUpload}
-            secondaryLabel="新增排程"
+            secondaryLabel="手動新增提醒"
             onSecondary={onAddReminder}
           />
         )}
@@ -3834,10 +3845,10 @@ function MedicationView({ medications, medicationSummarySource = medications, to
       )) : (
         <EmptyGuide
           title={searchQuery && totalMedicationCount > 0 ? "沒有符合搜尋的藥物。" : "目前還沒有吃藥說明。"}
-          description={searchQuery && totalMedicationCount > 0 ? "目前的關鍵字把藥物篩掉了，可以先顯示全部藥物再重新查看。" : "你可以拍下藥袋或處方資訊，讓 Care WEDO 幫你整理吃藥時間、份量與注意事項。"}
-          primaryLabel={searchQuery && totalMedicationCount > 0 ? "顯示全部藥物" : "上傳藥袋照片"}
+          description={searchQuery && totalMedicationCount > 0 ? "目前的關鍵字把藥物篩掉了，可以先顯示全部藥物再重新查看。" : "拍藥袋或處方箋就可以開始，Care WEDO 會幫你整理吃藥時間、份量與注意事項。"}
+          primaryLabel={searchQuery && totalMedicationCount > 0 ? "顯示全部藥物" : "拍照新增照護資料"}
           onPrimary={searchQuery && totalMedicationCount > 0 ? onClearSearch : onUpload}
-          secondaryLabel={searchQuery && totalMedicationCount > 0 ? "上傳藥袋照片" : "新增吃藥說明"}
+          secondaryLabel={searchQuery && totalMedicationCount > 0 ? "拍照新增照護資料" : undefined}
           onSecondary={searchQuery && totalMedicationCount > 0 ? onUpload : undefined}
         />
       )}
@@ -4033,10 +4044,9 @@ function RecordsView({ records, searchQuery, onUpload, onEditRecord, canViewHist
       )) : (
         <EmptyGuide
           title={searchQuery ? "沒有符合的紀錄。" : `目前沒有${modeLabel}。`}
-          description={searchQuery ? "換一個醫院、科別、醫師或提醒類型試試看。" : mode === "history" ? "切回未來安排可以查看接下來要做的事。" : "之後新增的看診、檢查或領藥提醒會先出現在這裡。"}
-          primaryLabel="上傳看診單"
+          description={searchQuery ? "換一個醫院、科別、醫師或提醒類型試試看。" : mode === "history" ? "切回未來安排可以查看接下來要做的事。" : "拍藥袋、處方箋、掛號單或提醒單後，整理好的照護資料會先出現在這裡。"}
+          primaryLabel="拍照新增照護資料"
           onPrimary={onUpload}
-          secondaryLabel="新增照護紀錄"
         />
       )}
     </div>
