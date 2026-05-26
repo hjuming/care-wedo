@@ -70,7 +70,7 @@ test("Family notes are stored as group-scoped reminders", () => {
   assert.match(dashboard, /active_group_id/);
   assert.match(dashboard, /family_notes/);
   assert.match(app, /GroupBadge/);
-  assert.match(app, /onEditFamilyNotes/);
+  assert.match(app, /FamilyNotesEditor notes=\{familyNotes\} onChange=\{onFamilyNotesChange\}/);
   assert.match(app, /family-note-draft-card/);
   assert.match(app, /removeDraft/);
   assert.match(app, />\s*新增\s*</);
@@ -100,13 +100,11 @@ test("Dashboard honors an explicitly selected profile over stale group state", (
   assert.doesNotMatch(chooseProfile, /found && \(!requestedGroupId \|\| found\.group_id === requestedGroupId\)/);
 });
 
-test("Global care contact sheets support keyboard close and focus return", () => {
+test("Floating contact dock is removed from elder-facing pages", () => {
   const source = readProjectFile("care-wedo-app/src/App.jsx");
-  const dock = source.slice(source.indexOf("function GlobalCareContactDock"));
-  assert.match(dock, /lastContactTriggerRef/);
-  assert.match(dock, /contactSheetPrimaryRef/);
-  assert.match(dock, /event\.key === "Escape"/);
-  assert.match(dock, /\.focus\(\)/);
+  assert.doesNotMatch(source, /function GlobalCareContactDock/);
+  assert.doesNotMatch(source, /global-care-contact-dock/);
+  assert.match(source, /協作者管理中心/);
 });
 
 test("Mobile LINE login uses a real LIFF link instead of a script-only redirect", () => {
@@ -128,16 +126,15 @@ test("Mobile LINE login uses a real LIFF link instead of a script-only redirect"
 
 test("Medication view groups medicines by time and keeps one calm taken action", () => {
   const source = readProjectFile("care-wedo-app/src/App.jsx");
-  const css = readProjectFile("care-wedo-app/src/index.css");
   const medicationView = source.slice(source.indexOf("function MedicationView"));
   assert.match(medicationView, /groupMedicationsBySchedule/);
   assert.match(medicationView, /medicine-time-group/);
   assert.match(medicationView, /medicine-slot-actions/);
   assert.match(medicationView, /medicine-chip-button/);
-  assert.match(medicationView, /medicine-slot-picker/);
-  assert.match(medicationView, /刪除這顆藥/);
-  assert.match(medicationView, /onUpdateMedication/);
-  assert.match(medicationView, /onDeleteMedication/);
+  assert.doesNotMatch(medicationView, /medicine-slot-picker/);
+  assert.doesNotMatch(medicationView, /刪除這顆藥/);
+  assert.doesNotMatch(medicationView, /onUpdateMedication/);
+  assert.doesNotMatch(medicationView, /onDeleteMedication/);
   assert.match(medicationView, /getMedicationShortName/);
   assert.match(medicationView, /"我已吃完"/);
   assert.match(medicationView, /formatDateLabel\(todayDate\).*已記錄/);
@@ -147,8 +144,6 @@ test("Medication view groups medicines by time and keeps one calm taken action",
   assert.doesNotMatch(medicationView, /我忘記有沒有吃/);
   assert.match(source, /markMedicationSlotStatus/);
   assert.match(source, /taken_slots/);
-  assert.match(css, /\.medicine-manage-panel/);
-  assert.match(css, /\.medicine-delete-action/);
   assert.doesNotMatch(medicationView, /尚未記錄/);
 });
 
@@ -206,19 +201,16 @@ test("OCR quota limit opens a plan upgrade prompt instead of a raw error", () =>
   assert.match(css, /\.quota-upgrade-actions/);
 });
 
-test("Ask family opens an editable branded copy modal instead of a browser prompt", () => {
+test("Family assistance controls do not appear outside centralized settings", () => {
   const source = readProjectFile("care-wedo-app/src/App.jsx");
   const css = readProjectFile("care-wedo-app/src/index.css");
-  const askFamily = source.slice(source.indexOf("function AskFamilyModal"));
-  const handleAskFamily = source.slice(source.indexOf("function handleAskFamily"), source.indexOf("function handleMobileNavChange"));
 
-  assert.match(source, /familyHelpDraft/);
-  assert.match(askFamily, /textarea/);
-  assert.match(askFamily, /一鍵複製/);
-  assert.match(askFamily, /navigator\.clipboard\.writeText/);
-  assert.match(css, /\.ask-family-modal/);
-  assert.match(css, /\.ask-family-textarea/);
-  assert.doesNotMatch(handleAskFamily, /window\.prompt|window\.alert|navigator\.share/);
+  assert.doesNotMatch(source, /function AskFamilyModal/);
+  assert.doesNotMatch(source, /function handleAskFamily/);
+  assert.doesNotMatch(source, /familyHelpDraft/);
+  assert.doesNotMatch(css, /\.ask-family-modal/);
+  assert.doesNotMatch(css, /\.ask-family-textarea/);
+  assert.match(source, /協作者管理中心/);
 });
 
 test("Manual reminders derive title from type while preserving department", () => {
@@ -229,7 +221,7 @@ test("Manual reminders derive title from type while preserving department", () =
   const updateApi = readProjectFile("functions/api/appointments/[id].ts");
   const shared = readProjectFile("functions/_shared/supabase.ts");
   const manualModal = app.slice(app.indexOf("function buildReminderFormData"), app.indexOf("function OverviewView"));
-  const updateHandler = app.slice(app.indexOf("async function handleAppointmentUpdate"), app.indexOf("async function handleDeleteAppointment"));
+  const saveHandler = app.slice(app.indexOf("async function handleManualReminderSave"), app.indexOf("function handleAddAppointmentToCalendar"));
 
   assert.match(schema, /title text/);
   assert.match(migration, /add column if not exists title text/);
@@ -245,8 +237,9 @@ test("Manual reminders derive title from type while preserving department", () =
   assert.doesNotMatch(manualModal, /<label>提醒名稱<\/label>/);
   assert.match(manualModal, /title: typeLabel\(formData\.type\)/);
   assert.match(manualModal, /department: formData\.department,/);
-  assert.match(updateHandler, /title: payload\.title/);
-  assert.match(updateHandler, /department: payload\.department \|\| null/);
+  assert.match(saveHandler, /createAppointment\(\{ \.\.\.payload, profile_id: activeProfileId \}/);
+  assert.doesNotMatch(app, /async function handleAppointmentUpdate/);
+  assert.doesNotMatch(app, /async function handleDeleteAppointment/);
 });
 
 test("Care reminder detail text is highlighted on cards", () => {
@@ -256,32 +249,29 @@ test("Care reminder detail text is highlighted on cards", () => {
   assert.match(css, /box-decoration-break:\s*clone/);
 });
 
-test("Today task edit action is tucked into the lower-right corner", () => {
+test("Today task cards keep only the primary elder action", () => {
   const app = readProjectFile("care-wedo-app/src/App.jsx");
-  const css = readProjectFile("care-wedo-app/src/index.css");
   const overviewView = app.slice(app.indexOf("function OverviewView"), app.indexOf("function CalendarView"));
   const todayTaskCard = overviewView.slice(
     overviewView.indexOf('<article key={task.id}'),
     overviewView.indexOf("</article>"),
   );
-  const editRule = css.slice(css.indexOf(".elder-task-edit-action"), css.indexOf(".elder-task-time"));
 
-  assert.match(todayTaskCard, /elder-task-actions[\s\S]*elder-task-edit-action/);
-  assert.match(editRule, /grid-column:\s*1 \/ -1/);
-  assert.match(editRule, /justify-self:\s*end/);
-  assert.doesNotMatch(editRule, /position:\s*absolute/);
-  assert.doesNotMatch(todayTaskCard, /card-corner-edit/);
+  assert.match(todayTaskCard, /elder-primary-action/);
+  assert.doesNotMatch(todayTaskCard, /問家人/);
+  assert.doesNotMatch(todayTaskCard, /elder-task-edit-action/);
+  assert.doesNotMatch(todayTaskCard, /編輯/);
 });
 
 test("Today page makes photo-first care upload the primary action", () => {
   const app = readProjectFile("care-wedo-app/src/App.jsx");
   const overviewView = app.slice(app.indexOf("function OverviewView"), app.indexOf("function CalendarView"));
-  const uploadGuide = app.slice(app.indexOf("function UploadGuide"), app.indexOf("function AskFamilyModal"));
+  const uploadGuide = app.slice(app.indexOf("function UploadGuide"), app.indexOf("function EmptyGuide"));
 
   assert.match(overviewView, /今天要照顧的事/);
   assert.match(overviewView, /拍照新增照護資料/);
   assert.match(overviewView, /用藥、回診、處方箋、掛號單都從這裡開始。/);
-  assert.match(overviewView, /手動新增提醒/);
+  assert.doesNotMatch(overviewView, /手動新增提醒/);
   assert.doesNotMatch(overviewView, /最近下一筆照護事項/);
   assert.match(uploadGuide, /不用先分類/);
   assert.match(uploadGuide, /系統會先幫你整理/);
@@ -339,14 +329,14 @@ test("Records page defaults to future arrangements and loads history on demand",
   assert.match(recordsView, /record-type-chip record-type-icon/);
   assert.match(recordsView, /record-type-chip record-tag/);
   assert.match(recordsView, /record-status-copy/);
-  assert.match(recordsView, /onEditRecord\?\.\(record\)/);
+  assert.doesNotMatch(recordsView, /onEditRecord\?\.\(record\)/);
   assert.doesNotMatch(recordsView, /onDeleteRecord/);
   assert.doesNotMatch(recordsView, /danger-subtle/);
   assert.match(css, /\.record-mode-switch/);
   assert.match(css, /\.record-summary-button/);
   assert.match(css, /\.record-type-chip/);
   assert.match(css, /\.record-card-actions/);
-  assert.match(css, /\.record-edit-button/);
+  assert.doesNotMatch(recordsView, /record-edit-button/);
 });
 
 test("Family invite card keeps copy actions elder-friendly on mobile", () => {
@@ -406,16 +396,15 @@ test("Medication slot status API records dated logs with ownership checks", () =
   assert.match(dashboard, /dashboard\.medication_logs_missing/);
 });
 
-test("Global care contact dock uses a circular icon-only app avatar on mobile", () => {
+test("Collaborator controls are centralized in the settings page", () => {
   const app = readProjectFile("care-wedo-app/src/App.jsx");
   const css = readProjectFile("care-wedo-app/src/index.css");
-  const dock = app.slice(app.indexOf("function GlobalCareContactDock"));
-  assert.match(app, /CARE_WEDO_APP_ICON/);
-  assert.match(app, /android-chrome-512x512\.png/);
-  assert.doesNotMatch(dock, /care-contact-main-button with-label/);
-  assert.match(css, /\.care-contact-main-button\s*\{[^}]*width:\s*64px/s);
-  assert.match(css, /\.global-care-contact-dock\s*\{[^}]*right:\s*16px/s);
-  assert.doesNotMatch(css, /calc\(\(100vw - min\(100vw, 430px\)\) \/ 2 \+ 72px\)/);
+  assert.match(app, /collaborator-control-panel/);
+  assert.match(app, /協作者管理中心/);
+  assert.match(app, /編輯照護對象/);
+  assert.match(app, /手動新增提醒/);
+  assert.match(css, /\.management-action-grid/);
+  assert.doesNotMatch(app, /function GlobalCareContactDock/);
 });
 
 test("Family group creation uses a user feature flag, not group plans", () => {
@@ -536,9 +525,9 @@ test("Future appointment cards expose a calendar file export action", () => {
   assert.match(calendarView, />\s*複製提醒文字\s*</);
   assert.match(calendarView, /event-card-actions[\s\S]*card-corner-calendar/);
   assert.doesNotMatch(calendarView.slice(calendarView.indexOf('<div className="event-card-actions"'), calendarView.indexOf('<div className="event-type">')), /card-corner-edit/);
-  assert.match(calendarView, /event-type[\s\S]*event-edit-action/);
+  assert.doesNotMatch(calendarView, /event-edit-action/);
   assert.match(calendarView, />\s*拍照新增照護資料\s*</);
-  assert.match(calendarView, />\s*手動新增提醒\s*</);
+  assert.doesNotMatch(calendarView, />\s*手動新增提醒\s*</);
   assert.doesNotMatch(calendarView, />\s*拍照上傳\s*</);
 });
 

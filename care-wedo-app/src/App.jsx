@@ -23,22 +23,6 @@ function todayInTaipei() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Taipei" });
 }
 
-function buildAskFamilyMessage(task, careName) {
-  if (task?.kind === "medication") {
-    return `${careName} 忘記剛剛有沒有吃藥，請幫忙確認。先不要讓 ${careName} 重複吃藥。\n\n藥品：${task.title}\n時間：${task.time}\n內容：${[task.subtitle, task.detail].filter(Boolean).join("；") || "請協助查看這筆吃藥說明。"}`;
-  }
-
-  if (task?.kind === "appointment") {
-    return `${careName} 正在準備看診，請幫忙確認時間、醫院和要帶的東西。\n\n時間：${task.time}\n內容：${[task.title, task.subtitle, task.detail].filter(Boolean).join("；") || "請協助查看這筆看診提醒。"}`;
-  }
-
-  if (task) {
-    return `${careName} 正在看 Care WEDO 的「${task.title}」提醒，但看不太懂，需要家人協助確認。\n\n時間：${task.time}\n內容：${[task.subtitle, task.detail].filter(Boolean).join("；") || "請協助查看這筆照護提醒。"}`;
-  }
-
-  return `${careName} 正在看 Care WEDO 今日照護，但看不太懂，需要家人協助確認。`;
-}
-
 function isDateTodayOrFuture(dateValue, today = todayInTaipei()) {
   if (!dateValue) return false;
   const dateText = String(dateValue);
@@ -251,8 +235,6 @@ function mergeDashboardShell(profileData, shellData) {
 
 const AVATAR_MAX_SOURCE_SIZE = 5 * 1024 * 1024;
 const AVATAR_CANVAS_SIZE = 480;
-const CARE_WEDO_LINE_URL = "https://lin.ee/xzbyyvf";
-const CARE_WEDO_APP_ICON = "/android-chrome-512x512.png";
 const CARE_WEDO_SUPPORT_EMAIL = "Care@wedopr.com";
 const CARE_WEDO_PRICING = {
   baseCircleMonthly: 30,
@@ -280,10 +262,6 @@ function getCareTodayTitle(profile, fallbackName = "照護對象") {
   if (relationship === "father") return "爸爸的今日照護";
   if (relationship === "mother") return "媽媽的今日照護";
   return `${name}的今日照護`;
-}
-
-function getInitial(name = "家") {
-  return name.trim().charAt(0) || "家";
 }
 
 function fileToDataUrl(file) {
@@ -472,7 +450,7 @@ const LANDING_FAQS = [
   },
   {
     question: "資料有錯可以修改嗎？",
-    answer: "可以。家人登入後台後，可在查詢頁或吃藥提醒頁編輯資料；不需要的提醒也可以在編輯畫面中刪除。",
+    answer: "可以。家人或協作者登入後，統一到「照護圈」管理中心處理照護對象、手動提醒與家庭提醒；長輩頁面只保留查看、拍照新增與完成確認。",
   },
   {
     question: "Care WEDO 適合誰使用？",
@@ -1199,10 +1177,8 @@ function DashboardApp() {
   const [identity, setIdentity] = useState({ status: "loading", idToken: null, profile: null, message: null });
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [showManualReminder, setShowManualReminder] = useState(false);
-  const [editingAppointment, setEditingAppointment] = useState(null);
   const [showFamilyNotesEditor, setShowFamilyNotesEditor] = useState(false);
   const [showPlanDetails, setShowPlanDetails] = useState(false);
-  const [familyHelpDraft, setFamilyHelpDraft] = useState(null);
   const [familyNotes, setFamilyNotes] = useState([]);
   const dashboardRequestSeqRef = useRef(0);
   const dashboardCacheRef = useRef(new Map());
@@ -1483,7 +1459,6 @@ function DashboardApp() {
     today: todayDate,
     appointments,
   }), [appointments, todayDate]);
-  const showContactDock = !IS_PROD || isPersonalMode;
   const collaborators = dashboard?.collaborators || dashboard?.members || [];
 
   useEffect(() => {
@@ -1499,14 +1474,6 @@ function DashboardApp() {
     await updateFamilyNotes({ idToken: identity.idToken, groupId: activeGroupId, notes: nextNotes });
     setFamilyNotes(nextNotes);
     await loadDashboard(identity, activeProfileId, activeGroupId);
-  }
-
-  function handleAskFamily(task = null) {
-    const careName = selectedProfile?.display_name || patient.name || "家人";
-    setFamilyHelpDraft({
-      title: task?.title ? `問家人：${task.title}` : "問家人",
-      message: buildAskFamilyMessage(task, careName),
-    });
   }
 
   function handleMobileNavChange(sectionId) {
@@ -1725,50 +1692,6 @@ function DashboardApp() {
     }
   }
 
-  async function handleMedicationDelete(medication) {
-    if (!medication?.id || String(medication.id).startsWith("demo-med-")) return;
-
-    updateActiveDashboard((prev) => ({
-      ...prev,
-      medications: (prev.medications || []).filter((item) => String(item.id) !== String(medication.id)),
-    }));
-
-    try {
-      await patchMedication(medication.id, { active: false }, { idToken: identity.idToken });
-      await loadDashboard(identity, activeProfileId, activeGroupId);
-    } catch (err) {
-      if (err.code === "AUTH_REQUIRED") {
-        await resetCareWedoSessionAndReturnHome();
-        return;
-      }
-      await loadDashboard(identity, activeProfileId, activeGroupId);
-      throw err;
-    }
-  }
-
-  async function handleMedicationUpdate(medication, updates) {
-    if (!medication?.id || String(medication.id).startsWith("demo-med-")) return;
-
-    updateActiveDashboard((prev) => ({
-      ...prev,
-      medications: (prev.medications || []).map((item) => (
-        String(item.id) === String(medication.id) ? { ...item, ...updates } : item
-      )),
-    }));
-
-    try {
-      await patchMedication(medication.id, updates, { idToken: identity.idToken });
-      await loadDashboard(identity, activeProfileId, activeGroupId);
-    } catch (err) {
-      if (err.code === "AUTH_REQUIRED") {
-        await resetCareWedoSessionAndReturnHome();
-        return;
-      }
-      await loadDashboard(identity, activeProfileId, activeGroupId);
-      throw err;
-    }
-  }
-
   async function handleManualReminderSave(payload) {
     if (!activeProfileId) {
       throw new Error("請先選擇照護對象。");
@@ -1777,49 +1700,6 @@ function DashboardApp() {
     await loadDashboard(identity, activeProfileId, activeGroupId);
     setShowManualReminder(false);
   }
-
-  function handleEditAppointment(appointmentOrId) {
-    const appointment = typeof appointmentOrId === "object"
-      ? appointmentOrId
-      : appointments.find((apt) => String(apt.id) === String(appointmentOrId));
-    if (!appointment) return;
-    setEditingAppointment(appointment);
-  }
-
-  async function handleAppointmentUpdate(payload) {
-    if (!editingAppointment?.id) {
-      throw new Error("找不到要編輯的提醒。");
-    }
-    await patchAppointment(editingAppointment.id, {
-      type: payload.type,
-      date: payload.date || null,
-      time: payload.time || null,
-      title: payload.title || payload.department || payload.hospital || null,
-      hospital: payload.hospital || null,
-      department: payload.department || null,
-      doctor: payload.doctor || null,
-      location: payload.location || null,
-      fasting_required: Boolean(payload.fasting_required),
-      fasting_hours: payload.fasting_required ? payload.fasting_hours || 8 : null,
-      notes: payload.notes || null,
-      reminder_text: payload.notes || null,
-      status: "upcoming",
-    }, { idToken: identity.idToken });
-    await loadDashboard(identity, activeProfileId, activeGroupId);
-    setEditingAppointment(null);
-  }
-
-  async function handleDeleteAppointment(appointment, options = {}) {
-    if (!appointment?.id) return;
-    if (!options.skipConfirm && !window.confirm("確定要刪除這筆行程或提醒嗎？刪除後首頁與未來行程不會再顯示。")) return;
-    await patchAppointment(appointment.id, { status: "deleted" }, { idToken: identity.idToken });
-    updateActiveDashboard((prev) => ({
-      ...prev,
-      appointments: (prev.appointments || []).filter((apt) => String(apt.id) !== String(appointment.id)),
-    }));
-    await loadDashboard(identity, activeProfileId, activeGroupId);
-  }
-
   async function handleAddAppointmentToCalendar(appointment) {
     if (!appointment?.id) return;
 
@@ -1874,27 +1754,6 @@ function DashboardApp() {
     loadDashboard(identity, profileId, profileGroupId);
   }
 
-  function handleGroupChange(groupId) {
-    const groupProfile = careProfiles.find((profile) => profile.group_id === groupId);
-    const nextProfileId = groupProfile?.id || null;
-    trackEvent("frontend.group_switch", { groupId, profileId: nextProfileId });
-    setActiveGroupId(groupId);
-    setActiveProfileId(nextProfileId);
-    window.localStorage.setItem("care_wedo_active_group_id", String(groupId));
-    if (nextProfileId) {
-      window.localStorage.setItem("care_wedo_active_profile_id", String(nextProfileId));
-      persistActiveProfilePreference(nextProfileId);
-    } else {
-      window.localStorage.removeItem("care_wedo_active_profile_id");
-    }
-    const cached = dashboardCacheRef.current.get(`${groupId}:${nextProfileId || "default"}`);
-    if (cached) {
-      setDashboard(mergeDashboardShell(cached, dashboardShellRef.current));
-      setDashboardError(null);
-    }
-    loadDashboard(identity, nextProfileId, groupId);
-  }
-
   function handleSetupComplete() {
     // Reload dashboard after setup
     loadDashboard(identity, activeProfileId, activeGroupId);
@@ -1942,7 +1801,6 @@ function DashboardApp() {
               data={ocrData}
               onClose={() => setOcrData(null)}
               onSaveCorrections={handleOcrCorrectionsSave}
-              onAskFamily={handleAskFamily}
               onNavigate={(section) => {
                 setOcrData(null);
                 setActiveSection(section);
@@ -1959,7 +1817,6 @@ function DashboardApp() {
             <div className="profile-info-main">
               <div className="profile-name-row">
                 <p className="profile-name">{selectedProfile?.display_name || patient.name || "照護對象"}</p>
-                <button type="button" className="btn-edit-inline" onClick={() => setShowEditProfile(true)}>✎</button>
               </div>
               <p className="profile-note">{patient.dept || "常看科別待補"}・{patient.age || "年齡待補"}</p>
               {selectedProfile?.notes && (
@@ -2018,21 +1875,23 @@ function DashboardApp() {
             activeGroupId={activeGroupId}
             activeGroupName={activeGroup?.name || dashboard?.active_group_name}
             collaborators={collaborators}
-            onGroupChange={handleGroupChange}
-            onOpenProfile={() => setShowEditProfile(true)}
             onOpenFamily={() => openSection("settings")}
           />
 
           {activeSection !== "overview" && activeSection !== "settings" && (
+            <>
             <div className="toolbar">
               <SectionHeading section={SECTIONS.find(s => s.id === activeSection)} />
+            </div>
+            <section className="today-search-panel content-search-panel" aria-label={`${SECTIONS.find(s => s.id === activeSection)?.label || "照護資料"}搜尋`}>
               <SearchField
                 value={searchQuery}
                 onChange={setSearchQuery}
                 suggestions={searchSuggestions}
-                placeholder="找醫院、科別、藥名"
+                placeholder="依醫院、診別、藥名篩選"
               />
-            </div>
+            </section>
+            </>
           )}
 
           {activeSection === "settings" && (
@@ -2054,12 +1913,8 @@ function DashboardApp() {
               familyNotes={familyNotes}
               hasCareData={hasCareData}
               onOpenCalendar={() => openSection("calendar")}
-              onEditFamilyNotes={() => setShowFamilyNotesEditor(true)}
               onUpload={handleUploadClick}
-              onAddReminder={() => setShowManualReminder(true)}
-              onEditAppointment={handleEditAppointment}
               onComplete={handleComplete}
-              onAskFamily={handleAskFamily}
             />
           )}
 
@@ -2068,8 +1923,6 @@ function DashboardApp() {
               appointments={appointments}
               careName={selectedProfile?.display_name || patient.name}
               onUpload={handleUploadClick}
-              onAddReminder={() => setShowManualReminder(true)}
-              onEditAppointment={handleEditAppointment}
               onAddToCalendar={handleAddAppointmentToCalendar}
             />
           )}
@@ -2083,8 +1936,6 @@ function DashboardApp() {
               onClearSearch={() => setSearchQuery("")}
               onUpload={handleUploadClick}
               onTaken={handleMedicationTaken}
-              onDeleteMedication={handleMedicationDelete}
-              onUpdateMedication={handleMedicationUpdate}
             />
           )}
 
@@ -2093,7 +1944,6 @@ function DashboardApp() {
               records={allAppointments}
               searchQuery={searchQuery}
               onUpload={handleUploadClick}
-              onEditRecord={handleEditAppointment}
               canViewHistory={canViewHistory}
               onUpgradeRequired={(reason) => showPlanUpgradePrompt(reason, "records_history")}
             />
@@ -2111,6 +1961,7 @@ function DashboardApp() {
               onProfileChange={handleProfileChange}
               onGroupChange={() => loadDashboard(identity, activeProfileId, activeGroupId)}
               onEditProfile={() => setShowEditProfile(true)}
+              onAddReminder={() => setShowManualReminder(true)}
               familyNotes={familyNotes}
               onFamilyNotesChange={handleFamilyNotesChange}
               onLogout={logoutLineIdentity}
@@ -2152,27 +2003,6 @@ function DashboardApp() {
         />
       )}
 
-      {familyHelpDraft && (
-        <AskFamilyModal
-          title={familyHelpDraft.title}
-          initialMessage={familyHelpDraft.message}
-          onClose={() => setFamilyHelpDraft(null)}
-        />
-      )}
-
-      {editingAppointment && (
-        <ManualReminderModal
-          mode="edit"
-          initialAppointment={editingAppointment}
-          onClose={() => setEditingAppointment(null)}
-          onSave={handleAppointmentUpdate}
-          onDelete={async () => {
-            await handleDeleteAppointment(editingAppointment, { skipConfirm: true });
-            setEditingAppointment(null);
-          }}
-        />
-      )}
-
       {showPlanDetails && (
         <PlanDetailsModal onClose={() => setShowPlanDetails(false)} />
       )}
@@ -2194,19 +2024,6 @@ function DashboardApp() {
         onChange={handleMobileNavChange}
       />
     </main>
-    {showContactDock && (
-      <GlobalCareContactDock
-        botContact={{
-          label: "小管家",
-          avatarUrl: CARE_WEDO_APP_ICON,
-          lineUrl: CARE_WEDO_LINE_URL,
-          available: true,
-        }}
-        collaborators={collaborators}
-        context={activeSection}
-        onAskFamily={handleAskFamily}
-      />
-    )}
     </>
   );
 }
@@ -2525,7 +2342,7 @@ function GroupBadge({ groups = [], activeGroupId, activeGroupName, onChange, fal
   const [open, setOpen] = useState(false);
   const label = activeGroupName || groups.find((group) => group.id === activeGroupId)?.name || fallbackLabel;
 
-  if (!groups.length) {
+  if (!groups.length || !onChange) {
     return <span className="group-context-badge static">{label}</span>;
   }
 
@@ -2575,8 +2392,6 @@ function CareContextHeader({
   activeGroupId,
   activeGroupName,
   collaborators = [],
-  onGroupChange,
-  onOpenProfile,
   onOpenFamily,
 }) {
   const careName = selectedProfile?.display_name || patient?.name || "照護對象";
@@ -2599,9 +2414,9 @@ function CareContextHeader({
   return (
     <section className="care-context-header" aria-label={careTitle}>
       <div className="care-context-main">
-        <button type="button" className="care-context-avatar" onClick={onOpenProfile} aria-label={`編輯 ${careName} 的照護資料`}>
+        <div className="care-context-avatar" aria-hidden="true">
           <img src={selectedProfile?.avatar_url || aiAvatar} alt={`${careName} 頭像`} />
-        </button>
+        </div>
         <div className="care-context-copy">
           <p className="care-context-eyebrow">正在照護</p>
           <h2>{careName}</h2>
@@ -2616,7 +2431,6 @@ function CareContextHeader({
             groups={groups}
             activeGroupId={activeGroupId}
             activeGroupName={activeGroupName}
-            onChange={onGroupChange}
             fallbackLabel="尚未建立照護圈"
           />
         </div>
@@ -2670,167 +2484,6 @@ function getMedicationShortName(name = "藥") {
     .replace(/\s+/g, "")
     .slice(0, 4) || "藥";
 }
-
-function GlobalCareContactDock({ collaborators = [], botContact, onAskFamily }) {
-  const [expanded, setExpanded] = useState(false);
-  const [contactSheet, setContactSheet] = useState(null);
-  const [showAllCollaborators, setShowAllCollaborators] = useState(false);
-  const lastContactTriggerRef = useRef(null);
-  const contactSheetPrimaryRef = useRef(null);
-  const normalizedCollaborators = useMemo(() => collaborators
-    .map(normalizeCollaborator)
-    .filter((item) => item.canContact)
-    .sort((a, b) => {
-      if (a.role === "admin" && b.role !== "admin") return -1;
-      if (b.role === "admin" && a.role !== "admin") return 1;
-      return a.displayName.localeCompare(b.displayName, "zh-Hant");
-    }), [collaborators]);
-  const visibleCollaborators = normalizedCollaborators.length > 3
-    ? normalizedCollaborators.slice(0, 1)
-    : normalizedCollaborators.slice(0, 2);
-  const hiddenCollaboratorCount = Math.max(normalizedCollaborators.length - visibleCollaborators.length, 0);
-  const contactName = contactSheet?.name || "家人";
-
-  const restoreContactTriggerFocus = useCallback(() => {
-    requestAnimationFrame(() => lastContactTriggerRef.current?.focus());
-  }, []);
-
-  const closeContactSheet = useCallback(() => {
-    setContactSheet(null);
-    restoreContactTriggerFocus();
-  }, [restoreContactTriggerFocus]);
-
-  const closeCollaboratorList = useCallback(() => {
-    setShowAllCollaborators(false);
-    restoreContactTriggerFocus();
-  }, [restoreContactTriggerFocus]);
-
-  useEffect(() => {
-    if (!contactSheet && !showAllCollaborators) return undefined;
-
-    contactSheetPrimaryRef.current?.focus();
-
-    function handleSheetKeyDown(event) {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        if (contactSheet) {
-          closeContactSheet();
-        } else {
-          closeCollaboratorList();
-        }
-      }
-    }
-
-    window.addEventListener("keydown", handleSheetKeyDown);
-    return () => window.removeEventListener("keydown", handleSheetKeyDown);
-  }, [closeCollaboratorList, closeContactSheet, contactSheet, showAllCollaborators]);
-
-  function openBotSheet(event) {
-    lastContactTriggerRef.current = event.currentTarget;
-    setContactSheet({ type: "bot", name: botContact.label });
-  }
-
-  function openCollaboratorSheet(collaborator, triggerElement = null) {
-    if (triggerElement) lastContactTriggerRef.current = triggerElement;
-    setContactSheet({
-      type: "family",
-      name: collaborator.displayName,
-    });
-  }
-
-  function handleContactConfirm() {
-    if (contactSheet?.type === "bot") {
-      window.open(botContact.lineUrl || CARE_WEDO_LINE_URL, "_blank", "noopener,noreferrer");
-    } else {
-      onAskFamily(null);
-    }
-    setContactSheet(null);
-    setExpanded(false);
-  }
-
-  return (
-    <>
-      {expanded && (
-        <button type="button" className="care-contact-dismiss-layer" onClick={() => setExpanded(false)} aria-label="收合照護協助入口" />
-      )}
-      <aside className={`global-care-contact-dock ${expanded ? "is-expanded" : ""}`} aria-label="照護協助入口">
-        <button
-          type="button"
-          className="care-contact-main-button"
-          onClick={() => setExpanded((current) => !current)}
-          aria-expanded={expanded}
-          aria-label={expanded ? "收合照護協助入口" : "展開照護協助入口"}
-        >
-          <img src={botContact.avatarUrl || CARE_WEDO_APP_ICON} alt="" />
-        </button>
-        {expanded && botContact.available && (
-          <button type="button" className="care-contact-item with-label" onClick={openBotSheet} aria-label="問 Care WEDO 照護小管家">
-            <img src={botContact.avatarUrl || CARE_WEDO_APP_ICON} alt="" />
-            <span>{botContact.label}</span>
-          </button>
-        )}
-        {expanded && visibleCollaborators.map((collaborator) => (
-          <button
-            key={collaborator.id}
-            type="button"
-            className="care-contact-item"
-            onClick={(event) => openCollaboratorSheet(collaborator, event.currentTarget)}
-            aria-label={`聯絡 ${collaborator.displayName}`}
-            title={collaborator.displayName}
-          >
-            {collaborator.avatarUrl ? <img src={collaborator.avatarUrl} alt="" /> : <span>{getInitial(collaborator.displayName)}</span>}
-          </button>
-        ))}
-        {expanded && hiddenCollaboratorCount > 0 && (
-          <button type="button" className="care-contact-more" onClick={(event) => {
-            lastContactTriggerRef.current = event.currentTarget;
-            setShowAllCollaborators(true);
-          }} aria-label={`顯示其他 ${hiddenCollaboratorCount} 位家人`}>
-            +{hiddenCollaboratorCount}
-          </button>
-        )}
-      </aside>
-
-      {showAllCollaborators && (
-        <div className="contact-sheet-backdrop" role="presentation" onClick={closeCollaboratorList}>
-          <section className="contact-sheet" role="dialog" aria-modal="true" aria-labelledby="collaborator-list-title" onClick={(event) => event.stopPropagation()}>
-            <h3 id="collaborator-list-title">可以聯絡的家人</h3>
-            <div className="collaborator-list">
-              {normalizedCollaborators.map((collaborator, index) => (
-                <button key={collaborator.id} type="button" ref={index === 0 ? contactSheetPrimaryRef : null} onClick={() => {
-                  setShowAllCollaborators(false);
-                  openCollaboratorSheet(collaborator);
-                }}>
-                  {collaborator.avatarUrl ? <img src={collaborator.avatarUrl} alt="" /> : <span>{getInitial(collaborator.displayName)}</span>}
-                  {collaborator.displayName}
-                </button>
-              ))}
-            </div>
-            <button type="button" className="secondary-action" onClick={closeCollaboratorList}>取消</button>
-          </section>
-        </div>
-      )}
-
-      {contactSheet && (
-        <div className="contact-sheet-backdrop" role="presentation" onClick={closeContactSheet}>
-          <section className="contact-sheet" role="dialog" aria-modal="true" aria-labelledby="contact-sheet-title" onClick={(event) => event.stopPropagation()}>
-            <h3 id="contact-sheet-title">{contactSheet.type === "bot" ? "要問 Care WEDO 照護小管家嗎？" : `要聯絡 ${contactName} 嗎？`}</h3>
-            <button type="button" className="primary-action" ref={contactSheetPrimaryRef} onClick={handleContactConfirm}>
-              {contactSheet.type === "bot" ? "打開 LINE 對話" : "傳 LINE 訊息"}
-            </button>
-            {contactSheet.type !== "bot" && (
-              <button type="button" className="secondary-action" onClick={() => window.alert("請到 LINE 聯絡人頁面選擇語音通話。")}>
-                打 LINE 語音
-              </button>
-            )}
-            <button type="button" className="secondary-action subtle" onClick={closeContactSheet}>取消</button>
-          </section>
-        </div>
-      )}
-    </>
-  );
-}
-
 
 const SCAN_STEPS = ["讀取照片", "辨識文字", "整理提醒"];
 
@@ -2906,71 +2559,6 @@ function UploadGuide({ onConfirm, onTextSubmit, onClose }) {
   );
 }
 
-function AskFamilyModal({ title, initialMessage, onClose }) {
-  const [message, setMessage] = useState(initialMessage || "");
-  const [copyStatus, setCopyStatus] = useState("");
-
-  async function handleCopy() {
-    const text = message.trim();
-    if (!text) {
-      setCopyStatus("請先輸入要傳給家人的文字。");
-      return;
-    }
-
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(text);
-      } else {
-        const textarea = document.createElement("textarea");
-        textarea.value = text;
-        textarea.setAttribute("readonly", "");
-        textarea.style.position = "fixed";
-        textarea.style.left = "-9999px";
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand("copy");
-        document.body.removeChild(textarea);
-      }
-      setCopyStatus("已複製，可以貼到 LINE 給家人。");
-    } catch {
-      setCopyStatus("目前無法自動複製，請長按文字框選取後複製。");
-    }
-  }
-
-  return (
-    <div className="modal-overlay ask-family-overlay" onClick={onClose}>
-      <div className="modal-content ask-family-modal" role="dialog" aria-modal="true" aria-labelledby="ask-family-title" onClick={(event) => event.stopPropagation()}>
-        <div className="modal-header ask-family-header">
-          <div>
-            <p className="modal-kicker">家人協助</p>
-            <h2 id="ask-family-title">{title || "問家人"}</h2>
-          </div>
-          <button type="button" onClick={onClose} className="btn-close" aria-label="關閉">✕</button>
-        </div>
-        <div className="modal-body ask-family-body">
-          <p className="ask-family-intro">可以先修改內容，再一鍵複製貼到 LINE 家庭群組。</p>
-          <label className="ask-family-label" htmlFor="ask-family-message">要傳給家人的文字</label>
-          <textarea
-            id="ask-family-message"
-            className="ask-family-textarea"
-            value={message}
-            onChange={(event) => {
-              setMessage(event.target.value);
-              setCopyStatus("");
-            }}
-            rows={10}
-          />
-          {copyStatus && <p className="ask-family-copy-status" aria-live="polite">{copyStatus}</p>}
-        </div>
-        <div className="modal-footer ask-family-actions">
-          <button type="button" className="secondary-action" onClick={onClose}>關閉</button>
-          <button type="button" className="primary-action" onClick={handleCopy}>一鍵複製</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function EmptyGuide({ title, description, primaryLabel, onPrimary, secondaryLabel, onSecondary }) {
   return (
     <div className="empty-guide">
@@ -3005,11 +2593,9 @@ function SearchField({ value, onChange, suggestions = [], placeholder = "搜尋"
         <div className="search-suggestions" aria-label="常用搜尋關鍵字">
           {suggestions.map((suggestion) => {
             const label = typeof suggestion === "string" ? suggestion : suggestion.label;
-            const count = typeof suggestion === "string" ? null : suggestion.count;
             return (
               <button type="button" key={label} onClick={() => onChange(label)}>
                 <span className="search-suggestion-label">{label}</span>
-                {count !== null && <span className="search-suggestion-count">（{count}）</span>}
               </button>
             );
           })}
@@ -3254,12 +2840,8 @@ function OverviewView({
   familyNotes,
   hasCareData,
   onOpenCalendar,
-  onEditFamilyNotes,
   onUpload,
-  onAddReminder,
-  onEditAppointment,
   onComplete,
-  onAskFamily,
 }) {
   const [locallyDoneTaskIds, setLocallyDoneTaskIds] = useState(() => new Set());
 
@@ -3285,7 +2867,6 @@ function OverviewView({
         <div className="today-main-actions" aria-label="今天常用操作">
           <button type="button" className="primary-action" onClick={onUpload}>拍照新增照護資料</button>
           <p className="today-upload-helper">用藥、回診、處方箋、掛號單都從這裡開始。</p>
-          <button type="button" className="secondary-action" onClick={onAddReminder}>手動新增提醒</button>
         </div>
       </section>
 
@@ -3321,15 +2902,7 @@ function OverviewView({
                     <button type="button" className="primary-action elder-primary-action" onClick={() => handlePrimaryAction(task)} disabled={isDone}>
                       {isDone ? "已記好了" : task.primaryActionLabel}
                     </button>
-                    <button type="button" className="secondary-action elder-secondary-action subtle" onClick={() => onAskFamily(task)}>
-                      問家人
-                    </button>
                   </div>
-                  {task.kind === "appointment" && (
-                    <button type="button" className="elder-task-edit-action" onClick={() => onEditAppointment(task.sourceId)} aria-label={`編輯 ${task.title}`}>
-                      編輯
-                    </button>
-                  )}
                 </article>
               );
             })}
@@ -3366,9 +2939,6 @@ function OverviewView({
         <article className="summary-panel">
           <div className="panel-title-row">
             <p className="panel-eyebrow">需要多留意</p>
-            <button type="button" className="card-corner-edit inline-edit-button" onClick={onEditFamilyNotes}>
-              編輯
-            </button>
           </div>
           <div className="attention-list">
             {urgentItems.length || familyNotes.length ? (
@@ -3394,7 +2964,7 @@ function OverviewView({
   );
 }
 
-function CalendarView({ appointments, careName = "", onUpload, onAddReminder, onEditAppointment, onAddToCalendar }) {
+function CalendarView({ appointments, careName = "", onUpload, onAddToCalendar }) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [calendarActionAppointment, setCalendarActionAppointment] = useState(null);
   const [calendarActionNotice, setCalendarActionNotice] = useState("");
@@ -3484,7 +3054,6 @@ function CalendarView({ appointments, careName = "", onUpload, onAddReminder, on
       <section className="event-list" aria-label="看診和領藥清單">
         <div className="inline-action-row event-list-actions">
           <button type="button" className="primary-action" onClick={onUpload}>拍照新增照護資料</button>
-          <button type="button" className="secondary-action" onClick={onAddReminder}>手動新增提醒</button>
         </div>
         {futureAppointments.length ? futureAppointments.map((apt) => (
           <article key={apt.id} id={`event-${apt.date}`} className="event-row">
@@ -3501,9 +3070,6 @@ function CalendarView({ appointments, careName = "", onUpload, onAddReminder, on
               {apt.location && <p className="location-line">地點：{apt.location}</p>}
               {apt.notes && <p className="soft-note">{apt.notes}</p>}
             </div>
-            <button type="button" className="event-edit-action" onClick={() => onEditAppointment(apt)} aria-label={`編輯 ${apt.title || apt.department || "提醒"}`}>
-              編輯
-            </button>
           </article>
         )) : (
           <EmptyGuide
@@ -3511,8 +3077,6 @@ function CalendarView({ appointments, careName = "", onUpload, onAddReminder, on
             description="可以先拍掛號單、處方箋或提醒單，Care WEDO 會幫你整理下一次回診、檢查或領藥時間。"
             primaryLabel="拍照新增照護資料"
             onPrimary={onUpload}
-            secondaryLabel="手動新增提醒"
-            onSecondary={onAddReminder}
           />
         )}
       </section>
@@ -3681,9 +3245,8 @@ function MedicationSummarySheet({ medications, onClose }) {
   );
 }
 
-function MedicationView({ medications, medicationSummarySource = medications, totalMedicationCount = 0, searchQuery = "", onClearSearch, onUpload, onTaken, onDeleteMedication, onUpdateMedication }) {
+function MedicationView({ medications, medicationSummarySource = medications, totalMedicationCount = 0, searchQuery = "", onClearSearch, onUpload, onTaken }) {
   const [savingSlot, setSavingSlot] = useState(null);
-  const [savingMedicationId, setSavingMedicationId] = useState(null);
   const [expandedMedicationId, setExpandedMedicationId] = useState(null);
   const [showMedicationSummary, setShowMedicationSummary] = useState(false);
   const [locallyTakenSlots, setLocallyTakenSlots] = useState(() => new Set());
@@ -3710,40 +3273,6 @@ function MedicationView({ medications, medicationSummarySource = medications, to
       }
     } finally {
       setSavingSlot(null);
-    }
-  }
-
-  async function handleSlotToggle(medication, slotValue) {
-    const current = getMedicationSlotValues(medication);
-    if (current.has(slotValue) && current.size > 1) {
-      current.delete(slotValue);
-    } else {
-      current.add(slotValue);
-      if (slotValue !== "other") current.delete("other");
-      if (slotValue === "other") {
-        current.clear();
-        current.add("other");
-      }
-    }
-    const nextSlots = MEDICATION_SLOT_OPTIONS
-      .map((option) => option.value)
-      .filter((value) => current.has(value));
-    setSavingMedicationId(medication.id);
-    try {
-      await onUpdateMedication?.(medication, { time_slot: nextSlots.join(",") });
-    } finally {
-      setSavingMedicationId(null);
-    }
-  }
-
-  async function handleDeleteMedication(medication) {
-    const confirmed = window.confirm(`確定要刪除「${medication.name || "這顆藥"}」嗎？刪除後不會再出現在吃藥提醒。`);
-    if (!confirmed) return;
-    setSavingMedicationId(medication.id);
-    try {
-      await onDeleteMedication?.(medication);
-    } finally {
-      setSavingMedicationId(null);
     }
   }
 
@@ -3806,33 +3335,6 @@ function MedicationView({ medications, medicationSummarySource = medications, to
                         {med.purpose && <div><dt>用途</dt><dd>{med.purpose}</dd></div>}
                         {med.warnings && <div><dt>注意</dt><dd>{med.warnings}</dd></div>}
                       </dl>
-                      <div className="medicine-manage-panel">
-                        <p>這顆藥要在哪些時段提醒？</p>
-                        <div className="medicine-slot-picker" role="group" aria-label={`${med.name || "藥物"}提醒時段`}>
-                          {MEDICATION_SLOT_OPTIONS.map((option) => {
-                            const selected = getMedicationSlotValues(med).has(option.value);
-                            return (
-                              <button
-                                key={option.value}
-                                type="button"
-                                className={selected ? "is-active" : ""}
-                                onClick={() => handleSlotToggle(med, option.value)}
-                                disabled={savingMedicationId === med.id}
-                              >
-                                {option.label}
-                              </button>
-                            );
-                          })}
-                        </div>
-                        <button
-                          type="button"
-                          className="medicine-delete-action"
-                          onClick={() => handleDeleteMedication(med)}
-                          disabled={savingMedicationId === med.id}
-                        >
-                          刪除這顆藥
-                        </button>
-                      </div>
                     </div>
                   )}
                 </article>
@@ -3930,7 +3432,7 @@ async function copyText(text) {
   document.body.removeChild(textarea);
 }
 
-function RecordsView({ records, searchQuery, onUpload, onEditRecord, canViewHistory = true, onUpgradeRequired }) {
+function RecordsView({ records, searchQuery, onUpload, canViewHistory = true, onUpgradeRequired }) {
   const [mode, setMode] = useState("future");
   const [copyNotice, setCopyNotice] = useState({ id: null, message: "" });
   const activeMode = canViewHistory ? mode : "future";
@@ -4032,9 +3534,6 @@ function RecordsView({ records, searchQuery, onUpload, onEditRecord, canViewHist
                   </div>
                   <div className="record-card-actions">
                     {copyNotice.id === record.id && <span className="record-copy-notice">{copyNotice.message}</span>}
-                    <button type="button" className="record-edit-button" onClick={() => onEditRecord?.(record)}>
-                      編輯
-                    </button>
                   </div>
                 </article>
               );
@@ -4062,6 +3561,8 @@ function SettingsView({
   activeProfileId,
   onProfileChange,
   onGroupChange,
+  onEditProfile,
+  onAddReminder,
   familyNotes,
   onFamilyNotesChange,
   onLogout,
@@ -4070,6 +3571,17 @@ function SettingsView({
 
   return (
     <div className="settings-grid">
+      <section className="summary-panel wide-panel collaborator-control-panel">
+        <p className="panel-eyebrow">協作者管理中心</p>
+        <h3>設定與資料整理都集中在這裡。</h3>
+        <p>長輩頁面只保留拍照新增、查看提醒與完成確認；編輯資料、手動新增、家人提醒由照護圈協作者在這裡處理。</p>
+        <div className="management-action-grid">
+          <button type="button" className="primary-action" onClick={onEditProfile}>編輯照護對象</button>
+          <button type="button" className="secondary-action" onClick={onAddReminder}>手動新增提醒</button>
+          <a className="secondary-action" href={`mailto:${CARE_WEDO_SUPPORT_EMAIL}`}>資料協助</a>
+        </div>
+      </section>
+
       <section className="summary-panel wide-panel billing-estimate-panel">
         <div>
           <p className="panel-eyebrow">本月費用預估</p>

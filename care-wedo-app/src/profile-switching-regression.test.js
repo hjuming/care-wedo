@@ -36,11 +36,12 @@ test("Dashboard keeps profile shell data separate from profile record data", () 
   assert.match(appSource, /mergeDashboardShell/);
 });
 
-test("Dashboard supports switching family groups from the today page", () => {
+test("Dashboard keeps family group context visible without switching from the today page", () => {
   assert.match(appSource, /activeGroupId/);
   assert.match(appSource, /care_wedo_active_group_id/);
   assert.match(appSource, /function GroupBadge/);
-  assert.match(appSource, /frontend\.group_switch/);
+  assert.match(appSource, /group-context-badge static/);
+  assert.doesNotMatch(appSource, /frontend\.group_switch/);
 });
 
 test("Profile switcher groups care profiles and persists drag order", () => {
@@ -87,13 +88,13 @@ test("Mobile care pages keep important Chinese text readable", () => {
   assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.invite-code-row\s*\{[\s\S]*grid-template-columns: 1fr/);
 });
 
-test("iPad portrait uses bottom navigation and keeps the contact dock clear", () => {
+test("iPad portrait uses bottom navigation without floating management controls", () => {
   const css = readProjectFile("care-wedo-app/src/index.css");
 
   assert.match(css, /@media \(min-width: 761px\) and \(max-width: 1024px\) and \(orientation: portrait\)[\s\S]*\.side-rail\s*\{[\s\S]*display: none/);
   assert.match(css, /@media \(min-width: 761px\) and \(max-width: 1024px\) and \(orientation: portrait\)[\s\S]*\.mobile-bottom-nav\s*\{[\s\S]*display: grid/);
   assert.match(css, /@media \(min-width: 761px\) and \(max-width: 1024px\) and \(orientation: portrait\)[\s\S]*\.dashboard-grid\s*\{[\s\S]*grid-template-columns: 1fr/);
-  assert.match(css, /@media \(min-width: 761px\) and \(max-width: 1024px\) and \(orientation: portrait\)[\s\S]*\.global-care-contact-dock\s*\{[\s\S]*bottom: calc\(104px \+ env\(safe-area-inset-bottom\)\)/);
+  assert.doesNotMatch(css, /global-care-contact-dock/);
 });
 
 test("iPad landscape search controls stay inside the viewport", () => {
@@ -102,7 +103,7 @@ test("iPad landscape search controls stay inside the viewport", () => {
   assert.match(css, /\.toolbar\s*\{[\s\S]*flex-wrap: wrap/);
   assert.match(css, /\.section-heading-row\s*\{[\s\S]*min-width: 0/);
   assert.match(css, /\.search-box\s*\{[\s\S]*min-width: 0/);
-  assert.match(css, /\.search-suggestions\s*\{[\s\S]*repeat\(auto-fit, minmax\(96px, 1fr\)\)/);
+  assert.match(css, /\.search-suggestions\s*\{[\s\S]*repeat\(6, minmax\(0, 1fr\)\)/);
   assert.match(css, /@media \(min-width: 761px\) and \(max-width: 1080px\) and \(orientation: landscape\)[\s\S]*\.dashboard-grid\s*\{[\s\S]*grid-template-columns: 260px minmax\(0, 1fr\)/);
   assert.match(css, /@media \(min-width: 761px\) and \(max-width: 1080px\) and \(orientation: landscape\)[\s\S]*\.content-area\s*\{[\s\S]*overflow-x: clip/);
   assert.match(css, /@media \(min-width: 761px\) and \(max-width: 1080px\) and \(orientation: landscape\)[\s\S]*\.toolbar \.search-box\s*\{[\s\S]*flex-basis: min\(420px, 100%\)/);

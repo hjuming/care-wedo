@@ -71,6 +71,10 @@ function splitSuggestionText(value) {
   return [text];
 }
 
+function toShortSuggestionLabel(value) {
+  return Array.from(String(value || "").trim().replace(/\s+/g, "")).slice(0, 4).join("");
+}
+
 function todayDateString() {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Taipei",
@@ -115,7 +119,7 @@ export function buildSearchSuggestions(items = [], limit = 6, today = todayDateS
   const suggestions = Array.from(scores.values());
   const hasFutureItems = suggestions.some((item) => item.futureCount > 0);
 
-  return suggestions
+  const rankedSuggestions = suggestions
     .sort((a, b) => {
       if (hasFutureItems) {
         return b.futureCount - a.futureCount
@@ -127,6 +131,16 @@ export function buildSearchSuggestions(items = [], limit = 6, today = todayDateS
         || b.score - a.score
         || a.label.localeCompare(b.label, "zh-Hant");
     })
-    .map(({ label, futureCount }) => ({ label, count: futureCount }))
-    .slice(0, limit);
+    .map(({ label, futureCount }) => ({ label: toShortSuggestionLabel(label), count: futureCount }))
+    .filter((item) => item.label.length >= 2);
+
+  const seenLabels = new Set();
+  const result = [];
+  for (const item of rankedSuggestions) {
+    if (seenLabels.has(item.label)) continue;
+    seenLabels.add(item.label);
+    result.push(item);
+    if (result.length >= limit) break;
+  }
+  return result;
 }

@@ -37,7 +37,7 @@ test("OcrResult exposes an editable correction flow", () => {
 test("OcrResult uses confirm-first actions before formalizing OCR records", () => {
   assert.match(ocrResultSource, /正確，存起來/);
   assert.match(ocrResultSource, /有錯，我要修改/);
-  assert.match(ocrResultSource, /我看不懂，問家人/);
+  assert.doesNotMatch(ocrResultSource, /問家人/);
   assert.match(ocrResultSource, /我先幫你分成/);
   assert.match(ocrResultSource, /照護提醒/);
   assert.match(ocrResultSource, /種用藥/);

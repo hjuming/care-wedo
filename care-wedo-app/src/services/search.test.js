@@ -40,9 +40,10 @@ test("buildSearchSuggestions extracts useful uploaded-data keywords first", () =
   assert.equal(labels.includes("陳安心"), true);
   assert.equal(labels.includes("領藥"), true);
   assert.equal(labels.includes("記得領藥"), false);
+  assert.equal(labels.every((label) => Array.from(label).length <= 4), true);
 });
 
-test("buildSearchSuggestions keeps six tags and shows future counts", () => {
+test("buildSearchSuggestions keeps six short unique tags and shows future counts", () => {
   const suggestions = buildSearchSuggestions([
     { type: "clinic_visit", hospital: "台大醫院", department: "內科", date: "2026-06-01" },
     { type: "clinic_visit", hospital: "台大醫院", department: "內科", date: "2026-06-03" },
@@ -54,8 +55,25 @@ test("buildSearchSuggestions keeps six tags and shows future counts", () => {
   ], 6, "2026-05-15");
 
   assert.equal(suggestions.length, 6);
+  assert.equal(new Set(suggestions.map((item) => item.label)).size, 6);
+  assert.equal(suggestions.every((item) => Array.from(item.label).length <= 4), true);
   assert.deepEqual(suggestions[0], { label: "台大醫院", count: 3 });
   assert.equal(suggestions.some((item) => item.label === "門診" && item.count === 2), true);
+});
+
+test("buildSearchSuggestions shortens long labels before de-duplicating", () => {
+  const suggestions = buildSearchSuggestions([
+    { type: "clinic_visit", hospital: "台大醫院新竹分院", department: "耳鼻喉科", date: "2026-06-01" },
+    { type: "clinic_visit", hospital: "台大醫院新竹院區", department: "耳鼻喉科", date: "2026-06-02" },
+    { type: "inspection", hospital: "國泰醫院汐止院區", department: "心臟內科", date: "2026-06-03" },
+    { type: "refill_reminder", hospital: "社區慢箋藥局", department: "慢箋領藥", date: "2026-06-04" },
+  ], 6, "2026-05-15");
+  const labels = suggestions.map((item) => item.label);
+
+  assert.equal(labels.includes("台大醫院"), true);
+  assert.equal(labels.filter((label) => label === "台大醫院").length, 1);
+  assert.equal(labels.every((label) => Array.from(label).length <= 4), true);
+  assert.equal(new Set(labels).size, labels.length);
 });
 
 test("buildSearchSuggestions ranks history when no future records exist but displays zero", () => {

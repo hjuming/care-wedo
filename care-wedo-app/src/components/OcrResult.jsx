@@ -41,7 +41,7 @@ function cleanMedicationDraft(med) {
   return { ...med };
 }
 
-export default function OcrResult({ data, onClose, onSaveCorrections, onAskFamily, onNavigate }) {
+export default function OcrResult({ data, onClose, onSaveCorrections, onNavigate }) {
   const parsed = data?.data || data;
   const saved = data?.saved || {};
   const [editing, setEditing] = useState(false);
@@ -136,9 +136,6 @@ export default function OcrResult({ data, onClose, onSaveCorrections, onAskFamil
               </button>
               <button type="button" className="secondary-action compact-action" onClick={() => setEditing(true)} disabled={saving}>
                 有錯，我要修改
-              </button>
-              <button type="button" className="secondary-action compact-action" onClick={() => onAskFamily?.(null)} disabled={saving}>
-                我看不懂，問家人
               </button>
             </>
           )}
