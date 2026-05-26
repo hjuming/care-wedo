@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildAppointmentCalendarRequest, buildDashboardRequest, buildGoogleCalendarEventUrl, buildLocalAppointmentCalendarFile, isAuthFailureMessage } from "./api.js";
+import { buildAppointmentCalendarRequest, buildDashboardRequest, buildGoogleCalendarEventUrl, buildLocalAppointmentCalendarFile, buildSessionRequest, isAuthFailureMessage } from "./api.js";
 
 test("buildDashboardRequest returns the dashboard endpoint without identity data in demo mode", () => {
   assert.deepEqual(buildDashboardRequest("/api"), {
@@ -46,6 +46,26 @@ test("buildAppointmentCalendarRequest targets an authenticated ICS download", ()
   assert.deepEqual(buildAppointmentCalendarRequest("/api", 42, { idToken: "token.123" }), {
     url: "/api/appointments/42/calendar.ics",
     init: {
+      headers: {
+        Authorization: "Bearer token.123",
+      },
+    },
+  });
+});
+
+test("buildSessionRequest creates same-origin session requests", () => {
+  assert.deepEqual(buildSessionRequest("/api", "GET"), {
+    url: "/api/session",
+    init: {
+      method: "GET",
+      credentials: "same-origin",
+    },
+  });
+  assert.deepEqual(buildSessionRequest("/api", "POST", { idToken: "token.123" }), {
+    url: "/api/session",
+    init: {
+      method: "POST",
+      credentials: "same-origin",
       headers: {
         Authorization: "Bearer token.123",
       },

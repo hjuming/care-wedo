@@ -124,6 +124,45 @@ test("Mobile LINE login uses a real LIFF link instead of a script-only redirect"
   assert.match(css, /\.nav-login-line-login/);
 });
 
+test("Care WEDO session cookie keeps returning users signed in", () => {
+  const shared = readProjectFile("functions/_shared/supabase.ts");
+  const sessionApi = readProjectFile("functions/api/session.ts");
+  const middleware = readProjectFile("functions/api/_middleware.ts");
+  const liff = readProjectFile("care-wedo-app/src/services/liff.js");
+  const app = readProjectFile("care-wedo-app/src/App.jsx");
+
+  assert.match(shared, /CARE_WEDO_SESSION_COOKIE = "care_wedo_session"/);
+  assert.match(shared, /HttpOnly/);
+  assert.match(shared, /Secure/);
+  assert.match(shared, /SameSite=Lax/);
+  assert.match(shared, /crypto\.subtle\.sign\("HMAC"/);
+  assert.match(shared, /verifyCareWedoSessionToken/);
+  assert.match(shared, /getCookieValue\(request, CARE_WEDO_SESSION_COOKIE\)/);
+  assert.match(sessionApi, /onRequestPost/);
+  assert.match(sessionApi, /Set-Cookie/);
+  assert.match(sessionApi, /onRequestDelete/);
+  assert.match(middleware, /pathname === "\/api\/session"/);
+  assert.match(liff, /fetchSessionIdentity/);
+  assert.match(liff, /createServerSession\(idToken\)/);
+  assert.match(liff, /clearServerSession/);
+  assert.match(app, /window\.history\.replaceState\(null, "", "\/app"\)/);
+});
+
+test("LINE links use an external browser handoff page", () => {
+  const app = readProjectFile("care-wedo-app/src/App.jsx");
+  const routing = readProjectFile("care-wedo-app/src/routing.js");
+  const liff = readProjectFile("care-wedo-app/src/services/liff.js");
+  const callback = readProjectFile("functions/callback.ts");
+  const reminders = readProjectFile("functions/api/cron/reminders.ts");
+
+  assert.match(routing, /external-open/);
+  assert.match(app, /function ExternalOpenPage/);
+  assert.match(app, /用瀏覽器開啟/);
+  assert.match(liff, /liff\.openWindow\(\{ url, external: true \}\)/);
+  assert.match(callback, /CARE_WEDO_OPEN_URL = "https:\/\/care\.wedopr\.com\/app\/open"/);
+  assert.match(reminders, /https:\/\/care\.wedopr\.com\/app\/open/);
+});
+
 test("Medication view groups medicines by time and keeps one calm taken action", () => {
   const source = readProjectFile("care-wedo-app/src/App.jsx");
   const medicationView = source.slice(source.indexOf("function MedicationView"));
@@ -238,8 +277,30 @@ test("Manual reminders derive title from type while preserving department", () =
   assert.match(manualModal, /title: typeLabel\(formData\.type\)/);
   assert.match(manualModal, /department: formData\.department,/);
   assert.match(saveHandler, /createAppointment\(\{ \.\.\.payload, profile_id: activeProfileId \}/);
-  assert.doesNotMatch(app, /async function handleAppointmentUpdate/);
-  assert.doesNotMatch(app, /async function handleDeleteAppointment/);
+  assert.match(app, /async function handleAppointmentUpdateSave/);
+  assert.match(app, /async function handleAppointmentDelete/);
+});
+
+test("Appointment cards expose edit and soft-delete controls with scoped APIs", () => {
+  const app = readProjectFile("care-wedo-app/src/App.jsx");
+  const api = readProjectFile("care-wedo-app/src/services/api.js");
+  const updateApi = readProjectFile("functions/api/appointments/[id].ts");
+  const calendarView = app.slice(app.indexOf("function CalendarView"), app.indexOf("const MEDICATION_SLOT_OPTIONS"));
+  const recordsView = app.slice(app.indexOf("function RecordsView"), app.indexOf("function SettingsView"));
+  const editSaveHandler = app.slice(app.indexOf("async function handleAppointmentUpdateSave"), app.indexOf("async function handleAppointmentDelete"));
+  const deleteHandler = app.slice(app.indexOf("async function handleAppointmentDelete"), app.indexOf("async function handleAddAppointmentToCalendar"));
+
+  assert.match(app, /deleteAppointment/);
+  assert.match(app, /editingAppointment/);
+  assert.match(calendarView, /onEditAppointment/);
+  assert.match(recordsView, /onEditRecord/);
+  assert.match(editSaveHandler, /patchAppointment\(editingAppointment\.id/);
+  assert.match(deleteHandler, /deleteAppointment\(editingAppointment\.id/);
+  assert.match(api, /export async function deleteAppointment/);
+  assert.match(api, /method: "DELETE"/);
+  assert.match(updateApi, /onRequestDelete/);
+  assert.match(updateApi, /status: "deleted"/);
+  assert.match(updateApi, /getIdentityAndGroups/);
 });
 
 test("Care reminder detail text is highlighted on cards", () => {
@@ -329,14 +390,14 @@ test("Records page defaults to future arrangements and loads history on demand",
   assert.match(recordsView, /record-type-chip record-type-icon/);
   assert.match(recordsView, /record-type-chip record-tag/);
   assert.match(recordsView, /record-status-copy/);
-  assert.doesNotMatch(recordsView, /onEditRecord\?\.\(record\)/);
+  assert.match(recordsView, /onEditRecord\?\.\(record\)/);
+  assert.match(recordsView, /record-edit-button/);
   assert.doesNotMatch(recordsView, /onDeleteRecord/);
   assert.doesNotMatch(recordsView, /danger-subtle/);
   assert.match(css, /\.record-mode-switch/);
   assert.match(css, /\.record-summary-button/);
   assert.match(css, /\.record-type-chip/);
   assert.match(css, /\.record-card-actions/);
-  assert.doesNotMatch(recordsView, /record-edit-button/);
 });
 
 test("Family invite card keeps copy actions elder-friendly on mobile", () => {
@@ -524,7 +585,8 @@ test("Future appointment cards expose a calendar file export action", () => {
   assert.match(calendarView, />\s*Apple \/ 手機行事曆\s*</);
   assert.match(calendarView, />\s*複製提醒文字\s*</);
   assert.match(calendarView, /event-card-actions[\s\S]*card-corner-calendar/);
-  assert.doesNotMatch(calendarView.slice(calendarView.indexOf('<div className="event-card-actions"'), calendarView.indexOf('<div className="event-type">')), /card-corner-edit/);
+  assert.match(calendarView.slice(calendarView.indexOf('<div className="event-card-actions"'), calendarView.indexOf('<div className="event-type">')), /card-corner-edit/);
+  assert.match(calendarView, /onEditAppointment\?\.\(apt\)/);
   assert.doesNotMatch(calendarView, /event-edit-action/);
   assert.match(calendarView, />\s*拍照新增照護資料\s*</);
   assert.doesNotMatch(calendarView, />\s*手動新增提醒\s*</);

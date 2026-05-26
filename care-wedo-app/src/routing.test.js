@@ -13,6 +13,11 @@ test("resolveCareWedoRoute sends the app path to the care dashboard", () => {
   assert.equal(resolveCareWedoRoute("/app#dashboard"), "app");
 });
 
+test("resolveCareWedoRoute sends LINE external-open paths to the browser handoff page", () => {
+  assert.equal(resolveCareWedoRoute("/app/open"), "external-open");
+  assert.equal(resolveCareWedoRoute("/open"), "external-open");
+});
+
 test("resolveCareWedoRoute sends the login path to the login page", () => {
   assert.equal(resolveCareWedoRoute("/login"), "login");
 });

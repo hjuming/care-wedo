@@ -2,12 +2,25 @@ export type Env = {
   SUPABASE_URL: string;
   SUPABASE_SERVICE_ROLE_KEY: string;
   LINE_LOGIN_CHANNEL_ID?: string;
+  CARE_WEDO_SESSION_SECRET?: string;
 };
 
 export type VerifiedLineIdentity = {
   lineUserId: string;
   name?: string;
   pictureUrl?: string;
+};
+
+export const CARE_WEDO_SESSION_COOKIE = "care_wedo_session";
+export const CARE_WEDO_SESSION_MAX_AGE_SECONDS = 60 * 24 * 60 * 60;
+const CARE_WEDO_SESSION_PREFIX = "cw_session.";
+
+type CareWedoSessionPayload = {
+  lineUserId: string;
+  name?: string;
+  pictureUrl?: string;
+  iat: number;
+  exp: number;
 };
 
 const DEFAULT_USER = {
@@ -252,12 +265,140 @@ export async function supabaseFetch<T>(
 }
 
 export function getBearerToken(request: Request) {
+  const authToken = getAuthorizationBearerToken(request);
+  if (authToken) return authToken;
+  return getCookieValue(request, CARE_WEDO_SESSION_COOKIE);
+}
+
+export function getAuthorizationBearerToken(request: Request) {
   const authHeader = request.headers.get("Authorization") || "";
   const match = authHeader.match(/^Bearer\s+(.+)$/i);
   return match?.[1] || null;
 }
 
+function base64UrlEncodeBytes(bytes: Uint8Array): string {
+  let binary = "";
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function base64UrlEncodeText(text: string): string {
+  return base64UrlEncodeBytes(new TextEncoder().encode(text));
+}
+
+function base64UrlDecodeText(value: string): string {
+  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+  const binary = atob(padded);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return new TextDecoder().decode(bytes);
+}
+
+function getSessionSecret(env: Env): string {
+  const secret = env.CARE_WEDO_SESSION_SECRET || env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!secret) throw new Error("Care WEDO session secret is not configured.");
+  return secret;
+}
+
+async function signSessionPayload(env: Env, encodedPayload: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(getSessionSecret(env)),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(encodedPayload));
+  return base64UrlEncodeBytes(new Uint8Array(signature));
+}
+
+export function getCookieValue(request: Request, name: string): string | null {
+  const cookieHeader = request.headers.get("Cookie") || "";
+  const cookies = cookieHeader.split(";").map((item) => item.trim()).filter(Boolean);
+  for (const cookie of cookies) {
+    const separator = cookie.indexOf("=");
+    if (separator <= 0) continue;
+    const key = cookie.slice(0, separator);
+    if (key !== name) continue;
+    return decodeURIComponent(cookie.slice(separator + 1));
+  }
+  return null;
+}
+
+export async function createCareWedoSessionToken(
+  env: Env,
+  identity: VerifiedLineIdentity,
+  now = Date.now(),
+): Promise<string> {
+  const issuedAt = Math.floor(now / 1000);
+  const payload: CareWedoSessionPayload = {
+    lineUserId: identity.lineUserId,
+    name: identity.name,
+    pictureUrl: identity.pictureUrl,
+    iat: issuedAt,
+    exp: issuedAt + CARE_WEDO_SESSION_MAX_AGE_SECONDS,
+  };
+  const encodedPayload = base64UrlEncodeText(JSON.stringify(payload));
+  const signature = await signSessionPayload(env, encodedPayload);
+  return `${CARE_WEDO_SESSION_PREFIX}${encodedPayload}.${signature}`;
+}
+
+export function buildCareWedoSessionCookie(token: string): string {
+  return [
+    `${CARE_WEDO_SESSION_COOKIE}=${encodeURIComponent(token)}`,
+    "Path=/",
+    `Max-Age=${CARE_WEDO_SESSION_MAX_AGE_SECONDS}`,
+    "HttpOnly",
+    "Secure",
+    "SameSite=Lax",
+  ].join("; ");
+}
+
+export function buildExpiredCareWedoSessionCookie(): string {
+  return [
+    `${CARE_WEDO_SESSION_COOKIE}=`,
+    "Path=/",
+    "Max-Age=0",
+    "HttpOnly",
+    "Secure",
+    "SameSite=Lax",
+  ].join("; ");
+}
+
+export async function verifyCareWedoSessionToken(env: Env, token: string): Promise<VerifiedLineIdentity> {
+  if (!token.startsWith(CARE_WEDO_SESSION_PREFIX)) {
+    throw new Error("Invalid Care WEDO session.");
+  }
+  const raw = token.slice(CARE_WEDO_SESSION_PREFIX.length);
+  const [encodedPayload, signature] = raw.split(".");
+  if (!encodedPayload || !signature) throw new Error("Invalid Care WEDO session.");
+
+  const expectedSignature = await signSessionPayload(env, encodedPayload);
+  if (signature !== expectedSignature) throw new Error("Care WEDO session signature mismatch.");
+
+  const payload = JSON.parse(base64UrlDecodeText(encodedPayload)) as Partial<CareWedoSessionPayload>;
+  const now = Math.floor(Date.now() / 1000);
+  if (!payload.lineUserId || !payload.exp || payload.exp <= now) {
+    throw new Error("Care WEDO session expired.");
+  }
+
+  return {
+    lineUserId: payload.lineUserId,
+    name: payload.name,
+    pictureUrl: payload.pictureUrl,
+  };
+}
+
 export async function verifyLineIdToken(env: Env, token: string): Promise<VerifiedLineIdentity> {
+  if (token.startsWith(CARE_WEDO_SESSION_PREFIX)) {
+    return verifyCareWedoSessionToken(env, token);
+  }
+
   if (!env.LINE_LOGIN_CHANNEL_ID) {
     throw new Error("LINE_LOGIN_CHANNEL_ID is not configured.");
   }

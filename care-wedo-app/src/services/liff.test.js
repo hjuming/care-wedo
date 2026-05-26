@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildLiffEntryUrl, buildLineAppLiffFallbackUrl, clearCareWedoLocalSession, loginWithLine, shouldOpenLiffEntryUrl } from "./liff.js";
+import { buildExternalAppUrl, buildLiffEntryUrl, buildLineAppLiffFallbackUrl, clearCareWedoLocalSession, isLineInAppBrowser, loginWithLine, shouldOpenLiffEntryUrl } from "./liff.js";
 
 test("buildLiffEntryUrl creates the LINE LIFF universal link", () => {
   assert.equal(buildLiffEntryUrl("2009972224-fQcfBXw5"), "https://liff.line.me/2009972224-fQcfBXw5");
@@ -12,6 +12,23 @@ test("buildLiffEntryUrl uses the production LIFF ID fallback when build env is m
 
 test("buildLineAppLiffFallbackUrl creates a LINE app fallback link", () => {
   assert.equal(buildLineAppLiffFallbackUrl("2009972224-fQcfBXw5"), "https://line.me/R/app/2009972224-fQcfBXw5");
+});
+
+test("buildExternalAppUrl builds a same-origin app URL", () => {
+  const originalWindow = globalThis.window;
+  globalThis.window = { location: { origin: "https://care.wedopr.com" } };
+
+  try {
+    assert.equal(buildExternalAppUrl("/app"), "https://care.wedopr.com/app");
+    assert.equal(buildExternalAppUrl("app/open"), "https://care.wedopr.com/app/open");
+  } finally {
+    globalThis.window = originalWindow;
+  }
+});
+
+test("isLineInAppBrowser detects LINE webviews", () => {
+  assert.equal(isLineInAppBrowser("Mozilla/5.0 Line/14.0.0"), true);
+  assert.equal(isLineInAppBrowser("Mozilla/5.0 Safari/605.1.15"), false);
 });
 
 test("shouldOpenLiffEntryUrl detects phone browsers that should open the LINE app LIFF route", () => {

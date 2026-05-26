@@ -1,5 +1,7 @@
 // LIFF ID is public. Keep a code fallback so manual local builds cannot produce
 // a login button that silently skips LINE OAuth.
+import { clearServerSession, createServerSession, fetchSessionIdentity } from "./api.js";
+
 const DEFAULT_LIFF_ID = "2009972224-fQcfBXw5";
 const LIFF_ID = import.meta.env?.VITE_LINE_LIFF_ID || DEFAULT_LIFF_ID;
 
@@ -18,6 +20,15 @@ export function buildLineAppLiffFallbackUrl(liffId = LIFF_ID) {
   return `https://line.me/R/app/${encodeURIComponent(liffId)}`;
 }
 
+export function buildExternalAppUrl(path = "/app") {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return `${window.location.origin}${normalizedPath}`;
+}
+
+export function isLineInAppBrowser(userAgent = globalThis.window?.navigator?.userAgent || "") {
+  return /\bLine\//i.test(userAgent);
+}
+
 export function shouldOpenLiffEntryUrl(
   userAgent = globalThis.window?.navigator?.userAgent || "",
   maxTouchPoints = globalThis.window?.navigator?.maxTouchPoints || 0,
@@ -32,6 +43,23 @@ export function shouldOpenLiffEntryUrl(
 function openDashboardRoute() {
   window.history.pushState(null, "", "/app");
   window.dispatchEvent(new PopStateEvent("popstate"));
+}
+
+export async function openUrlInExternalBrowser(url = buildExternalAppUrl("/app")) {
+  if (!isLineInAppBrowser()) {
+    window.location.assign(url);
+    return true;
+  }
+
+  try {
+    const { default: liff } = await import("@line/liff");
+    await liff.init({ liffId: LIFF_ID });
+    liff.openWindow({ url, external: true });
+    return true;
+  } catch {
+    window.location.assign(url);
+    return false;
+  }
 }
 
 export function clearCareWedoLocalSession() {
@@ -51,6 +79,7 @@ export function clearCareWedoLocalSession() {
 }
 
 export async function resetCareWedoSessionAndReturnHome() {
+  await clearServerSession();
   clearCareWedoLocalSession();
 
   try {
@@ -79,6 +108,9 @@ export async function resetCareWedoSessionAndReturnHome() {
 
 /** 初始化 LIFF 並取得身分。在 DashboardApp boot() 中呼叫。 */
 export async function initLineIdentity() {
+  const serverSession = await fetchSessionIdentity();
+  if (serverSession) return serverSession;
+
   if (!LIFF_ID) {
     if (import.meta.env.PROD) {
       return {
@@ -118,6 +150,10 @@ export async function initLineIdentity() {
       Promise.resolve(liff.getIDToken()),
     ]);
 
+    if (idToken) {
+      await createServerSession(idToken).catch(() => null);
+    }
+
     return {
       status: idToken ? "authenticated" : "unauthenticated",
       idToken,
@@ -151,6 +187,8 @@ export async function loginWithLine() {
     const { default: liff } = await import("@line/liff");
     await liff.init({ liffId: LIFF_ID });
     if (liff.isLoggedIn()) {
+      const idToken = liff.getIDToken();
+      if (idToken) await createServerSession(idToken).catch(() => null);
       // 已登入 → 直接進後台
       openDashboardRoute();
       return;

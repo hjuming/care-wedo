@@ -40,6 +40,19 @@ export function buildAppointmentCalendarRequest(apiBase = API_BASE, appointmentI
   };
 }
 
+export function buildSessionRequest(apiBase = API_BASE, method = "GET", identity = {}) {
+  const init = { method, credentials: "same-origin" };
+  if (identity.idToken) {
+    init.headers = {
+      Authorization: `Bearer ${identity.idToken}`,
+    };
+  }
+  return {
+    url: `${apiBase}/session`,
+    init,
+  };
+}
+
 function appointmentTypeLabel(type) {
   if (type === "family_note") return "家庭提醒";
   if (type === "inspection") return "檢查";
@@ -329,6 +342,40 @@ export async function fetchDashboard(identity) {
   return res.json();
 }
 
+export async function fetchSessionIdentity() {
+  const { url, init } = buildSessionRequest(API_BASE, "GET");
+  const res = await fetch(url, init);
+  if (!res.ok) return null;
+  const data = await res.json().catch(() => null);
+  if (!data?.authenticated) return null;
+  return {
+    status: "authenticated",
+    idToken: null,
+    profile: data.profile || null,
+    message: null,
+  };
+}
+
+export async function createServerSession(idToken) {
+  if (!idToken) return null;
+  const { url, init } = buildSessionRequest(API_BASE, "POST", { idToken });
+  const res = await fetch(url, init);
+  if (!res.ok) return null;
+  const data = await res.json().catch(() => null);
+  if (!data?.authenticated) return null;
+  return {
+    status: "authenticated",
+    idToken,
+    profile: data.profile || null,
+    message: null,
+  };
+}
+
+export async function clearServerSession() {
+  const { url, init } = buildSessionRequest(API_BASE, "DELETE");
+  await fetch(url, init).catch(() => null);
+}
+
 /**
  * 取得使用者的照護群組
  */
@@ -548,6 +595,21 @@ export async function patchAppointment(id, updates, { idToken }) {
   if (!response.ok) {
     const error = await response.json().catch(async () => ({ error: await response.text() }));
     throw new Error(error.error || "無法更新預約");
+  }
+  return response.json();
+}
+
+export async function deleteAppointment(id, { idToken }) {
+  const headers = {};
+  if (idToken) headers.Authorization = `Bearer ${idToken}`;
+
+  const response = await fetch(`${API_BASE}/appointments/${id}`, {
+    method: "DELETE",
+    headers,
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(async () => ({ error: await response.text() }));
+    throw new Error(error.error || "無法刪除預約");
   }
   return response.json();
 }

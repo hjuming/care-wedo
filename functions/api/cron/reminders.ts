@@ -3,7 +3,7 @@ import { logError, logEvent } from "../../_shared/logger";
 
 const DEFAULT_RECIPIENT = "親愛的家人";
 const WEEKDAY_LABELS = ["日", "一", "二", "三", "四", "五", "六"];
-const BRAND_SIGNATURE = "Care WEDO\n陪你照顧最重要的人\nhttps://care.wedopr.com";
+const BRAND_SIGNATURE = "Care WEDO\n陪你照顧最重要的人\nhttps://care.wedopr.com/app/open";
 
 type Env = SupabaseEnv & {
   CRON_SECRET?: string;
@@ -106,10 +106,13 @@ function appointmentTypeLabel(type?: string | null) {
 }
 
 function formatDateLabel(dateStr: string) {
-  const date = new Date(`${dateStr}T00:00:00+08:00`);
   const [year, month, day] = dateStr.split("-");
+  const yearNumber = Number(year);
+  const monthNumber = Number(month);
+  const dayNumber = Number(day);
+  const date = new Date(Date.UTC(yearNumber, monthNumber - 1, dayNumber));
   if (!year || !month || !day || Number.isNaN(date.getTime())) return dateStr;
-  return `${Number(month)}/${Number(day)}（${WEEKDAY_LABELS[date.getDay()]}）`;
+  return `${monthNumber}/${dayNumber}（${WEEKDAY_LABELS[date.getUTCDay()]}）`;
 }
 
 function formatTimeLabel(time?: string | null) {

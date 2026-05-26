@@ -6,8 +6,8 @@ import LoginSetup from "./components/LoginSetup";
 import MobileBottomNav from "./components/MobileBottomNav";
 import OcrResult from "./components/OcrResult";
 import { patientData, medicines, timeline as initialTimeline } from "./data/patient";
-import { buildGoogleCalendarEventUrl, confirmOcrDocument, createAppointment, downloadAppointmentCalendarFile, downloadLocalAppointmentCalendarFile, fetchDashboard, joinGroup, markMedicationSlotStatus, ocrAnalyze, ocrAnalyzeText, patchAppointment, patchMedication, updateActiveProfilePreference, updateFamilyNotes, updateProfile, updateProfileOrder } from "./services/api";
-import { buildLiffEntryUrl, buildLineAppLiffFallbackUrl, initLineIdentity, loginWithLine, logoutLineIdentity, resetCareWedoSessionAndReturnHome, shouldOpenLiffEntryUrl } from "./services/liff";
+import { buildGoogleCalendarEventUrl, confirmOcrDocument, createAppointment, deleteAppointment, downloadAppointmentCalendarFile, downloadLocalAppointmentCalendarFile, fetchDashboard, fetchSessionIdentity, joinGroup, markMedicationSlotStatus, ocrAnalyze, ocrAnalyzeText, patchAppointment, patchMedication, updateActiveProfilePreference, updateFamilyNotes, updateProfile, updateProfileOrder } from "./services/api";
+import { buildExternalAppUrl, buildLiffEntryUrl, buildLineAppLiffFallbackUrl, initLineIdentity, isLineInAppBrowser, loginWithLine, logoutLineIdentity, openUrlInExternalBrowser, resetCareWedoSessionAndReturnHome, shouldOpenLiffEntryUrl } from "./services/liff";
 import { trackError, trackEvent } from "./services/telemetry";
 import { buildTodayTasks, formatTaipeiTodayLabel, groupMedicationsBySchedule, hasSameDayTasks } from "./services/todayTasks";
 import { buildSearchSuggestions, matchSearch } from "./services/search";
@@ -1152,12 +1152,72 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    if (route !== "landing" || window.location.pathname !== "/") return undefined;
+    let active = true;
+    fetchSessionIdentity().then((session) => {
+      if (!active || !session) return;
+      window.history.replaceState(null, "", "/app");
+      setRoute("app");
+    }).catch(() => null);
+    return () => {
+      active = false;
+    };
+  }, [route]);
+
   if (route === "app") return <DashboardApp />;
+  if (route === "external-open") return <ExternalOpenPage />;
   if (route === "login") return <LoginPage />;
   if (route === "features") return <LandingPage variant="details" />;
   if (route === "privacy") return <PrivacyPage />;
   if (route === "terms") return <TermsPage />;
   return <LandingPage />;
+}
+
+function ExternalOpenPage() {
+  const [status, setStatus] = useState(isLineInAppBrowser() ? "opening" : "redirecting");
+  const targetUrl = buildExternalAppUrl("/app");
+
+  const handleOpenExternal = useCallback(async () => {
+    setStatus("opening");
+    const opened = await openUrlInExternalBrowser(targetUrl);
+    setStatus(opened ? "opened" : "manual");
+  }, [targetUrl]);
+
+  useEffect(() => {
+    if (!isLineInAppBrowser()) {
+      window.location.replace(targetUrl);
+      return undefined;
+    }
+    const timer = window.setTimeout(() => {
+      handleOpenExternal();
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [handleOpenExternal, targetUrl]);
+
+  return (
+    <main className="external-open-shell">
+      <section className="external-open-card" aria-label="用瀏覽器開啟 Care WEDO">
+        <p className="panel-eyebrow">Care WEDO</p>
+        <h1>用瀏覽器開啟，之後就不用一直重新登入。</h1>
+        <p>
+          如果 LINE 沒有自動跳出，請按下面這顆按鈕。完成登入後，除非你主動登出，之後回到首頁會直接進入後台。
+        </p>
+        <button type="button" className="primary-action" onClick={handleOpenExternal}>
+          用瀏覽器開啟
+        </button>
+        <a className="secondary-action external-open-fallback" href={targetUrl}>
+          留在這裡繼續
+        </a>
+        <p className="external-open-status" aria-live="polite">
+          {status === "opening" && "正在嘗試開啟外部瀏覽器..."}
+          {status === "opened" && "如果外部瀏覽器已開啟，可以回到瀏覽器繼續。"}
+          {status === "manual" && "如果沒有跳出，請長按連結或使用右上角在瀏覽器開啟。"}
+          {status === "redirecting" && "正在前往 Care WEDO..."}
+        </p>
+      </section>
+    </main>
+  );
 }
 
 function DashboardApp() {
@@ -1177,6 +1237,7 @@ function DashboardApp() {
   const [identity, setIdentity] = useState({ status: "loading", idToken: null, profile: null, message: null });
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [showManualReminder, setShowManualReminder] = useState(false);
+  const [editingAppointment, setEditingAppointment] = useState(null);
   const [showFamilyNotesEditor, setShowFamilyNotesEditor] = useState(false);
   const [showPlanDetails, setShowPlanDetails] = useState(false);
   const [familyNotes, setFamilyNotes] = useState([]);
@@ -1700,6 +1761,57 @@ function DashboardApp() {
     await loadDashboard(identity, activeProfileId, activeGroupId);
     setShowManualReminder(false);
   }
+
+  async function handleAppointmentUpdateSave(payload) {
+    if (!editingAppointment?.id) {
+      throw new Error("找不到要修改的提醒。");
+    }
+
+    const updates = {
+      ...payload,
+      date: normalizeDateInput(payload.date),
+      title: typeLabel(payload.type),
+      department: payload.department,
+      fasting_hours: payload.fasting_required ? payload.fasting_hours : null,
+    };
+
+    if (String(editingAppointment.id).startsWith("demo-")) {
+      updateActiveDashboard((prev) => ({
+        ...prev,
+        appointments: (prev.appointments || []).map((apt) => (
+          apt.id === editingAppointment.id ? { ...apt, ...updates } : apt
+        )),
+      }));
+      setEditingAppointment(null);
+      return;
+    }
+
+    await patchAppointment(editingAppointment.id, updates, { idToken: identity.idToken });
+    await loadDashboard(identity, activeProfileId, activeGroupId);
+    setEditingAppointment(null);
+  }
+
+  async function handleAppointmentDelete() {
+    if (!editingAppointment?.id) {
+      throw new Error("找不到要刪除的提醒。");
+    }
+
+    if (String(editingAppointment.id).startsWith("demo-")) {
+      updateActiveDashboard((prev) => ({
+        ...prev,
+        appointments: (prev.appointments || []).map((apt) => (
+          apt.id === editingAppointment.id ? { ...apt, status: "deleted" } : apt
+        )),
+      }));
+      setEditingAppointment(null);
+      return;
+    }
+
+    await deleteAppointment(editingAppointment.id, { idToken: identity.idToken });
+    await loadDashboard(identity, activeProfileId, activeGroupId);
+    setEditingAppointment(null);
+  }
+
   async function handleAddAppointmentToCalendar(appointment) {
     if (!appointment?.id) return;
 
@@ -1924,6 +2036,7 @@ function DashboardApp() {
               careName={selectedProfile?.display_name || patient.name}
               onUpload={handleUploadClick}
               onAddToCalendar={handleAddAppointmentToCalendar}
+              onEditAppointment={setEditingAppointment}
             />
           )}
 
@@ -1944,6 +2057,7 @@ function DashboardApp() {
               records={allAppointments}
               searchQuery={searchQuery}
               onUpload={handleUploadClick}
+              onEditRecord={setEditingAppointment}
               canViewHistory={canViewHistory}
               onUpgradeRequired={(reason) => showPlanUpgradePrompt(reason, "records_history")}
             />
@@ -1991,6 +2105,16 @@ function DashboardApp() {
         <ManualReminderModal
           onClose={() => setShowManualReminder(false)}
           onSave={handleManualReminderSave}
+        />
+      )}
+
+      {editingAppointment && (
+        <ManualReminderModal
+          mode="edit"
+          initialAppointment={editingAppointment}
+          onClose={() => setEditingAppointment(null)}
+          onSave={handleAppointmentUpdateSave}
+          onDelete={handleAppointmentDelete}
         />
       )}
 
@@ -2964,7 +3088,7 @@ function OverviewView({
   );
 }
 
-function CalendarView({ appointments, careName = "", onUpload, onAddToCalendar }) {
+function CalendarView({ appointments, careName = "", onUpload, onAddToCalendar, onEditAppointment }) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [calendarActionAppointment, setCalendarActionAppointment] = useState(null);
   const [calendarActionNotice, setCalendarActionNotice] = useState("");
@@ -3058,6 +3182,9 @@ function CalendarView({ appointments, careName = "", onUpload, onAddToCalendar }
         {futureAppointments.length ? futureAppointments.map((apt) => (
           <article key={apt.id} id={`event-${apt.date}`} className="event-row">
             <div className="event-card-actions">
+              <button type="button" className="card-corner-edit" onClick={() => onEditAppointment?.(apt)} aria-label={`編輯 ${apt.title || apt.department || "提醒"}`}>
+                編輯
+              </button>
               <button type="button" className="card-corner-calendar" onClick={() => setCalendarActionAppointment(apt)} aria-label={`加入 ${apt.title || apt.department || "提醒"} 到行事曆`}>
                 加入行事曆
               </button>
@@ -3432,7 +3559,7 @@ async function copyText(text) {
   document.body.removeChild(textarea);
 }
 
-function RecordsView({ records, searchQuery, onUpload, canViewHistory = true, onUpgradeRequired }) {
+function RecordsView({ records, searchQuery, onUpload, onEditRecord, canViewHistory = true, onUpgradeRequired }) {
   const [mode, setMode] = useState("future");
   const [copyNotice, setCopyNotice] = useState({ id: null, message: "" });
   const activeMode = canViewHistory ? mode : "future";
@@ -3534,6 +3661,9 @@ function RecordsView({ records, searchQuery, onUpload, canViewHistory = true, on
                   </div>
                   <div className="record-card-actions">
                     {copyNotice.id === record.id && <span className="record-copy-notice">{copyNotice.message}</span>}
+                    <button type="button" className="record-edit-button" onClick={() => onEditRecord?.(record)} aria-label={`編輯 ${title} 提醒`}>
+                      編輯
+                    </button>
                   </div>
                 </article>
               );

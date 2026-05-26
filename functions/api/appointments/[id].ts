@@ -63,3 +63,25 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env, params 
     return Response.json({ error: message }, { status });
   }
 };
+
+export const onRequestDelete: PagesFunction<Env> = async ({ request, env, params }) => {
+  try {
+    const id = Number(params.id);
+    if (!Number.isFinite(id) || id <= 0) {
+      return Response.json({ error: "無效的 ID" }, { status: 400 });
+    }
+
+    const token = getBearerToken(request);
+    if (!token) {
+      return Response.json({ error: "請先登入" }, { status: 401 });
+    }
+
+    const { userId, groupIds } = await getIdentityAndGroups(request, env);
+    const updated = await patchAppointment(env, id, userId, groupIds, { status: "deleted" });
+    return Response.json({ success: true, appointment: serializeAppointment(updated) });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "刪除預約失敗";
+    const status = message.includes("沒有修改權限") ? 403 : 500;
+    return Response.json({ error: message }, { status });
+  }
+};

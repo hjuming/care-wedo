@@ -28,6 +28,7 @@ type LineWebhookBody = {
 const encoder = new TextEncoder();
 const ASSIGNMENT_ACK_TEXT = "收到。\n我來存檔。";
 const LINE_NEXT_UPLOAD_PROFILE_PREFIX = "line_next_upload_profile:";
+const CARE_WEDO_OPEN_URL = "https://care.wedopr.com/app/open";
 
 function timingSafeEqual(a: string, b: string) {
   if (a.length !== b.length) return false;
@@ -154,7 +155,8 @@ function formatLineDate(value: unknown) {
   const match = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
   if (!match) return text;
   const [, year, month, day] = match;
-  const weekday = ["日", "一", "二", "三", "四", "五", "六"][new Date(`${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}T00:00:00+08:00`).getDay()];
+  const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+  const weekday = ["日", "一", "二", "三", "四", "五", "六"][date.getUTCDay()];
   return `${Number(month)}/${Number(day)}（${weekday}）`;
 }
 
@@ -264,7 +266,7 @@ function formatResultSummary(parsed: import("./_shared/medical_ocr").ParsedMedic
   if (lines.length === 0) lines.push("已為您整理好這筆照護資料。");
   lines.push("");
   lines.push(`已存入【${profileName}】。`);
-  lines.push("https://care.wedopr.com");
+  lines.push(CARE_WEDO_OPEN_URL);
   return lines.join("\n");
 }
 
@@ -317,7 +319,7 @@ function afterSummaryQuickReply() {
   return {
     items: [
       lineTextQuickReply("再傳一張", "我要上傳"),
-      lineUriQuickReply("看清單", "https://care.wedopr.com"),
+      lineUriQuickReply("看清單", CARE_WEDO_OPEN_URL),
     ],
   };
 }
@@ -442,7 +444,7 @@ async function pushAssignmentSummary(
 ) {
   const reply = saved.parsed
     ? formatResultSummary(saved.parsed, saved.profileName)
-    : `已存入【${saved.profileName}】。\nhttps://care.wedopr.com`;
+    : `已存入【${saved.profileName}】。\n${CARE_WEDO_OPEN_URL}`;
 
   await pushText(env, lineUserId, reply, summaryQuickReply());
   const familySummary = `家人上傳了【${saved.profileName}】的資料。\n已整理好。\n\n${reply}`;
@@ -526,7 +528,7 @@ async function prepareUploadByText(env: Env, event: LineEvent, incomingText: str
   const profiles = await getAccessibleProfiles(env, userId);
   if (profiles.length === 0) {
     await replyText(env, event.replyToken, "請先建立家人資料。", {
-      items: [lineUriQuickReply("打開 Care WEDO", "https://care.wedopr.com")],
+      items: [lineUriQuickReply("打開 Care WEDO", CARE_WEDO_OPEN_URL)],
     });
     return true;
   }
@@ -574,7 +576,7 @@ async function replyDefaultUploadHelp(env: Env, event: LineEvent) {
       env,
       event.replyToken,
       "可以拍照或貼文字給我。\n我會幫您整理。",
-      { items: [lineUriQuickReply("打開 Care WEDO", "https://care.wedopr.com")] },
+      { items: [lineUriQuickReply("打開 Care WEDO", CARE_WEDO_OPEN_URL)] },
     );
     return;
   }
@@ -936,7 +938,7 @@ async function handleEvent(env: Env, event: LineEvent, waitUntil: (promise: Prom
   if (incomingText && await prepareUploadByText(env, event, incomingText)) return;
 
   if (incomingText.includes("網址") || incomingText.toLowerCase().includes("url")) {
-    await replyText(env, event.replyToken, "這裡可以看完整清單：https://care.wedopr.com");
+    await replyText(env, event.replyToken, `這裡可以看完整清單：${CARE_WEDO_OPEN_URL}`);
     return;
   }
 
