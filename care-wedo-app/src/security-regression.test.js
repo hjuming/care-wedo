@@ -197,8 +197,11 @@ test("Medication view exposes an A4-friendly doctor summary", () => {
   assert.match(medicationArea, /用途/);
   assert.match(medicationArea, /劑量/);
   assert.match(medicationArea, /服用時間/);
+  assert.match(medicationArea, /複製文字/);
+  assert.match(medicationArea, /儲存圖片/);
   assert.match(medicationArea, /medicationSummarySource/);
   assert.match(css, /\.medicine-summary-sheet/);
+  assert.match(css, /data-label/);
   assert.match(css, /@media print/);
 });
 
@@ -206,11 +209,14 @@ test("Version A pricing is visible without wiring live payments", () => {
   const app = readProjectFile("care-wedo-app/src/App.jsx");
   const css = readProjectFile("care-wedo-app/src/index.css");
 
-  assert.match(app, /baseCircleMonthly:\s*30/);
-  assert.match(app, /extraCollaboratorMonthly:\s*10/);
-  assert.match(app, /extraRecipientMonthly:\s*30/);
+  assert.match(app, /recipientMonthly:\s*30/);
+  assert.match(app, /collaboratorMonthly:\s*10/);
+  assert.match(app, /maxCareProfiles:\s*4/);
+  assert.match(app, /maxPaidCollaborators:\s*5/);
   assert.match(app, /estimateCareCirclePrice/);
   assert.match(app, /本月費用預估/);
+  assert.match(app, /主帳號不列入協作者費用/);
+  assert.doesNotMatch(app, /主帳號：\$0/);
   assert.match(app, /照護圈升級 \$30\/月/);
   assert.match(app, /每位照護對象 100 筆\/月/);
   assert.match(app, /保留最近 30 天/);
@@ -356,7 +362,7 @@ test("Logged-in dashboard exposes a clear care context header", () => {
   assert.match(app, /function CareContextHeader/);
   assert.match(app, /正在照護/);
   assert.match(app, /照護圈/);
-  assert.match(app, /一起照護的人/);
+  assert.match(app, /照護協作者/);
   assert.match(app, /登入者/);
   assert.match(css, /\.care-context-header/);
   assert.match(css, /\.today-main-actions/);
@@ -498,9 +504,12 @@ test("Beta family groups default to the Care Circle plan while multiple group ac
 test("Version A plan rows keep legacy plans inactive and price Care Circle at 30", () => {
   const schema = readProjectFile("supabase/schema.sql");
   const migration = readProjectFile("supabase/migration_phase52_version_a_plan_limits.sql");
-  const combined = `${schema}\n${migration}`;
+  const capsMigration = readProjectFile("supabase/migration_phase53_family_group_caps.sql");
+  const combined = `${schema}\n${migration}\n${capsMigration}`;
 
-  assert.match(combined, /'pro',\s*'照護圈升級',\s*100,\s*2,\s*1,\s*true,\s*30/);
+  assert.match(combined, /'pro',\s*'照護圈升級',\s*100,\s*6,\s*4,\s*true,\s*30/);
+  assert.match(combined, /max_members = 6/);
+  assert.match(combined, /max_recipients = 4/);
   assert.match(combined, /'free',\s*'Free',\s*10,\s*1,\s*1,\s*false,\s*0/);
   assert.match(combined, /where id in \('basic', 'plus', 'team'\)/);
   assert.match(combined, /is_active = false/);
@@ -516,6 +525,9 @@ test("Group settings exposes plan limits before adding care recipients", () => {
   assert.match(groupsApi, /member_count/);
   assert.match(groupsApi, /max_recipients/);
   assert.match(component, /selectedRecipientLimitReached/);
+  assert.match(component, /maxCareProfiles:\s*4/);
+  assert.match(component, /maxPaidCollaborators:\s*5/);
+  assert.match(component, /另外開設家庭群組/);
   assert.match(component, /quota-note/);
   assert.match(component, /disabled=\{loading \|\| selectedRecipientLimitReached\}/);
   assert.match(css, /\.quota-note-warning/);

@@ -877,6 +877,9 @@ export function serializeCareProfile(row: CareProfileRow) {
 
 export const FREE_OCR_MONTHLY_LIMIT = 10;
 export const MULTIPLE_FAMILY_GROUPS_FEATURE = "multiple_family_groups";
+export const CARE_WEDO_MAX_CARE_PROFILES_PER_GROUP = 4;
+export const CARE_WEDO_MAX_PAID_COLLABORATORS_PER_GROUP = 5;
+export const CARE_WEDO_MAX_MEMBERS_PER_GROUP = CARE_WEDO_MAX_PAID_COLLABORATORS_PER_GROUP + 1;
 
 // Fallback plan definition — used when DB lookup fails or group has no plan_id.
 const FREE_PLAN_FALLBACK: PlanRow = {
@@ -890,6 +893,15 @@ const FREE_PLAN_FALLBACK: PlanRow = {
   is_active: true,
   sort_order: 10,
 };
+
+function normalizePlanLimits(plan: PlanRow): PlanRow {
+  if (plan.id !== "pro") return plan;
+  return {
+    ...plan,
+    max_members: CARE_WEDO_MAX_MEMBERS_PER_GROUP,
+    max_recipients: CARE_WEDO_MAX_CARE_PROFILES_PER_GROUP,
+  };
+}
 
 function resolveMonthlyOcrLimit(plan: PlanRow, recipientCount = 1): number {
   if (plan.id === "free") return plan.monthly_ocr_limit;
@@ -923,7 +935,7 @@ export async function getGroupPlan(env: Env, groupId: number | null): Promise<Pl
     env,
     `plans?id=eq.${encodeURIComponent(planId)}&select=*&limit=1`,
   );
-  return plans[0] ?? FREE_PLAN_FALLBACK;
+  return normalizePlanLimits(plans[0] ?? FREE_PLAN_FALLBACK);
 }
 
 type UserPlanRow = { plan: string; plan_expires_at: string | null };
@@ -1135,11 +1147,17 @@ export async function checkGroupMemberLimit(
     `user_family_groups?group_id=eq.${groupId}&select=user_id`,
   );
 
-  if (members.length >= plan.max_members) {
+  const memberLimit = plan.id === "pro"
+    ? CARE_WEDO_MAX_MEMBERS_PER_GROUP
+    : plan.max_members;
+
+  if (members.length >= memberLimit) {
     return {
       ok: false,
       error: "MEMBER_LIMIT_REACHED",
-      message: `目前方案最多可加入 ${plan.max_members} 位成員。`,
+      message: plan.id === "pro"
+        ? "每個家庭群組最多 1 位主帳號與 5 位協作者。超過這個，請用其他協作者帳號，另外開設家庭群組。"
+        : `目前方案最多可加入 ${memberLimit} 位成員。`,
       plan,
     };
   }
@@ -1161,11 +1179,17 @@ export async function checkGroupRecipientLimit(
     `care_profiles?group_id=eq.${groupId}&select=id`,
   );
 
-  if (profiles.length >= plan.max_recipients) {
+  const recipientLimit = plan.id === "pro"
+    ? CARE_WEDO_MAX_CARE_PROFILES_PER_GROUP
+    : plan.max_recipients;
+
+  if (profiles.length >= recipientLimit) {
     return {
       ok: false,
       error: "RECIPIENT_LIMIT_REACHED",
-      message: `目前方案最多可建立 ${plan.max_recipients} 位照護對象。`,
+      message: plan.id === "pro"
+        ? "每個家庭群組最多 4 位主要照護對象。超過這個，請用其他協作者帳號，另外開設家庭群組。"
+        : `目前方案最多可建立 ${recipientLimit} 位照護對象。`,
       plan,
     };
   }

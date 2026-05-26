@@ -3,6 +3,11 @@ import { createCareProfile, fetchGroups, regenerateInvite, removeMember, updateM
 import { resetCareWedoSessionAndReturnHome } from "../services/liff";
 
 const CARE_WEDO_LINE_URL = "https://lin.ee/xzbyyvf";
+const GROUP_LIMITS = {
+  maxCareProfiles: 4,
+  maxPaidCollaborators: 5,
+  maxMembersIncludingOwner: 6,
+};
 
 export default function GroupSettings({ identity, onGroupChange, onProfileCreated }) {
   const [data, setData] = useState({ groups: [], care_profiles: [], user_memberships: [] });
@@ -48,6 +53,10 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
   }
 
   function copyInviteCode(group) {
+    if (isCollaboratorLimitReached(group)) {
+      setError("此家庭群組已達 5 位協作者上限。超過這個，請用其他協作者帳號，另外開設家庭群組。");
+      return;
+    }
     const message = buildInviteMessage(group, group.invite_code);
     navigator.clipboard.writeText(message);
     setCopiedCode(group.invite_code);
@@ -95,10 +104,21 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
   const selectedCareProfileCount = selectedGroup?.care_profile_count
     ?? data.care_profiles?.filter((profile) => profile.group_id === selectedGroupId).length
     ?? 0;
-  const selectedRecipientLimit = selectedGroupPlan?.max_recipients || null;
+  const selectedRecipientLimit = Math.min(selectedGroupPlan?.max_recipients || GROUP_LIMITS.maxCareProfiles, GROUP_LIMITS.maxCareProfiles);
   const selectedRecipientLimitReached = Boolean(
     selectedRecipientLimit && selectedCareProfileCount >= selectedRecipientLimit,
   );
+
+  function getCollaboratorCount(group) {
+    const members = group?.members || getMembersByGroup(group?.id);
+    return Math.max((group?.member_count ?? members.length) - 1, 0);
+  }
+
+  function isCollaboratorLimitReached(group) {
+    const members = group?.members || getMembersByGroup(group?.id);
+    const memberCount = group?.member_count ?? members.length;
+    return memberCount >= GROUP_LIMITS.maxMembersIncludingOwner || getCollaboratorCount(group) >= GROUP_LIMITS.maxPaidCollaborators;
+  }
 
   async function handleCreateProfile(event) {
     event.preventDefault();
@@ -116,7 +136,7 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
     }
 
     if (selectedRecipientLimitReached) {
-      setError(`「${selectedGroup?.name || "這個群組"}」目前已達 ${selectedCareProfileCount}/${selectedRecipientLimit} 位照護對象上限。`);
+      setError(`「${selectedGroup?.name || "這個群組"}」已達 ${selectedRecipientLimit} 位主要照護對象上限。超過這個，請用其他協作者帳號，另外開設家庭群組。`);
       return;
     }
 
@@ -204,7 +224,7 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
   if (identity.status === "demo") {
     return (
       <div className="group-settings-card">
-        <p className="panel-eyebrow">群組與通知設定</p>
+        <p className="panel-eyebrow">協作者管理中心</p>
         <p className="helper-copy">LINE 登入後才能管理群組通知與照護對象。</p>
       </div>
     );
@@ -213,7 +233,7 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
   return (
     <div className="group-settings">
       <div className="group-settings-card">
-        <p className="panel-eyebrow">我的家庭群組</p>
+        <p className="panel-eyebrow">家庭群組管理</p>
         {error && <p className="error-msg">{error}</p>}
         {success && <p className="success-msg">{success}</p>}
         
@@ -223,38 +243,41 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
             const isAdmin = membership?.role === "admin";
             // Use enriched members list from group if available, else fall back to memberships
             const members = group.members || getMembersByGroup(group.id);
+            const careProfileCount = group.care_profile_count ?? 0;
+            const collaboratorCount = getCollaboratorCount(group);
+            const collaboratorLimitReached = isCollaboratorLimitReached(group);
             return (
               <div key={group.id} className="settings-group-card">
                 <div className="settings-group-header">
                   <div>
                     <strong>{group.name}</strong>
+                    <p className="small-copy">{isAdmin ? "群組管理者" : "協作者"}・主帳號 1 位不計費</p>
                     <p className="small-copy">
-                      {isAdmin ? "👑 群組管理者" : "👨‍👩‍👧‍👦 成員"}・{members.length} 人
+                      主要照護對象 {careProfileCount}/{GROUP_LIMITS.maxCareProfiles}・協作者 {collaboratorCount}/{GROUP_LIMITS.maxPaidCollaborators}
                     </p>
-                    {group.plan && (
-                      <p className="small-copy">
-                        成員 {group.member_count ?? members.length}/{group.plan.max_members}・照護對象 {group.care_profile_count ?? 0}/{group.plan.max_recipients}
-                      </p>
-                    )}
                   </div>
                 </div>
 
                 <div className="group-invite-block">
-                  <div className="invite-copy-head">
-                    <span>邀請碼</span>
+                  <div className="invite-copy-head compact">
+                    <span>邀請協作者</span>
                     <strong>{group.invite_code}</strong>
                   </div>
-                  <p className="helper-copy">給家人貼到 LINE。家人點網址登入後，會自動加入這個家庭群組。</p>
-                  <p className="helper-copy">要收到上傳摘要與每日提醒，家人也需要加入 LINE 照護小管家。</p>
+                  <p className="helper-copy">
+                    {collaboratorLimitReached
+                      ? "已達 5 位協作者上限。超過這個，請用其他協作者帳號，另外開設家庭群組。"
+                      : "複製邀請碼或完整邀請文，貼到 LINE 給協作者。"}
+                  </p>
                   <div className="invite-code-row">
                     <button
                       type="button"
                       className="btn-copy"
+                      disabled={collaboratorLimitReached}
                       onClick={() => copyInviteCode(group)}
                     >
                       {copiedCode === group.invite_code ? "已複製邀請文案" : "複製完整邀請"}
                     </button>
-                    <button type="button" className="btn-secondary-sm" onClick={() => copyInviteCodeOnly(group.invite_code)}>
+                    <button type="button" className="btn-secondary-sm" disabled={collaboratorLimitReached} onClick={() => copyInviteCodeOnly(group.invite_code)}>
                       只複製邀請碼
                     </button>
                     <a className="btn-secondary-sm invite-line-link" href={CARE_WEDO_LINE_URL} target="_blank" rel="noopener noreferrer">
@@ -273,7 +296,7 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
                 </div>
 
                 <div className="members-list">
-                  <label>群組成員</label>
+                  <label>照護協作者</label>
                   <div className="members-grid">
                     {members.map((m, idx) => {
                       const memberUser = getMemberUser(m);
@@ -332,8 +355,8 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
       </div>
 
       <div className="group-settings-card">
-        <p className="panel-eyebrow">新增照護對象</p>
-        <p className="helper-copy">這裡新增的是被照顧的人；要邀請一起照顧的家人，請使用上方邀請碼。</p>
+        <p className="panel-eyebrow">新增主要照護對象</p>
+        <p className="helper-copy">這裡新增的是被照顧的人。每個家庭群組最多 4 位；超過時請另外開設家庭群組。</p>
         {data.groups?.length ? (
           <form className="profile-create-form" onSubmit={handleCreateProfile}>
             <label>
@@ -346,8 +369,8 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
             </label>
             {selectedGroupPlan && (
               <p className={selectedRecipientLimitReached ? "quota-note quota-note-warning" : "quota-note"}>
-                目前 {selectedCareProfileCount}/{selectedRecipientLimit} 位照護對象
-                {selectedRecipientLimitReached ? "，已達此群組上限。" : "。"}
+                目前 {selectedCareProfileCount}/{selectedRecipientLimit} 位主要照護對象
+                {selectedRecipientLimitReached ? "，已達此家庭群組上限。" : "。"}
               </p>
             )}
             <label>

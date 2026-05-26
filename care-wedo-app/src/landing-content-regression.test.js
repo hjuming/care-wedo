@@ -42,7 +42,7 @@ test("landing page copy matches elder-friendly beta positioning", () => {
   assert.match(app, /Care Circle/);
   assert.match(app, /Care@wedopr\.com/);
   assert.match(app, /推薦方案/);
-  assert.match(app, /一起照護的人/);
+  assert.match(app, /照護協作者/);
   assert.match(app, /資料怎麼保存/);
   assert.match(app, /系統測試期間，所有帳號開放照護圈升級體驗/);
   assert.match(app, /照護圈協作/);

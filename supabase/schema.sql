@@ -61,7 +61,7 @@ create table if not exists public.plans (
 
 insert into public.plans (id, name, monthly_ocr_limit, max_members, max_recipients, family_group_enabled, price_monthly_usd, is_active, sort_order) values
   ('free',     'Free',             10,     1,  1,  false,  0,   true,   10),
-  ('pro',      '照護圈升級',       100,     2,  1,  true,  30,   true,   20),
+  ('pro',      '照護圈升級',       100,     6,  4,  true,  30,   true,   20),
   ('basic',    'Legacy Basic',     30,     2,  1,  true,   1,   false, 910),
   ('plus',     'Legacy Plus',      50,     5,  2,  true,   3,   false, 920),
   ('team',     'Legacy Team',     200,    15,  8,  true,  10,   false, 930),

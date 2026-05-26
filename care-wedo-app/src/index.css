@@ -2530,6 +2530,7 @@ input:focus-visible {
 }
 
 .care-context-avatar {
+  appearance: none;
   flex: 0 0 auto;
   width: 78px;
   height: 78px;
@@ -2539,6 +2540,8 @@ input:focus-visible {
   background: var(--primary-soft);
   box-shadow: 0 12px 28px rgba(49, 95, 104, 0.16);
   overflow: hidden;
+  cursor: pointer;
+  padding: 0;
 }
 
 .care-context-avatar img {
@@ -2575,6 +2578,27 @@ input:focus-visible {
   font-weight: 800;
   line-height: 1.35;
   overflow-wrap: anywhere;
+}
+
+.care-profile-quick-switch {
+  margin-top: 8px;
+  display: inline-grid;
+  grid-template-columns: auto minmax(120px, 1fr);
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.care-profile-quick-switch select {
+  min-height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--primary-dark);
+  font-weight: 900;
+  padding: 4px 10px;
 }
 
 .care-context-details {
@@ -2617,6 +2641,34 @@ input:focus-visible {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.care-context-avatar-stack {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.care-context-avatar-stack img,
+.care-context-avatar-stack span {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: var(--primary-dark);
+  font-size: 11px;
+  font-weight: 900;
+  object-fit: cover;
+}
+
+.care-context-avatar-stack img + img,
+.care-context-avatar-stack img + span,
+.care-context-avatar-stack span + img,
+.care-context-avatar-stack span + span {
+  margin-left: -8px;
 }
 
 .care-context-family-button {
@@ -2690,6 +2742,19 @@ input:focus-visible {
   border-radius: 999px;
   box-shadow: 0 0 15px var(--section-color);
   opacity: 0.8;
+}
+
+.section-heading-row.is-compact {
+  min-height: auto;
+  padding-left: 14px;
+}
+
+.section-heading-row.is-compact h2 {
+  font-size: 28px;
+}
+
+.section-heading-row.is-compact::before {
+  width: 4px;
 }
 
 .permission-badge {
@@ -3367,6 +3432,10 @@ input:focus-visible {
   line-height: 1.55;
 }
 
+.medicine-summary-row > span::before {
+  content: none;
+}
+
 .medicine-summary-row > span:first-child,
 .medicine-summary-row > strong:first-child {
   border-left: 0;
@@ -3671,6 +3740,39 @@ input:focus-visible {
   color: var(--text-secondary);
   font-size: 14px;
   font-weight: 800;
+}
+
+.billing-breakdown-list {
+  display: grid;
+  gap: 10px;
+}
+
+.billing-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid rgba(94, 143, 154, 0.22);
+  border-radius: 8px;
+  background: var(--surface-strong);
+  padding: 14px;
+}
+
+.billing-line span {
+  color: var(--accent);
+  font-weight: 900;
+}
+
+.billing-line strong {
+  color: var(--text-primary);
+  font-weight: 900;
+}
+
+.billing-line em {
+  color: var(--primary-dark);
+  font-style: normal;
+  font-size: 22px;
+  font-weight: 900;
 }
 
 .trust-panel h3 {
@@ -6490,9 +6592,25 @@ button:disabled,
     grid-template-columns: 1fr;
   }
 
+  .billing-line {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
   .pricing-model-table .plan-tier-row,
   .medicine-summary-row {
     grid-template-columns: 1fr;
+  }
+
+  .medicine-summary-head {
+    display: none;
+  }
+
+  .medicine-summary-row {
+    gap: 0;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
   }
 
   .pricing-model-table .plan-tier-row > span,
@@ -6500,6 +6618,18 @@ button:disabled,
   .medicine-summary-row > strong {
     border-left: 0;
     border-top: 1px solid var(--border);
+  }
+
+  .medicine-summary-row > span {
+    display: grid;
+    grid-template-columns: 92px minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .medicine-summary-row > span::before {
+    content: attr(data-label);
+    color: var(--accent);
+    font-weight: 900;
   }
 
   .pricing-model-table .plan-tier-row > span:first-child,
@@ -6522,7 +6652,7 @@ button:disabled,
 
   .medicine-summary-actions {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: 1fr;
   }
 
   .medicine-summary-actions .primary-action,

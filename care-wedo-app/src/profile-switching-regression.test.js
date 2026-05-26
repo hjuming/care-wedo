@@ -36,12 +36,12 @@ test("Dashboard keeps profile shell data separate from profile record data", () 
   assert.match(appSource, /mergeDashboardShell/);
 });
 
-test("Dashboard keeps family group context visible without switching from the today page", () => {
+test("Dashboard keeps family group context visible and can switch groups from the header", () => {
   assert.match(appSource, /activeGroupId/);
   assert.match(appSource, /care_wedo_active_group_id/);
   assert.match(appSource, /function GroupBadge/);
-  assert.match(appSource, /group-context-badge static/);
-  assert.doesNotMatch(appSource, /frontend\.group_switch/);
+  assert.match(appSource, /onGroupChange/);
+  assert.match(appSource, /frontend\.group_switch/);
 });
 
 test("Profile switcher groups care profiles and persists drag order", () => {

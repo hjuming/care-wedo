@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./index.css";
-import GroupManager from "./components/GroupManager";
 import GroupSettings from "./components/GroupSettings";
 import LoginSetup from "./components/LoginSetup";
 import MobileBottomNav from "./components/MobileBottomNav";
@@ -237,11 +236,15 @@ const AVATAR_MAX_SOURCE_SIZE = 5 * 1024 * 1024;
 const AVATAR_CANVAS_SIZE = 480;
 const CARE_WEDO_SUPPORT_EMAIL = "Care@wedopr.com";
 const CARE_WEDO_PRICING = {
-  baseCircleMonthly: 30,
-  extraCollaboratorMonthly: 10,
-  extraRecipientMonthly: 30,
+  recipientMonthly: 30,
+  collaboratorMonthly: 10,
   freeMonthlyOcrLimit: 10,
   paidMonthlyOcrLimit: 100,
+};
+const CARE_WEDO_GROUP_LIMITS = {
+  maxCareProfiles: 4,
+  maxPaidCollaborators: 5,
+  maxMembersIncludingOwner: 6,
 };
 
 function isQuotaLimitMessage(message = "") {
@@ -392,18 +395,18 @@ const FREE_FEATURES = [
   ["長輩友善短提醒", true, true],
   ["給醫生看的用藥總表", true, true],
   ["吃藥提醒與資料保存", "保留最近 30 天；不開放歷史查詢", "完整保存與查詢"],
-  ["照護圈協作", false, "可邀請家人"],
-  ["照護對象", "1 位", "可加購"],
-  ["一起照護的人", "不含協作者", "可加購"],
+  ["照護圈協作", false, "最多 5 位協作者"],
+  ["照護對象", "1 位", "最多 4 位"],
+  ["照護協作者", "不含協作者", "最多 5 位"],
   ["今日照護與未來行程", true, true],
   ["完整歷史紀錄與健康時間線", false, "完整保存與查詢"],
-  ["正式版月費訂閱", "$0", "$30 起"],
+  ["正式版月費訂閱", "$0", "$30-250/月"],
 ];
 
 const PLAN_TIERS = [
   { name: "Free", label: "免費版", price: "$0/月", copy: "1 位照護對象、每月 10 筆 AI 整理，可看未來提醒；最近 30 天資料會保存但不開放歷史查詢。", featured: false },
-  { name: "Care Circle", label: "照護圈升級", price: "$30/月", copy: "完整歷史紀錄、每位照護對象 100 筆/月 AI 整理，可邀請 1 位家人一起照護。", featured: true },
-  { name: "Helper", label: "增加一起照護的人", price: "+$10/人/月", copy: "可協助上傳、編輯、查看照護資料；不可變更付款與成員權限。" },
+  { name: "Care Circle", label: "照護圈升級", price: "$30-250/月", copy: "每個家庭群組最多 4 位主要照護對象、5 位協作者；主帳號不列入協作者費用。", featured: true },
+  { name: "Helper", label: "增加照護協作者", price: "+$10/人/月", copy: "可協助上傳、編輯、查看照護資料；不可變更付款與成員權限。" },
   { name: "Care Recipient", label: "增加照護對象", price: "+$30/人/月", copy: "每增加一位爸爸、媽媽、自己或其他照護對象，加收資料保存費。" },
 ];
 
@@ -513,7 +516,7 @@ function PlanDetailsModal({ onClose }) {
           <PlanTierTable />
           <div className="pricing-note-card">
             <strong>版本 A 收費方向</strong>
-            <p>免費可以先照顧 1 位家人，最近 30 天資料會保存但不開放歷史查詢。正式收費後，需要完整歷史紀錄或邀請家人一起照護時，照護圈升級每月 $30 起。</p>
+            <p>免費可以先照顧 1 位家人，最近 30 天資料會保存但不開放歷史查詢。正式收費後，每個家庭群組以照護對象與協作者計費，月費區間 $30-250。</p>
           </div>
           <p className="helper-copy">系統測試期間，所有帳號開放照護圈升級體驗，正式收費前會再次公告。付款與資料問題可聯絡 <a href={`mailto:${CARE_WEDO_SUPPORT_EMAIL}`}>{CARE_WEDO_SUPPORT_EMAIL}</a>。</p>
         </div>
@@ -553,7 +556,7 @@ function PlanUpgradeModal({ reason = "quota", onClose, onViewPlans }) {
             <article>
               <span>照護圈升級</span>
               <strong>$30/月</strong>
-              <p>包含 1 位一起照護的人。</p>
+              <p>啟用家庭群組協作與完整歷史保存。</p>
             </article>
             <article>
               <span>整理額度</span>
@@ -580,37 +583,32 @@ function PlanUpgradeModal({ reason = "quota", onClose, onViewPlans }) {
 
 function estimateCareCirclePrice({ careProfiles = [], collaborators = [] } = {}) {
   const recipientCount = Math.max(careProfiles.length, 1);
-  const invitedCollaboratorCount = Math.max(collaborators.length - 1, 0);
-  const needsPaidCircle = recipientCount > 1 || invitedCollaboratorCount > 0;
+  const paidCollaboratorCount = Math.max(collaborators.length - 1, 0);
+  const needsPaidCircle = recipientCount > 1 || paidCollaboratorCount > 0;
+  const recipientSubtotal = needsPaidCircle ? recipientCount * CARE_WEDO_PRICING.recipientMonthly : 0;
+  const collaboratorSubtotal = paidCollaboratorCount * CARE_WEDO_PRICING.collaboratorMonthly;
+  const total = recipientSubtotal + collaboratorSubtotal;
 
   if (!needsPaidCircle) {
     return {
       recipientCount,
-      invitedCollaboratorCount,
+      paidCollaboratorCount,
       total: 0,
-      base: 0,
-      extraCollaborators: 0,
-      extraRecipients: 0,
+      recipientSubtotal,
+      collaboratorSubtotal,
       label: "目前可用 Free",
-      note: "Free 會保留最近 30 天資料但不開放歷史查詢；需要完整歷史紀錄或邀請家人一起照護時，可升級照護圈。",
+      note: "免費版適合單一照護對象自己使用；新增照護對象或協作者時，會升級為照護圈收費。",
     };
   }
 
-  const extraCollaborators = Math.max(invitedCollaboratorCount - 1, 0);
-  const extraRecipients = Math.max(recipientCount - 1, 0);
-  const total = CARE_WEDO_PRICING.baseCircleMonthly
-    + extraCollaborators * CARE_WEDO_PRICING.extraCollaboratorMonthly
-    + extraRecipients * CARE_WEDO_PRICING.extraRecipientMonthly;
-
   return {
     recipientCount,
-    invitedCollaboratorCount,
+    paidCollaboratorCount,
     total,
-    base: CARE_WEDO_PRICING.baseCircleMonthly,
-    extraCollaborators,
-    extraRecipients,
+    recipientSubtotal,
+    collaboratorSubtotal,
     label: `本月預估 $${total}`,
-    note: "正式收費前會再次確認，不會因新增資料而靜默扣款。",
+    note: "收費週期：新增照護對象或協作者時收費；沒有退出或減少人數時，次月同一天會繼續扣款。",
   };
 }
 
@@ -880,13 +878,13 @@ function LandingPage({ variant = "home" }) {
           <article className="plan-card featured-plan">
             <button type="button" className="plan-name-trigger" onClick={() => setShowPlanDetails(true)}>版本 A 收費方式</button>
             <h3>照護圈升級 $30/月</h3>
-            <p>適合長期照顧父母、長輩或慢性病家人。完整保存歷史紀錄，每位照護對象 100 筆/月整理額度，可邀請 1 位家人一起照護。</p>
+            <p>適合長期照顧父母、長輩或慢性病家人。每個家庭群組最多 4 位主要照護對象、5 位協作者，月費清楚落在 $30-250。</p>
             <LineLoginAction loggingIn={loggingIn} label="建立家庭協作" onLogin={handleLineLogin} />
           </article>
         </div>
         <div className="pricing-example-band" aria-label="收費方式範例">
           <article>
-            <span>一起照護的人</span>
+            <span>照護協作者</span>
             <strong>+$10/人/月</strong>
             <p>可協助上傳、編輯、查看資料，不可更改付款與成員權限。</p>
           </article>
@@ -1866,6 +1864,22 @@ function DashboardApp() {
     loadDashboard(identity, profileId, profileGroupId);
   }
 
+  function handleGroupChange(groupId) {
+    const nextGroupId = Number(groupId);
+    if (!Number.isFinite(nextGroupId) || nextGroupId <= 0) return;
+    const firstProfileInGroup = careProfiles.find((profile) => profile.group_id === nextGroupId);
+    const nextProfileId = firstProfileInGroup?.id || activeProfileId;
+    trackEvent("frontend.group_switch", { groupId: nextGroupId, profileId: nextProfileId });
+    setActiveGroupId(nextGroupId);
+    window.localStorage.setItem("care_wedo_active_group_id", String(nextGroupId));
+    if (nextProfileId) {
+      setActiveProfileId(nextProfileId);
+      persistActiveProfilePreference(nextProfileId);
+      window.localStorage.setItem("care_wedo_active_profile_id", String(nextProfileId));
+    }
+    loadDashboard(identity, nextProfileId, nextGroupId);
+  }
+
   function handleSetupComplete() {
     // Reload dashboard after setup
     loadDashboard(identity, activeProfileId, activeGroupId);
@@ -1983,17 +1997,21 @@ function DashboardApp() {
             identity={identity}
             patient={patient}
             selectedProfile={selectedProfile}
+            profiles={careProfiles}
             groups={groups}
             activeGroupId={activeGroupId}
             activeGroupName={activeGroup?.name || dashboard?.active_group_name}
             collaborators={collaborators}
+            onProfileChange={handleProfileChange}
+            onGroupChange={handleGroupChange}
+            onOpenProfile={() => setShowEditProfile(true)}
             onOpenFamily={() => openSection("settings")}
           />
 
           {activeSection !== "overview" && activeSection !== "settings" && (
             <>
             <div className="toolbar">
-              <SectionHeading section={SECTIONS.find(s => s.id === activeSection)} />
+              <SectionHeading section={SECTIONS.find(s => s.id === activeSection)} compact />
             </div>
             <section className="today-search-panel content-search-panel" aria-label={`${SECTIONS.find(s => s.id === activeSection)?.label || "照護資料"}搜尋`}>
               <SearchField
@@ -2008,7 +2026,7 @@ function DashboardApp() {
 
           {activeSection === "settings" && (
             <div className="toolbar">
-              <SectionHeading section={SECTIONS.find(s => s.id === activeSection)} badge={permissionVersion} />
+              <SectionHeading section={SECTIONS.find(s => s.id === activeSection)} badge={permissionVersion} compact />
             </div>
           )}
 
@@ -2502,25 +2520,24 @@ function GroupBadge({ groups = [], activeGroupId, activeGroupName, onChange, fal
   );
 }
 
-function collaboratorRoleLabel(role = "") {
-  if (role === "admin" || role === "owner") return "管理者";
-  if (role === "caregiver") return "照護者";
-  return "家人";
-}
-
 function CareContextHeader({
   identity,
   patient,
   selectedProfile,
+  profiles = [],
   groups = [],
   activeGroupId,
   activeGroupName,
   collaborators = [],
+  onProfileChange,
+  onGroupChange,
+  onOpenProfile,
   onOpenFamily,
 }) {
   const careName = selectedProfile?.display_name || patient?.name || "照護對象";
   const careTitle = getCareTodayTitle(selectedProfile, careName);
-  const careMeta = [patient?.dept, patient?.age].filter(Boolean).join("・") || selectedProfile?.notes || "照護資料";
+  const careDepartment = patient?.dept && patient.dept !== "藥局" ? patient.dept : null;
+  const careMeta = [careDepartment, patient?.age].filter(Boolean).join("・") || selectedProfile?.notes || "照護資料";
   const loginName = identity?.profile?.displayName || identity?.profile?.display_name || (identity?.status === "demo" ? "範例帳號" : "LINE 帳號");
   const normalizedCollaborators = useMemo(() => collaborators
     .map(normalizeCollaborator)
@@ -2538,13 +2555,23 @@ function CareContextHeader({
   return (
     <section className="care-context-header" aria-label={careTitle}>
       <div className="care-context-main">
-        <div className="care-context-avatar" aria-hidden="true">
+        <button type="button" className="care-context-avatar" onClick={onOpenProfile} aria-label="編輯照護者資料">
           <img src={selectedProfile?.avatar_url || aiAvatar} alt={`${careName} 頭像`} />
-        </div>
+        </button>
         <div className="care-context-copy">
           <p className="care-context-eyebrow">正在照護</p>
           <h2>{careName}</h2>
           <p className="care-context-meta">{careMeta}</p>
+          {profiles.length > 1 && (
+            <label className="care-profile-quick-switch">
+              <span>切換照護者</span>
+              <select value={selectedProfile?.id || ""} onChange={(event) => onProfileChange?.(Number(event.target.value))}>
+                {profiles.map((profile) => (
+                  <option key={profile.id} value={profile.id}>{profile.display_name}</option>
+                ))}
+              </select>
+            </label>
+          )}
         </div>
       </div>
 
@@ -2555,15 +2582,20 @@ function CareContextHeader({
             groups={groups}
             activeGroupId={activeGroupId}
             activeGroupName={activeGroupName}
+            onChange={onGroupChange}
             fallbackLabel="尚未建立照護圈"
           />
         </div>
         <button type="button" className="care-context-item care-context-family-button" onClick={onOpenFamily}>
-          <span className="care-context-label">一起照護的人</span>
+          <span className="care-context-label">照護協作者</span>
           <strong>{collaboratorSummary}</strong>
           {collaboratorPreview.length > 0 && (
-            <span className="care-context-helper">
-              {collaboratorPreview.map((item) => `${item.displayName}・${collaboratorRoleLabel(item.role)}`).join("、")}
+            <span className="care-context-avatar-stack" aria-label="協作者頭像">
+              {collaboratorPreview.map((item) => (
+                item.avatarUrl
+                  ? <img key={item.id} src={item.avatarUrl} alt={`${item.displayName} 頭像`} />
+                  : <span key={item.id}>{item.displayName.slice(0, 2)}</span>
+              ))}
             </span>
           )}
         </button>
@@ -2577,9 +2609,9 @@ function CareContextHeader({
   );
 }
 
-function SectionHeading({ section, badge = null }) {
+function SectionHeading({ section, badge = null, compact = false }) {
   return (
-    <div className="section-heading-row" style={{ "--section-color": section.color }}>
+    <div className={compact ? "section-heading-row is-compact" : "section-heading-row"} style={{ "--section-color": section.color }}>
       <h2>{section.label}</h2>
       {badge?.label && (
         <span className={badge.id === "unlimited" ? "permission-badge permission-badge-unlimited" : "permission-badge"} title={badge.description || ""}>
@@ -3306,25 +3338,98 @@ function buildMedicationSummaryText(medications = [], date = todayInTaipei()) {
   ].join("\n\n");
 }
 
+function saveMedicationSummaryImage(medications = [], date = todayInTaipei()) {
+  const rows = uniqueActiveMedications(medications);
+  const width = 1200;
+  const padding = 64;
+  const lineHeight = 36;
+  const blockGap = 32;
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d");
+  const measure = (text, font = "28px sans-serif") => {
+    context.font = font;
+    const words = Array.from(String(text || ""));
+    const lines = [];
+    let line = "";
+    words.forEach((char) => {
+      const next = `${line}${char}`;
+      if (context.measureText(next).width > width - padding * 2 && line) {
+        lines.push(line);
+        line = char;
+      } else {
+        line = next;
+      }
+    });
+    if (line) lines.push(line);
+    return lines;
+  };
+  const rowBlocks = rows.map((medication) => [
+    { label: "藥品全名", value: medication.name || "藥名待確認" },
+    { label: "用途", value: medication.purpose || "用途待確認" },
+    { label: "劑量", value: medication.dosage || "待確認" },
+    { label: "服用時間", value: medicationScheduleText(medication) },
+    { label: "注意事項", value: medication.warnings || "無特別註記" },
+  ]);
+  const estimatedHeight = 260 + rowBlocks.reduce((sum, block) => (
+    sum + 34 + block.reduce((innerSum, item) => innerSum + measure(`${item.label}：${item.value}`).length * lineHeight + 18, 0) + blockGap
+  ), 0);
+  canvas.width = width;
+  canvas.height = Math.max(estimatedHeight, 760);
+  context.fillStyle = "#fffdf8";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.fillStyle = "#172426";
+  context.font = "700 56px sans-serif";
+  context.fillText("Care WEDO 用藥總表", padding, 92);
+  context.font = "700 30px sans-serif";
+  context.fillStyle = "#4c5c60";
+  context.fillText(`更新日期：${formatDateLabel(date)}`, padding, 150);
+  let y = 215;
+  rowBlocks.forEach((block, index) => {
+    context.fillStyle = "#2c6670";
+    context.font = "700 34px sans-serif";
+    context.fillText(`第 ${index + 1} 筆`, padding, y);
+    y += 52;
+    block.forEach((item) => {
+      context.font = "700 28px sans-serif";
+      context.fillStyle = "#b8722b";
+      context.fillText(`${item.label}：`, padding, y);
+      const lines = measure(item.value);
+      context.font = "28px sans-serif";
+      context.fillStyle = "#172426";
+      lines.forEach((line, lineIndex) => {
+        context.fillText(line, padding + 150, y + lineIndex * lineHeight);
+      });
+      y += Math.max(lines.length, 1) * lineHeight + 18;
+    });
+    y += blockGap;
+  });
+  const link = document.createElement("a");
+  link.download = `care-wedo-medications-${date}.png`;
+  link.href = canvas.toDataURL("image/png");
+  link.click();
+}
+
 function MedicationSummarySheet({ medications, onClose }) {
   const [notice, setNotice] = useState("");
   const todayDate = todayInTaipei();
   const rows = uniqueActiveMedications(medications);
   const summaryText = buildMedicationSummaryText(rows, todayDate);
 
-  async function handleShare() {
+  async function handleCopySummary() {
     try {
-      if (navigator.share) {
-        await navigator.share({
-          title: "Care WEDO 用藥總表",
-          text: summaryText,
-        });
-        return;
-      }
       await copyText(summaryText);
       setNotice("已複製用藥總表文字。");
     } catch {
-      setNotice("分享失敗，請再試一次。");
+      setNotice("複製失敗，請再試一次。");
+    }
+  }
+
+  function handleSaveImage() {
+    try {
+      saveMedicationSummaryImage(rows, todayDate);
+      setNotice("已產生用藥總表圖片。");
+    } catch {
+      setNotice("儲存圖片失敗，請再試一次。");
     }
   }
 
@@ -3333,8 +3438,8 @@ function MedicationSummarySheet({ medications, onClose }) {
       <div className="medicine-summary-modal" role="dialog" aria-modal="true" aria-labelledby="medicine-summary-title" onClick={(event) => event.stopPropagation()}>
         <div className="medicine-summary-actions no-print">
           <button type="button" className="secondary-action" onClick={onClose}>返回</button>
-          <button type="button" className="secondary-action" onClick={handleShare}>分享</button>
-          <button type="button" className="primary-action" onClick={() => window.print()}>列印</button>
+          <button type="button" className="secondary-action" onClick={handleCopySummary}>複製文字</button>
+          <button type="button" className="primary-action" onClick={handleSaveImage}>儲存圖片</button>
         </div>
         <section className="medicine-summary-sheet" aria-label="給醫生看的用藥總表">
           <div className="medicine-summary-header">
@@ -3353,11 +3458,11 @@ function MedicationSummarySheet({ medications, onClose }) {
               </div>
               {rows.map((medication) => (
                 <div className="medicine-summary-row" role="row" key={medication.id || medication.name}>
-                  <span>{medication.name || "藥名待確認"}</span>
-                  <span>{medication.purpose || "用途待確認"}</span>
-                  <span>{medication.dosage || "待確認"}</span>
-                  <span>{medicationScheduleText(medication)}</span>
-                  <span>{medication.warnings || "無特別註記"}</span>
+                  <span data-label="藥品全名">{medication.name || "藥名待確認"}</span>
+                  <span data-label="用途">{medication.purpose || "用途待確認"}</span>
+                  <span data-label="劑量">{medication.dosage || "待確認"}</span>
+                  <span data-label="服用時間">{medicationScheduleText(medication)}</span>
+                  <span data-label="注意事項">{medication.warnings || "無特別註記"}</span>
                 </div>
               ))}
             </div>
@@ -3712,32 +3817,6 @@ function SettingsView({
         </div>
       </section>
 
-      <section className="summary-panel wide-panel billing-estimate-panel">
-        <div>
-          <p className="panel-eyebrow">本月費用預估</p>
-          <h3>{priceEstimate.label}</h3>
-          <p>照護對象 {priceEstimate.recipientCount} 位・一起照護的人 {priceEstimate.invitedCollaboratorCount} 位</p>
-        </div>
-        <div className="billing-breakdown-grid" aria-label="版本 A 收費明細">
-          <article>
-            <span>照護圈升級</span>
-            <strong>{priceEstimate.base ? `$${priceEstimate.base}` : "$0"}</strong>
-            <small>完整歷史紀錄與每位照護對象 100 筆/月整理額度</small>
-          </article>
-          <article>
-            <span>增加一起照護的人</span>
-            <strong>+${priceEstimate.extraCollaborators * CARE_WEDO_PRICING.extraCollaboratorMonthly}</strong>
-            <small>{priceEstimate.extraCollaborators} 位 × $10/月</small>
-          </article>
-          <article>
-            <span>增加照護對象</span>
-            <strong>+${priceEstimate.extraRecipients * CARE_WEDO_PRICING.extraRecipientMonthly}</strong>
-            <small>{priceEstimate.extraRecipients} 位 × $30/月</small>
-          </article>
-        </div>
-        <p className="helper-copy">{priceEstimate.note} 付款與資料問題可聯絡 <a href={`mailto:${CARE_WEDO_SUPPORT_EMAIL}`}>{CARE_WEDO_SUPPORT_EMAIL}</a>。</p>
-      </section>
-
       <section className="summary-panel">
         <p className="panel-eyebrow">照護對象</p>
         <div className="care-profile-list">
@@ -3757,10 +3836,6 @@ function SettingsView({
             />
           )}
         </div>
-      </section>
-
-      <section className="summary-panel">
-        <GroupManager identity={identity} onGroupChange={onGroupChange} />
       </section>
 
       <section className="summary-panel wide-panel">
@@ -3791,6 +3866,43 @@ function SettingsView({
         <h3>保存整理後的重要文字資料，方便日後查詢。</h3>
         <p>Care WEDO 使用雲端資料庫保存照護資料，並規劃定期備份。若資料有問題、需要匯出或刪除，可聯絡客服信箱。</p>
         <a className="inline-action" href={`mailto:${CARE_WEDO_SUPPORT_EMAIL}`}>{CARE_WEDO_SUPPORT_EMAIL}</a>
+      </section>
+
+      <section className="summary-panel wide-panel billing-estimate-panel">
+        <div>
+          <p className="panel-eyebrow">本月費用預估</p>
+          <h3>{priceEstimate.label}</h3>
+          <p>
+            每個家庭群組上限：主要照護對象 {CARE_WEDO_GROUP_LIMITS.maxCareProfiles} 位、
+            協作者 {CARE_WEDO_GROUP_LIMITS.maxPaidCollaborators} 位；主帳號不列入協作者費用。
+          </p>
+        </div>
+        <div className="billing-breakdown-list" aria-label="收費明細">
+          {priceEstimate.total > 0 ? (
+            <>
+              <div className="billing-line">
+                <span>主要照護對象</span>
+                <strong>${CARE_WEDO_PRICING.recipientMonthly} x {priceEstimate.recipientCount} 位</strong>
+                <em>${priceEstimate.recipientSubtotal}</em>
+              </div>
+              {priceEstimate.paidCollaboratorCount > 0 && (
+                <div className="billing-line">
+                  <span>共同協作者</span>
+                  <strong>${CARE_WEDO_PRICING.collaboratorMonthly} x {priceEstimate.paidCollaboratorCount} 位</strong>
+                  <em>${priceEstimate.collaboratorSubtotal}</em>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="billing-line">
+              <span>免費版</span>
+              <strong>1 位主要照護對象・沒有協作者</strong>
+              <em>$0</em>
+            </div>
+          )}
+        </div>
+        <p className="helper-copy">平台收費區間：$30-250/月。{priceEstimate.note}</p>
+        <p className="helper-copy">超過上限時，請用其他協作者帳號另外開設家庭群組。付款與資料問題可聯絡 <a href={`mailto:${CARE_WEDO_SUPPORT_EMAIL}`}>{CARE_WEDO_SUPPORT_EMAIL}</a>。</p>
       </section>
 
       {isPersonalMode && onLogout && (
