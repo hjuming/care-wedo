@@ -361,6 +361,6 @@ type MedicationIdentity = {
 - [x] 付費前能看到資料保存、備份與客服聯絡方式。
 - [x] 客服信箱 `Care@wedopr.com` 出現在方案與信任相關頁面。
 - [ ] 所有 UI 改動通過手機 390px 檢查。
-- [x] `pnpm test`：130 passed。
+- [x] `pnpm test`：131 passed。
 - [x] `pnpm lint`：passed。
 - [x] `pnpm build`：passed。

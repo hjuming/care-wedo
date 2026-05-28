@@ -70,3 +70,31 @@ test("robots, sitemap, and llms files expose crawl and answer-layer context", ()
   assert.match(headers, /\/features\n\s+Cache-Control: no-store/);
   assert.doesNotMatch(headers, /\/\*\n\s+Cache-Control: no-store/);
 });
+
+test("static AIO pages are readable without JavaScript", () => {
+  const sitemap = readProjectFile("public/sitemap.xml");
+  const llms = readProjectFile("public/llms.txt");
+
+  for (const page of ["faq", "guide", "pricing"]) {
+    const html = readProjectFile(`public/${page}/index.html`);
+    assert.match(html, /<!doctype html>/i);
+    assert.match(html, /<main/);
+    assert.match(html, /Care WEDO/);
+    assert.doesNotMatch(html, /<script/i);
+    assert.doesNotMatch(html, /Care WEDO 需要 JavaScript/);
+    assert.match(sitemap, new RegExp(`<loc>https://care\\.wedopr\\.com/${page}</loc>`));
+    assert.match(llms, new RegExp(`https://care\\.wedopr\\.com/${page}`));
+  }
+
+  const faq = readProjectFile("public/faq/index.html");
+  const guide = readProjectFile("public/guide/index.html");
+  const pricing = readProjectFile("public/pricing/index.html");
+
+  assert.match(faq, /Care WEDO 是什麼/);
+  assert.match(faq, /不是醫療診斷工具/);
+  assert.match(guide, /第一次使用/);
+  assert.match(guide, /加入 Care WEDO LINE 小管家/);
+  assert.match(pricing, /每個家庭群組/);
+  assert.match(pricing, /\$30-250\/月/);
+  assert.match(pricing, /主帳號不計入協作者費用/);
+});

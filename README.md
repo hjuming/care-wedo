@@ -153,7 +153,7 @@ https://care.wedopr.com
 - 首頁清楚界定 Free 與照護圈升級規劃。
 - 測試期間尚未正式收費，介面先讓使用者理解正式版費用與上限。
 - 新增意見回饋區塊，透過 EmailJS 收集使用者建議。
-- 社交分享、SEO、AIO/GEO 基礎已補齊：OG/Twitter meta、JSON-LD、FAQPage、`robots.txt`、`sitemap.xml`、`llms.txt`。下一步需補不執行 JavaScript 也可讀的靜態產品摘要、FAQ、pricing/guide 頁。
+- 社交分享、SEO、AIO/GEO 基礎已補齊：OG/Twitter meta、JSON-LD、FAQPage、`robots.txt`、`sitemap.xml`、`llms.txt`，以及不執行 JavaScript 也可讀的 `/faq`、`/guide`、`/pricing` 靜態頁。
 - 所有路徑共用 `/assets/images/og-care-wedo.jpg` 作為社交分享圖片；圖片為 1200x630 JPEG，符合 Facebook / LINE / X 常見 large preview 規格。
 - 2026-05-17 已修復 Facebook Debugger 抓取 403 與預覽圖不顯示問題：`robots.txt` 明確允許 `facebookexternalhit`、`Facebot`、`meta-externalagent`，OG/Twitter meta 改指向 JPG，並對分享圖加上 `X-Robots-Tag: all`。
 
@@ -322,7 +322,7 @@ P2：
 
 - 正式付費方案與金流。
 - 建立 `billing_events`、`billing_subscriptions`、`invoices` 草案，讓 $30-250/月模型可被後端核算與稽核。
-- 補靜態 AIO 頁面：`/faq`、`/guide`、`/pricing`，讓 AI crawler 不執行 JavaScript 也能讀到 Care WEDO 是照護提醒工具，不是醫療診斷工具。
+- 持續補 AIO 內容：把 Beta 訪談、真實使用教學與資料安全聲明整理進 `/faq`、`/guide`、`/pricing`、`/llms.txt`。
 - 照護資料匯出。
 - OCR 低信心欄位人工確認。
 

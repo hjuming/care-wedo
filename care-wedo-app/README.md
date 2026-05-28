@@ -116,14 +116,16 @@ pnpm build
 - LINE 通知語氣要像家人貼心提醒，不像系統公告；固定用 `早安` / `晚安` 開頭與 `Care WEDO 陪你照顧最重要的人` 收尾。
 - LINE Login 只完成網頁身份驗證；要收到上傳摘要與每日提醒，家人仍需加入 LINE 照護小管家官方帳號。
 
-## AIO / 靜態內容待補
+## AIO / 靜態內容
 
-目前 OG/Twitter meta、JSON-LD、FAQPage、sitemap、robots、llms 已有基礎；下一階段仍需補低成本靜態頁，讓不執行 JavaScript 的搜尋摘要器與 AI crawler 也能直接讀到核心內容：
+目前 OG/Twitter meta、JSON-LD、FAQPage、sitemap、robots、llms 與低成本靜態頁已有基礎；不執行 JavaScript 的搜尋摘要器與 AI crawler 也能直接讀到核心內容：
 
 - `/faq`：產品用途、限制、資料保存、非醫療診斷聲明。
 - `/guide`：LINE 上傳、家人登入、照護圈協作流程。
 - `/pricing`：Free / 照護圈升級、$30-250/月、4 位主要照護對象 + 5 位協作者上限。
 - `/llms.txt`：同步產品定位、功能、限制、價格模型、客服信箱。
+
+下一步：補 Beta 訪談摘要、實際教學案例與更完整資料安全聲明。
 
 ## LINE 通知語氣與排程
 

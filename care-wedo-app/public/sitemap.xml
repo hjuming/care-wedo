@@ -19,6 +19,24 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://care.wedopr.com/faq</loc>
+    <lastmod>2026-05-29</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://care.wedopr.com/guide</loc>
+    <lastmod>2026-05-29</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://care.wedopr.com/pricing</loc>
+    <lastmod>2026-05-29</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
     <loc>https://care.wedopr.com/privacy</loc>
     <lastmod>2026-05-15</lastmod>
     <changefreq>monthly</changefreq>
