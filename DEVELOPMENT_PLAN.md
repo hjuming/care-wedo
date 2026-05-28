@@ -227,13 +227,13 @@ EmailJS 需要的環境變數：
 |---|---|---|---|
 | PR-CARE-P0-001 | P0 | Production Observability & Alerting | 🟡 基礎完成：前端錯誤、Functions/API、LINE push、cron、OCR 失敗可分類追蹤；待接 Sentry / Cloudflare Analytics 自動通知 |
 | PR-CARE-P0-002 | P0 | Paid Action Confirmation Modal | ✅ 已完成：新增照護對象或共同協作者前顯示目前月費、增加後月費、Beta 不扣款說明 |
-| PR-CARE-P0-003 | P0 | Real Receipt Regression Pack | 10 張真實台灣醫院單據，覆蓋掛號、檢查、領藥、藥袋、處方箋與重複上傳 |
+| PR-CARE-P0-003 | P0 | Real Receipt Regression Pack | 🟡 基礎完成：已建立 10 張去識別化 manifest、私有圖片目錄規則、validator 與 runbook；待補真實圖片 hash 與 LINE WebView 實測紀錄 |
 | PR-CARE-P1-001 | P1 | Medication Identity Normalization | 藥名 normalize、商品名/學名拆分、疑似同藥標記、停用藥不進用藥總表 |
 | PR-CARE-P1-002 | P1 | Billing Data Foundation | `billing_events`、`billing_subscriptions`、`invoices`、後端 entitlement helper 草案 |
 
 ### P0：實機穩定性
 
-- 用至少 10 張真實台灣醫院單據測試 LINE 上傳流程。
+- 用至少 10 張真實台灣醫院單據測試 LINE 上傳流程：已建立 `test-fixtures/real-receipt-regression/manifest.json` 與 `REAL_RECEIPT_REGRESSION_RUNBOOK.md`，真實圖檔不進 Git。
 - 測試單張、多張、重複上傳、先選錯人再改人。
 - 針對新增照護對象、複製邀請碼、加入群組，補實機測試：1/4、4/4、5/5 協作者、超額提示。
 - 補所有 UI 改動的 390px 手機與 LINE WebView 檢查，尤其是照護圈、用藥總表、費用確認。
@@ -288,11 +288,12 @@ pnpm build
 
 目前最後一次驗證狀態：
 
-- `pnpm test`：122 passed
+- `pnpm test`：125 passed
 - `pnpm lint`：passed
 - `pnpm build`：passed
 - P0-002 費用確認 modal：已用 Chrome DevTools Protocol 模擬 390px 手機寬度檢查，`overflowX = false`
 - P0-001 observability 基礎：已補 `/api/telemetry`、事件分類、Cloudflare tail runbook 與回歸測試
+- P0-003 真實單據回歸包基礎：已補 10 筆 manifest、`npm run receipt-pack:check` 與回歸測試
 
 ---
 

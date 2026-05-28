@@ -91,6 +91,13 @@ pnpm build
 - 前端與 Functions 共同使用事件分類：`ocr_failed`、`line_push_failed`、`quota_exceeded`、`auth_failed`、`cron_failed`。
 - 不記錄醫療全文、token、原圖、base64；排查指令與告警門檻請看根目錄 `PRODUCTION_OBSERVABILITY_RUNBOOK.md`。
 
+## Real Receipt Regression
+
+- 真實單據回歸 manifest：`test-fixtures/real-receipt-regression/manifest.json`。
+- 私有圖片目錄：`test-fixtures/real-receipt-regression/private-images/`，已加入 `.gitignore`，不要 commit 真實醫療圖片。
+- 檢查指令：在專案根目錄執行 `npm run receipt-pack:check`。
+- 操作規範請看根目錄 `REAL_RECEIPT_REGRESSION_RUNBOOK.md`。
+
 ## 設計原則
 
 - 長輩可讀：字大、短句、明確按鈕。

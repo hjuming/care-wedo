@@ -19,6 +19,9 @@ care-wedo-app/.env.local
 # Documents
 開發文件/
 
+# Care WEDO private medical receipt fixtures
+test-fixtures/real-receipt-regression/private-images/
+
 # Environment Variables
 .env
 .wrangler/

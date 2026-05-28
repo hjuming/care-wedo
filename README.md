@@ -145,6 +145,7 @@ https://care.wedopr.com
 - 其他頁面標題列已改成 compact 版，搜尋框與今日頁面對齊，避免排程、紀錄、用藥頁第一屏被標題佔滿。
 - 用藥總表手機版改為欄位標籤卡片；操作改為 `複製文字` 與 `儲存圖片`，比列印更符合長輩實際使用情境。
 - 2026-05-29 已補 Beta observability 基礎：前端 production error 可送入 `/api/telemetry`，Functions log 會帶 `ocr_failed`、`line_push_failed`、`quota_exceeded`、`auth_failed`、`cron_failed` 分類，並新增 Cloudflare tail runbook。
+- 2026-05-29 已建立真實單據回歸包基礎：`test-fixtures/real-receipt-regression/manifest.json` 定義 10 張台灣單據測試案例；真實圖片放在未追蹤的 private-images 目錄，避免醫療資料進 Git。
 
 ### 7. 未登入首頁與回饋收集
 
@@ -304,7 +305,7 @@ https://care.wedopr.com/callback
 
 P0：
 
-- 用 5–10 張真實單據完成 LINE 實機回歸測試。
+- 用 10 張真實單據完成 LINE 實機回歸測試；目前已建立去識別化 manifest 與驗證工具，待放入本機私有圖片與實測紀錄。
 - 照護圈新增照護對象、邀請協作者前補正式費用確認 modal，避免未來接金流後出現靜默升級疑慮。
 - 完成 390px 手機與 LINE WebView 實機檢查，尤其是照護圈、用藥總表、費用確認 modal。
 - 強化藥品去重：藥品代碼、學名、商品名、前綴模糊比對。

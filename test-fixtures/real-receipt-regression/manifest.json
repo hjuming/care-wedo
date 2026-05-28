@@ -1,0 +1,229 @@
+{
+  "schema_version": "care-wedo-real-receipt-regression-v1",
+  "updated_at": "2026-05-29",
+  "purpose": "P0-003 Real Receipt Regression Pack manifest. Raw medical images stay in private-images/ and are not committed.",
+  "privacy": {
+    "raw_medical_images_committed": false,
+    "redaction_required": true,
+    "private_image_directory": "test-fixtures/real-receipt-regression/private-images",
+    "allowed_committed_data": "Only de-identified metadata, expected record shape, scenario tags, and hash placeholders."
+  },
+  "coverage_requirements": {
+    "minimum_cases": 10,
+    "document_types": ["clinic_visit", "inspection", "refill_reminder", "medication_bag", "prescription"],
+    "scenarios": ["multi_upload", "wrong_profile_then_reassign", "duplicate_upload", "low_confidence_review"]
+  },
+  "cases": [
+    {
+      "id": "tw-clinic-visit-01",
+      "country": "TW",
+      "document_type": "clinic_visit",
+      "redaction_status": "verified",
+      "scenarios": ["single_upload"],
+      "fixture": {
+        "local_private_path": "private-images/tw-clinic-visit-01.jpg",
+        "sha256_placeholder": "pending-private-image-hash"
+      },
+      "expected": {
+        "care_profile_label": "測試長輩A",
+        "records": [
+          { "kind": "appointment", "type": "clinic_visit", "required_fields": ["date", "time", "hospital", "department"] }
+        ]
+      },
+      "line_expectation": {
+        "elder_duplicate_warning_visible": false,
+        "raw_medical_full_text_visible": false
+      }
+    },
+    {
+      "id": "tw-clinic-visit-02",
+      "country": "TW",
+      "document_type": "clinic_visit",
+      "redaction_status": "verified",
+      "scenarios": ["wrong_profile_then_reassign"],
+      "fixture": {
+        "local_private_path": "private-images/tw-clinic-visit-02.jpg",
+        "sha256_placeholder": "pending-private-image-hash"
+      },
+      "expected": {
+        "care_profile_label": "測試長輩B",
+        "records": [
+          { "kind": "appointment", "type": "clinic_visit", "required_fields": ["date", "hospital", "department"] }
+        ]
+      },
+      "line_expectation": {
+        "elder_duplicate_warning_visible": false,
+        "raw_medical_full_text_visible": false
+      }
+    },
+    {
+      "id": "tw-inspection-01",
+      "country": "TW",
+      "document_type": "inspection",
+      "redaction_status": "verified",
+      "scenarios": ["single_upload"],
+      "fixture": {
+        "local_private_path": "private-images/tw-inspection-01.jpg",
+        "sha256_placeholder": "pending-private-image-hash"
+      },
+      "expected": {
+        "care_profile_label": "測試長輩A",
+        "records": [
+          { "kind": "appointment", "type": "inspection", "required_fields": ["date", "time", "hospital", "department"] }
+        ]
+      },
+      "line_expectation": {
+        "elder_duplicate_warning_visible": false,
+        "raw_medical_full_text_visible": false
+      }
+    },
+    {
+      "id": "tw-inspection-02",
+      "country": "TW",
+      "document_type": "inspection",
+      "redaction_status": "verified",
+      "scenarios": ["low_confidence_review"],
+      "fixture": {
+        "local_private_path": "private-images/tw-inspection-02.jpg",
+        "sha256_placeholder": "pending-private-image-hash"
+      },
+      "expected": {
+        "care_profile_label": "測試長輩C",
+        "records": [
+          { "kind": "appointment", "type": "inspection", "required_fields": ["date", "hospital"] }
+        ]
+      },
+      "line_expectation": {
+        "elder_duplicate_warning_visible": false,
+        "raw_medical_full_text_visible": false
+      }
+    },
+    {
+      "id": "tw-refill-01",
+      "country": "TW",
+      "document_type": "refill_reminder",
+      "redaction_status": "verified",
+      "scenarios": ["single_upload"],
+      "fixture": {
+        "local_private_path": "private-images/tw-refill-01.jpg",
+        "sha256_placeholder": "pending-private-image-hash"
+      },
+      "expected": {
+        "care_profile_label": "測試長輩A",
+        "records": [
+          { "kind": "appointment", "type": "refill_reminder", "required_fields": ["date", "hospital"] }
+        ]
+      },
+      "line_expectation": {
+        "elder_duplicate_warning_visible": false,
+        "raw_medical_full_text_visible": false
+      }
+    },
+    {
+      "id": "tw-refill-02",
+      "country": "TW",
+      "document_type": "refill_reminder",
+      "redaction_status": "verified",
+      "scenarios": ["duplicate_upload"],
+      "fixture": {
+        "local_private_path": "private-images/tw-refill-02.jpg",
+        "sha256_placeholder": "pending-private-image-hash"
+      },
+      "expected": {
+        "care_profile_label": "測試長輩A",
+        "records": [
+          { "kind": "appointment", "type": "refill_reminder", "required_fields": ["date", "hospital"] }
+        ]
+      },
+      "line_expectation": {
+        "elder_duplicate_warning_visible": false,
+        "raw_medical_full_text_visible": false
+      }
+    },
+    {
+      "id": "tw-medication-bag-01",
+      "country": "TW",
+      "document_type": "medication_bag",
+      "redaction_status": "verified",
+      "scenarios": ["single_upload"],
+      "fixture": {
+        "local_private_path": "private-images/tw-medication-bag-01.jpg",
+        "sha256_placeholder": "pending-private-image-hash"
+      },
+      "expected": {
+        "care_profile_label": "測試長輩B",
+        "records": [
+          { "kind": "medication", "type": "medication", "required_fields": ["name", "dosage", "frequency"] }
+        ]
+      },
+      "line_expectation": {
+        "elder_duplicate_warning_visible": false,
+        "raw_medical_full_text_visible": false
+      }
+    },
+    {
+      "id": "tw-medication-bag-02",
+      "country": "TW",
+      "document_type": "medication_bag",
+      "redaction_status": "verified",
+      "scenarios": ["multi_upload"],
+      "fixture": {
+        "local_private_path": "private-images/tw-medication-bag-02.jpg",
+        "sha256_placeholder": "pending-private-image-hash"
+      },
+      "expected": {
+        "care_profile_label": "測試長輩B",
+        "records": [
+          { "kind": "medication", "type": "medication", "required_fields": ["name", "dosage"] }
+        ]
+      },
+      "line_expectation": {
+        "elder_duplicate_warning_visible": false,
+        "raw_medical_full_text_visible": false
+      }
+    },
+    {
+      "id": "tw-prescription-01",
+      "country": "TW",
+      "document_type": "prescription",
+      "redaction_status": "verified",
+      "scenarios": ["multi_upload"],
+      "fixture": {
+        "local_private_path": "private-images/tw-prescription-01.jpg",
+        "sha256_placeholder": "pending-private-image-hash"
+      },
+      "expected": {
+        "care_profile_label": "測試長輩C",
+        "records": [
+          { "kind": "medication", "type": "medication", "required_fields": ["name", "frequency"] },
+          { "kind": "appointment", "type": "refill_reminder", "required_fields": ["date"] }
+        ]
+      },
+      "line_expectation": {
+        "elder_duplicate_warning_visible": false,
+        "raw_medical_full_text_visible": false
+      }
+    },
+    {
+      "id": "tw-prescription-02",
+      "country": "TW",
+      "document_type": "prescription",
+      "redaction_status": "verified",
+      "scenarios": ["low_confidence_review", "duplicate_upload"],
+      "fixture": {
+        "local_private_path": "private-images/tw-prescription-02.jpg",
+        "sha256_placeholder": "pending-private-image-hash"
+      },
+      "expected": {
+        "care_profile_label": "測試長輩C",
+        "records": [
+          { "kind": "medication", "type": "medication", "required_fields": ["name"] }
+        ]
+      },
+      "line_expectation": {
+        "elder_duplicate_warning_visible": false,
+        "raw_medical_full_text_visible": false
+      }
+    }
+  ]
+}
