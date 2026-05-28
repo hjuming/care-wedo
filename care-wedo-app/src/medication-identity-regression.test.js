@@ -44,5 +44,28 @@ test("web OCR pending medications store identity metadata for family review", ()
   assert.match(ocrApi, /normalized_name:\s*identity\.normalizedName/);
   assert.match(ocrApi, /identity_confidence:\s*identity\.confidence/);
   assert.match(ocrApi, /duplicate_candidate_ids:\s*identity\.duplicateCandidateIds/);
+  assert.match(ocrApi, /med\.duplicate_candidate_ids\s*=\s*identity\.duplicateCandidateIds/);
   assert.doesNotMatch(ocrApi, /findMedicationIdentityMatch\(identity, existing\) === "fuzzy"[\s\S]{0,120}duplicate = existing/);
+});
+
+test("OCR review warns family when a medication may already exist", () => {
+  const ocrResult = readProjectFile("care-wedo-app/src/components/OcrResult.jsx");
+
+  assert.match(ocrResult, /duplicate_candidate_ids/);
+  assert.match(ocrResult, /identity_confidence/);
+  assert.match(ocrResult, /可能已存在/);
+  assert.match(ocrResult, /請確認是不是同一顆藥/);
+  assert.match(ocrResult, /MedicationDuplicateNotice/);
+});
+
+test("OCR confirm merges only high-confidence duplicate medications", () => {
+  const confirmApi = readProjectFile("functions/api/ocr/confirm.ts");
+
+  assert.match(confirmApi, /confirmMedications/);
+  assert.match(confirmApi, /duplicate_candidate_ids/);
+  assert.match(confirmApi, /identity_confidence/);
+  assert.match(confirmApi, /identityConfidence >= 0\.99/);
+  assert.match(confirmApi, /regularMedicationIds/);
+  assert.match(confirmApi, /mergedMedicationIds/);
+  assert.doesNotMatch(confirmApi, /identityConfidence < 0\.99[\s\S]{0,180}active:\s*true/);
 });

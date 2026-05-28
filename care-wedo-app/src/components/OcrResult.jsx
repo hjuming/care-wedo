@@ -18,6 +18,19 @@ function normalizeAppointmentDraft(apt = {}) {
   };
 }
 
+function normalizeDuplicateCandidateIds(value) {
+  if (Array.isArray(value)) return value.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0);
+  if (typeof value === "string" && value.trim()) {
+    try {
+      const parsed = JSON.parse(value);
+      return normalizeDuplicateCandidateIds(parsed);
+    } catch {
+      return value.split(",").map((id) => Number(id.trim())).filter((id) => Number.isFinite(id) && id > 0);
+    }
+  }
+  return [];
+}
+
 function normalizeMedicationDraft(med = {}) {
   return {
     name: med.name || "",
@@ -26,6 +39,13 @@ function normalizeMedicationDraft(med = {}) {
     purpose: med.purpose || med.use || "",
     warnings: med.warnings || "",
     reminder_text: med.reminder_text || "",
+    normalized_name: med.normalized_name || "",
+    brand_name: med.brand_name || "",
+    generic_name: med.generic_name || "",
+    drug_code: med.drug_code || "",
+    dosage_text: med.dosage_text || "",
+    identity_confidence: typeof med.identity_confidence === "number" ? med.identity_confidence : Number(med.identity_confidence || 0),
+    duplicate_candidate_ids: normalizeDuplicateCandidateIds(med.duplicate_candidate_ids),
   };
 }
 
@@ -247,8 +267,21 @@ function MedicationPreview({ medication }) {
     <div className="ocr-row">
       <strong>{medication.name || "藥名待確認"}</strong>
       <span>{[medication.frequency, medication.dosage, medication.purpose].filter(Boolean).join(" · ")}</span>
+      <MedicationDuplicateNotice medication={medication} />
       {medication.warnings && <em>{medication.warnings}</em>}
     </div>
+  );
+}
+
+function MedicationDuplicateNotice({ medication }) {
+  const candidateCount = normalizeDuplicateCandidateIds(medication.duplicate_candidate_ids).length;
+  if (!candidateCount) return null;
+  const confidence = Number(medication.identity_confidence || 0);
+  const tone = confidence >= 0.99 ? "系統判斷很可能是同一顆藥" : "OCR 只抓到相似資料，先不要自動合併";
+  return (
+    <p className="ocr-duplicate-note">
+      可能已存在，請確認是不是同一顆藥。{tone}。
+    </p>
   );
 }
 

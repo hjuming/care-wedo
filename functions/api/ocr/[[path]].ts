@@ -265,6 +265,13 @@ async function saveParsedData(
     if (exactDuplicate && !identity.duplicateCandidateIds.includes(exactDuplicate.id)) {
       identity.duplicateCandidateIds = [exactDuplicate.id, ...identity.duplicateCandidateIds];
     }
+    med.normalized_name = identity.normalizedName || null;
+    med.brand_name = identity.brandName || null;
+    med.generic_name = identity.genericName || null;
+    med.drug_code = identity.drugCode || null;
+    med.dosage_text = identity.dosageText || null;
+    med.identity_confidence = identity.confidence;
+    med.duplicate_candidate_ids = identity.duplicateCandidateIds;
     return {
       user_id: userId,
       group_id: groupId,
