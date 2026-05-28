@@ -111,6 +111,39 @@ pnpm build
 - `functions/_shared/supabase.ts` 提供 `resolveGroupBillingEntitlement`，統一計算 4 位主要照護對象、5 位付費協作者、主帳號不計費與 $30-250/月預估。
 - `recordBillingGroupEvent` 會在新增照護對象與新協作者加入後，寫入 `billing_events`、更新 `billing_subscriptions`，並建立當月 draft invoice snapshot；phase 55 尚未套用時不阻斷 Beta 流程。
 - Production Supabase 已套用 phase 55 migration；接金流前需再補正式帳單結算、升降級/取消政策與 webhook。
+- 2026-05-29 已補齊 `billing_entitlement` 前後端對齊：`/api/groups` 會回傳家庭群組權益快照，協作者管理中心改以後端值顯示上限與預估金額。
+
+### 運維備忘（Phase 55）
+
+- 上線時間：2026-05-29 02:54:17（Asia/Taipei）
+- 版本標記：`phase55_billing_foundation`
+- 查核 SQL（最少）：
+
+```sql
+select table_name
+from pg_tables
+where schemaname = 'public'
+  and table_name in ('billing_subscriptions', 'billing_events', 'invoices');
+
+select
+  event_type,
+  count(*) as event_count
+from public.billing_events
+group by event_type;
+```
+
+- 回滾點：緊急回復先保留稽核資料；確認無正式帳單依賴後，依序執行 drop script：
+
+```sql
+begin;
+drop table if exists public.invoices;
+drop table if exists public.billing_events;
+drop table if exists public.billing_subscriptions;
+commit;
+```
+
+- 代碼回滾參考：`git checkout HEAD~1`（當下通常為 `aad562f`）。
+- 可回退標籤（上線前可建）：`git tag -f phase55_release_pre`
 
 ## 設計原則
 
@@ -123,6 +156,7 @@ pnpm build
 - 上傳入口同時支援照片與文字；文字貼上後也要經 AI 判讀、寫入資料庫，再回到同一個人工確認流程。
 - LINE 通知語氣要像家人貼心提醒，不像系統公告；固定用 `早安` / `晚安` 開頭與 `Care WEDO 陪你照顧最重要的人` 收尾。
 - LINE Login 只完成網頁身份驗證；要收到上傳摘要與每日提醒，家人仍需加入 LINE 照護小管家官方帳號。
+- LINE 對話窗內接到 LIFF callback 時，將先導向 `/app/open`，透過 `external` 開啟外部瀏覽器並保留 `code/liff.state`，避免回到 LINE 小視窗中反覆登入。
 
 ## AIO / 靜態內容
 

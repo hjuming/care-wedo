@@ -13,7 +13,7 @@ import { buildSearchSuggestions, matchSearch } from "./services/search";
 import PrivacyPage from "./components/PrivacyPage";
 import TermsPage from "./components/TermsPage";
 import aiAvatar from "./assets/ai-avatar.png";
-import { isLineCallbackSearch, resolveCareWedoRoute, resolveInitialCareWedoRoute } from "./routing";
+import { isLineCallbackSearch, resolveCareWedoRoute } from "./routing";
 
 
 const IS_PROD = import.meta.env.PROD;
@@ -1107,15 +1107,36 @@ function LoginPage() {
 }
 
 export default function App() {
+  const initialSearch = window.location.search;
+  const shouldAutoOpenExternalBrowserAfterCallback = isLineCallbackSearch(initialSearch) && isLineInAppBrowser();
+
+  function resolveRoute(pathname = window.location.pathname, search = window.location.search) {
+    const base = resolveCareWedoRoute(pathname);
+    if (base === "app" && isLineCallbackSearch(search) && isLineInAppBrowser()) return "external-open";
+    return base;
+  }
+
   const [route, setRoute] = useState(() => {
     // LINE OAuth callback URL must remain untouched until liff.init() completes.
     // We only route the SPA view to /app here; URL cleanup happens after LIFF init.
-    return resolveInitialCareWedoRoute(window.location.pathname, window.location.search);
+    return shouldAutoOpenExternalBrowserAfterCallback
+      ? "external-open"
+      : resolveRoute(window.location.pathname, initialSearch);
   });
 
   useEffect(() => {
+    if (route !== "external-open" || !isLineCallbackSearch(window.location.search) || !isLineInAppBrowser()) {
+      return undefined;
+    }
+    if (window.location.pathname !== "/app/open") {
+      window.history.replaceState(null, "", `/app/open${window.location.search}`);
+    }
+    return undefined;
+  }, [route]);
+
+  useEffect(() => {
     // 處理瀏覽器上一頁/下一頁
-    const handlePopState = () => setRoute(resolveCareWedoRoute(window.location.pathname));
+    const handlePopState = () => setRoute(resolveRoute(window.location.pathname, window.location.search));
     window.addEventListener("popstate", handlePopState);
 
     // 攔截所有內部 <a> 點擊，改用 pushState 客戶端導航
@@ -1134,10 +1155,12 @@ export default function App() {
       ) return;
       e.preventDefault();
       window.history.pushState(null, "", href);
-      setRoute(resolveCareWedoRoute(href));
-      const hash = href.includes("#") ? href.slice(href.indexOf("#")) : "";
-      if (hash) {
-        window.setTimeout(() => document.querySelector(hash)?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+      const [pathAndSearch, hash = ""] = href.split("#", 2);
+      const [path, search = ""] = pathAndSearch.split("?", 2);
+      setRoute(resolveRoute(path || "/", search ? `?${search}` : ""));
+      const hashWithSymbol = hash ? `#${hash}` : "";
+      if (hashWithSymbol) {
+        window.setTimeout(() => document.querySelector(hashWithSymbol)?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
       } else {
         window.scrollTo({ top: 0, behavior: "smooth" });
       }
@@ -1174,7 +1197,8 @@ export default function App() {
 
 function ExternalOpenPage() {
   const [status, setStatus] = useState(isLineInAppBrowser() ? "opening" : "redirecting");
-  const targetUrl = buildExternalAppUrl("/app");
+  const callbackSearch = window.location.search || "";
+  const targetUrl = buildExternalAppUrl(`/app${callbackSearch}`);
 
   const handleOpenExternal = useCallback(async () => {
     setStatus("opening");

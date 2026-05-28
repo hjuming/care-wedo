@@ -29,8 +29,24 @@ function calculateGroupMonthlyEstimate({ careProfileCount = 1, collaboratorCount
   };
 }
 
+function getBillingLimitConfig(group) {
+  const entitlement = group?.billing_entitlement || {};
+  return {
+    maxCareProfiles: Number.isFinite(entitlement.maxCareProfiles) ? entitlement.maxCareProfiles : GROUP_LIMITS.maxCareProfiles,
+    maxPaidCollaborators: Number.isFinite(entitlement.maxPaidCollaborators) ? entitlement.maxPaidCollaborators : GROUP_LIMITS.maxPaidCollaborators,
+    maxMembersIncludingOwner: Number.isFinite(entitlement.maxMembersIncludingOwner)
+      ? entitlement.maxMembersIncludingOwner
+      : GROUP_LIMITS.maxMembersIncludingOwner,
+    canAddCareProfile: typeof entitlement.canAddCareProfile === "boolean" ? entitlement.canAddCareProfile : true,
+    estimatedMonthlyAmount: Number.isFinite(entitlement.estimatedMonthlyAmount) ? entitlement.estimatedMonthlyAmount : null,
+    careProfileCount: Number.isFinite(entitlement.careProfileCount) ? entitlement.careProfileCount : null,
+    paidCollaboratorCount: Number.isFinite(entitlement.paidCollaboratorCount) ? entitlement.paidCollaboratorCount : null,
+  };
+}
+
 function buildPaidActionPreview({ actionType, group, careProfileCount, collaboratorCount }) {
   const current = calculateGroupMonthlyEstimate({ careProfileCount, collaboratorCount });
+  const billingLimits = getBillingLimitConfig(group);
   const next = calculateGroupMonthlyEstimate({
     careProfileCount: actionType === "create_profile" ? careProfileCount + 1 : careProfileCount,
     collaboratorCount: actionType === "invite_collaborator" ? collaboratorCount + 1 : collaboratorCount,
@@ -38,7 +54,10 @@ function buildPaidActionPreview({ actionType, group, careProfileCount, collabora
   return {
     actionType,
     groupName: group?.name || "家庭群組",
-    current,
+    current: {
+      ...current,
+      total: billingLimits.estimatedMonthlyAmount ?? current.total,
+    },
     next,
     delta: Math.max(next.total - current.total, 0),
   };
@@ -48,6 +67,7 @@ function PaidActionConfirmationModal({ action, onCancel, onConfirm }) {
   if (!action) return null;
 
   if (action.type === "limit_reached") {
+    const limits = getBillingLimitConfig(action.group || null);
     return (
       <div className="modal-overlay paid-action-modal-overlay" onClick={onCancel}>
         <div className="modal-content paid-action-modal" role="dialog" aria-modal="true" aria-labelledby="paid-action-limit-title" onClick={(event) => event.stopPropagation()}>
@@ -61,8 +81,8 @@ function PaidActionConfirmationModal({ action, onCancel, onConfirm }) {
           <div className="modal-body">
             <p className="helper-copy">{action.message}</p>
             <div className="limit-summary-grid">
-              <span>主要照護對象 {GROUP_LIMITS.maxCareProfiles} 位</span>
-              <span>共同協作者 {GROUP_LIMITS.maxPaidCollaborators} 位</span>
+              <span>主要照護對象 {limits.maxCareProfiles} 位</span>
+              <span>共同協作者 {limits.maxPaidCollaborators} 位</span>
               <span>主帳號 1 位不計費</span>
             </div>
             <p className="quota-note quota-note-warning">超過這個，請用其他協作者帳號，另外開設家庭群組。</p>
@@ -177,12 +197,13 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
   }
 
   function showLimitModal(kind, group) {
+    const limits = getBillingLimitConfig(group);
     const title = kind === "collaborator"
-      ? "已達 5 位共同協作者上限"
-      : "已達 4 位主要照護對象上限";
+      ? `已達 ${limits.maxPaidCollaborators} 位共同協作者上限`
+      : `已達 ${limits.maxCareProfiles} 位主要照護對象上限`;
     const message = kind === "collaborator"
-      ? `「${group?.name || "這個群組"}」已達共同協作者上限。`
-      : `「${group?.name || "這個群組"}」已達主要照護對象上限。`;
+      ? `「${group?.name || "這個群組"}」已達 ${limits.maxPaidCollaborators} 位共同協作者上限。`
+      : `「${group?.name || "這個群組"}」已達 ${limits.maxCareProfiles} 位主要照護對象上限。`;
     setPendingPaidAction({ type: "limit_reached", title, message });
   }
 
@@ -238,23 +259,30 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
 
   const selectedGroup = data.groups?.find((group) => group.id === selectedGroupId) || null;
   const selectedGroupPlan = selectedGroup?.plan || null;
-  const selectedCareProfileCount = selectedGroup?.care_profile_count
+  const selectedGroupBillingConfig = getBillingLimitConfig(selectedGroup);
+  const selectedCareProfileCount = (selectedGroupBillingConfig.careProfileCount ?? selectedGroup?.care_profile_count
     ?? data.care_profiles?.filter((profile) => profile.group_id === selectedGroupId).length
-    ?? 0;
-  const selectedRecipientLimit = Math.min(selectedGroupPlan?.max_recipients || GROUP_LIMITS.maxCareProfiles, GROUP_LIMITS.maxCareProfiles);
+    ?? 0);
+  const selectedRecipientLimit = selectedGroupBillingConfig.maxCareProfiles;
   const selectedRecipientLimitReached = Boolean(
     selectedRecipientLimit && selectedCareProfileCount >= selectedRecipientLimit,
   );
 
+
   function getCollaboratorCount(group) {
     const members = group?.members || getMembersByGroup(group?.id);
+    const billingConfig = getBillingLimitConfig(group);
+    if (Number.isFinite(billingConfig.paidCollaboratorCount)) {
+      return Math.max(billingConfig.paidCollaboratorCount, 0);
+    }
     return Math.max((group?.member_count ?? members.length) - 1, 0);
   }
 
   function isCollaboratorLimitReached(group) {
     const members = group?.members || getMembersByGroup(group?.id);
     const memberCount = group?.member_count ?? members.length;
-    return memberCount >= GROUP_LIMITS.maxMembersIncludingOwner || getCollaboratorCount(group) >= GROUP_LIMITS.maxPaidCollaborators;
+    const billingConfig = getBillingLimitConfig(group);
+    return memberCount >= billingConfig.maxMembersIncludingOwner || getCollaboratorCount(group) >= billingConfig.maxPaidCollaborators;
   }
 
   async function submitCreateProfile({ groupId, profileName, profileRelationship }) {
@@ -415,9 +443,12 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
             const isAdmin = membership?.role === "admin";
             // Use enriched members list from group if available, else fall back to memberships
             const members = group.members || getMembersByGroup(group.id);
-            const careProfileCount = group.care_profile_count ?? 0;
+            const careProfileCount = Number.isFinite(group?.billing_entitlement?.careProfileCount)
+              ? group.billing_entitlement.careProfileCount
+              : group.care_profile_count ?? 0;
             const collaboratorCount = getCollaboratorCount(group);
             const collaboratorLimitReached = isCollaboratorLimitReached(group);
+            const groupBillingConfig = getBillingLimitConfig(group);
             return (
               <div key={group.id} className="settings-group-card">
                 <div className="settings-group-header">
@@ -425,7 +456,7 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
                     <strong>{group.name}</strong>
                     <p className="small-copy">{isAdmin ? "群組管理者" : "協作者"}・主帳號 1 位不計費</p>
                     <p className="small-copy">
-                      主要照護對象 {careProfileCount}/{GROUP_LIMITS.maxCareProfiles}・協作者 {collaboratorCount}/{GROUP_LIMITS.maxPaidCollaborators}
+                      主要照護對象 {careProfileCount}/{groupBillingConfig.maxCareProfiles}・協作者 {collaboratorCount}/{groupBillingConfig.maxPaidCollaborators}
                     </p>
                   </div>
                 </div>
@@ -437,7 +468,7 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
                   </div>
                   <p className="helper-copy">
                     {collaboratorLimitReached
-                      ? "已達 5 位協作者上限。超過這個，請用其他協作者帳號，另外開設家庭群組。"
+                      ? `已達 ${groupBillingConfig.maxPaidCollaborators} 位協作者上限。超過這個，請用其他協作者帳號，另外開設家庭群組。`
                       : "複製邀請碼或完整邀請文，貼到 LINE 給協作者。"}
                   </p>
                   <div className="invite-code-row">
@@ -527,7 +558,7 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
 
       <div className="group-settings-card">
         <p className="panel-eyebrow">新增主要照護對象</p>
-        <p className="helper-copy">這裡新增的是被照顧的人。每個家庭群組最多 4 位；超過時請另外開設家庭群組。</p>
+        <p className="helper-copy">這裡新增的是被照顧的人。每個家庭群組最多 {selectedRecipientLimit || GROUP_LIMITS.maxCareProfiles} 位；超過時請另外開設家庭群組。</p>
         {data.groups?.length ? (
           <form className="profile-create-form" onSubmit={requestProfileCreationConfirmation}>
             <label>

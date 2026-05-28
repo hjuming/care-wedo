@@ -93,15 +93,17 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
 
     const groupsWithMembers = await Promise.all(
       groups.map(async (group) => {
-        const [members, plan] = await Promise.all([
+        const [members, plan, billingEntitlement] = await Promise.all([
           getGroupMembers(env, group.id),
           getGroupPlan(env, group.id),
+          resolveGroupBillingEntitlement(env, group.id),
         ]);
         return {
           ...group,
           members,
           member_count: members.length,
           care_profile_count: profileCountByGroupId.get(group.id) || 0,
+          billing_entitlement: billingEntitlement,
           plan: {
             id: plan.id,
             name: plan.name,

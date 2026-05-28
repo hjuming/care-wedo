@@ -239,8 +239,11 @@ Authentication error [code: 10000]
 
 ### Phase 55 上線備忘（2026-05-29）
 
+**版本**：`phase55_billing_foundation`  
 **執行項目**：`supabase/migration_phase55_billing_foundation.sql` 已在 production Supabase SQL Editor 套用。  
-**驗證方式**：確認三張表已建立，且 `service_role` 具備 select/insert/update/delete 權限。
+**完成時間**：2026-05-29 02:54:17（Asia/Taipei，UTC+8）  
+**執行結果**：成功，回傳 `Success. No rows returned`。  
+**驗證方式**：確認三張表已建立，且 `service_role` 具備 select/insert/update/delete 權限；API 與頁面金流快照邏輯已生效。
 
 **查核 SQL**：
 
@@ -258,12 +261,32 @@ where table_schema = 'public'
   and grantee = 'service_role'
   and table_name in ('billing_subscriptions', 'billing_events', 'invoices')
 order by table_name, privilege_type;
+
+select
+  family_group_id,
+  care_profile_count,
+  paid_collaborator_count,
+  estimated_monthly_amount,
+  status
+from public.billing_subscriptions
+order by family_group_id;
+
+select
+  event_type,
+  count(*) as event_count
+from public.billing_events
+group by event_type
+order by event_type;
 ```
 
-**版本備註**：
+**版本備註（Phase 55 已上線）**：
 
 - 版本標記：`phase55_billing_foundation`
-- 內容：新增 `billing_subscriptions`、`billing_events`、`invoices`，`recordBillingGroupEvent` 可落地追蹤新增照護對象與邀請協作者事件，預備正式計費資料稽核。
+- 內容：
+  - 建立 `billing_subscriptions`、`billing_events`、`invoices`；
+  - `recordBillingGroupEvent` 開始可追蹤照護對象新增與邀請協作者；
+  - `GET /api/groups` 已回傳 `billing_entitlement`（含 `maxCareProfiles`、`maxPaidCollaborators`、`estimatedMonthlyAmount`）；
+  - 協作者管理中心採用後端 entitlement 做人數上限與費用預估顯示，避免前端邏輯漂移。
 - 還原步驟（緊急）：
 
 ```sql
@@ -273,6 +296,23 @@ drop table if exists public.billing_events;
 drop table if exists public.billing_subscriptions;
 commit;
 ```
+
+回滾前檢查：
+
+1) 無正式收款訂單（`invoices.status != 'paid'`）的資料可直接清空；
+2) 已有正式訂單資料請改採「凍結寫入 + 留存稽核資料」後再逐步遷移。
+
+**代碼回滾參考（運維）**：
+
+- Git 回滾基準：`HEAD~1`（當下通常為 `aad562f`）。
+- 緊急回滾：`git checkout HEAD~1`
+- 建議建立回滾標記（上線前）：`git tag -f phase55_release_pre`
+
+### LINE 身份流程補充（Phase 55）
+
+- 若使用者在 LINE 對話窗收到登入 callback（有 `code` / `liff.state`），前端會先轉到 `/app/open`。
+- `openUrlInExternalBrowser` 會嘗試 `liff.openWindow({ url, external: true })`，並保留 callback query，避免落在 LINE 視窗中重複授權。
+- 驗證建議：觀察 `/app/open` 命中率，若偏低請檢查 callback 參數是否被瀏覽器清除或重導向衝突。
 
 ---
 

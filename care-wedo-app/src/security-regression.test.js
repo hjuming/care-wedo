@@ -158,6 +158,8 @@ test("LINE links use an external browser handoff page", () => {
   assert.match(routing, /external-open/);
   assert.match(app, /function ExternalOpenPage/);
   assert.match(app, /用瀏覽器開啟/);
+  assert.match(app, /shouldAutoOpenExternalBrowserAfterCallback/);
+  assert.ok(app.includes('window.history.replaceState(null, "", `/app/open${window.location.search}`)'));
   assert.match(liff, /liff\.openWindow\(\{ url, external: true \}\)/);
   assert.match(callback, /CARE_WEDO_OPEN_URL = "https:\/\/care\.wedopr\.com\/app\/open"/);
   assert.match(reminders, /https:\/\/care\.wedopr\.com\/app\/open/);
@@ -524,6 +526,7 @@ test("Group settings exposes plan limits before adding care recipients", () => {
   assert.match(groupsApi, /care_profile_count/);
   assert.match(groupsApi, /member_count/);
   assert.match(groupsApi, /max_recipients/);
+  assert.match(groupsApi, /billing_entitlement/);
   assert.match(component, /selectedRecipientLimitReached/);
   assert.match(component, /maxCareProfiles:\s*4/);
   assert.match(component, /maxPaidCollaborators:\s*5/);
@@ -550,7 +553,7 @@ test("Paid care actions show a beta fee confirmation before continuing", () => {
   assert.match(component, /requestInviteConfirmation/);
   assert.match(component, /runConfirmedPaidAction/);
   assert.match(component, /正式收費前會再次確認，不會靜默扣款/);
-  assert.match(component, /已達 5 位共同協作者上限/);
+  assert.match(component, /已達 .*位共同協作者上限/);
   assert.match(css, /\.paid-action-modal/);
   assert.match(css, /width:\s*min\(560px,\s*calc\(100vw - 40px\)\)/);
   assert.match(css, /width:\s*calc\(100vw - 24px\)/);

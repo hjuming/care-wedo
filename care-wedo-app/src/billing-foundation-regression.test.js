@@ -53,6 +53,15 @@ test("backend entitlement helper is the source of truth for Care WEDO billing ma
   assert.match(supabase, /canInviteCollaborator/);
 });
 
+test("groups GET API returns backend billing entitlement on each group", () => {
+  const groupsApi = readProjectFile("functions/api/groups.ts");
+  const component = readProjectFile("care-wedo-app/src/components/GroupSettings.jsx");
+
+  assert.match(groupsApi, /billing_entitlement:\s*billingEntitlement/);
+  assert.match(component, /getBillingLimitConfig/);
+  assert.match(component, /billing_entitlement/);
+});
+
 test("billing events are recorded for paid care actions without blocking beta flows", () => {
   const supabase = readProjectFile("functions/_shared/supabase.ts");
   const groupsApi = readProjectFile("functions/api/groups.ts");

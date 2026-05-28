@@ -1,6 +1,6 @@
 # Care WEDO 醫療照護小管家
 
-> **當前版本：V1.0 Beta（2026-05-28）**
+> **當前版本：V1.0 Beta（2026-05-29）**
 > **正式站**：https://care.wedopr.com
 > **狀態**：LINE 實機流程已進入測試期；照護圈後台改為長輩友善的協作者管理中心。
 > **Production 上線紀錄**：2026-05-29（Asia/Taipei）已完成 Phase 55（Billing Data Foundation）套用。
@@ -129,6 +129,7 @@ https://care.wedopr.com
 - 系統刻意排除上傳本人，不讓同一個人收到兩次。
 - 沒有 LINE user id、`web-mvp` 測試帳號或關閉該通知者，不會收到推播。
 - LINE Login 只代表完成網頁身份驗證；若家人要收到 LINE 推播，仍需要加入 Care WEDO LINE 照護小管家。邀請文案需同時提供群組加入網址與 LINE 小管家連結。
+- LINE 對話窗中的登入 callback（含 `code` / `liff.state`）會先導向 `/app/open`，再以外部瀏覽器重新開啟同一個 callback URL，完成身分驗證後可直接進入後台，降低留在 LINE 視窗操作困擾。
 
 ### 6. Web App 與家庭照護
 
@@ -148,6 +149,7 @@ https://care.wedopr.com
 - 2026-05-29 已補 Beta observability 基礎：前端 production error 可送入 `/api/telemetry`，Functions log 會帶 `ocr_failed`、`line_push_failed`、`quota_exceeded`、`auth_failed`、`cron_failed` 分類，並新增 Cloudflare tail runbook。
 - 2026-05-29 已建立真實單據回歸包基礎：`test-fixtures/real-receipt-regression/manifest.json` 定義 10 張台灣單據測試案例；真實圖片放在未追蹤的 private-images 目錄，避免醫療資料進 Git。
 - 2026-05-29 已建立 Billing Data Foundation 草案：新增 `billing_subscriptions`、`billing_events`、`invoices` migration 與後端 `resolveGroupBillingEntitlement` / `recordBillingGroupEvent` helper；新增照護對象與新協作者加入會寫入可稽核事件、subscription snapshot 與當月 draft invoice。Production Supabase 已套用 `supabase/migration_phase55_billing_foundation.sql`。
+- 同一批次後續更新：`/api/groups` 追加回傳 `billing_entitlement`，照護圈頁使用後端實際權益快照做人數上限與 `estimatedMonthlyAmount` 顯示，避免前端硬編碼上限與稽核口徑不同步。
 
 ### 7. 未登入首頁與回饋收集
 
@@ -188,8 +190,19 @@ https://care.wedopr.com
 
 ### 8.1 Production 上線紀錄補充（Phase 55）
 
-**時間**：2026-05-29（Asia/Taipei）  
+**版本**：`phase55_billing_foundation`  
+**時間**：2026-05-29 02:54:17（Asia/Taipei，UTC+8）  
 **執行結果**：`supabase/migration_phase55_billing_foundation.sql` 在 production SQL Editor 成功執行（`Success. No rows returned`）。
+
+**版本備註（Phase 55 已上線）**
+
+- `billing_subscriptions`、`billing_events`、`invoices` 已成功建立並授權 service_role 使用。
+- `GET /api/groups` 回傳每個家庭群組的 `billing_entitlement`：
+  - 上限（`maxCareProfiles`、`maxPaidCollaborators`）
+  - 計算基礎（`careProfileCount`、`paidCollaboratorCount`）
+  - `estimatedMonthlyAmount`
+- `/app/settings`（協作者管理中心）改採後端 `billing_entitlement` 作為人數上限與本月估算金額來源，避免前端硬編碼。
+- 新增 `billing-foundation` 回歸與安全規則檢查，補齊後端寫入測試與 Group Settings 用量邏輯驗證。
 
 #### 查核 SQL（已驗證）
 
@@ -207,12 +220,28 @@ where table_schema = 'public'
   and grantee = 'service_role'
   and table_name in ('billing_subscriptions', 'billing_events', 'invoices')
 order by table_name, privilege_type;
+
+select
+  family_group_id,
+  care_profile_count,
+  paid_collaborator_count,
+  estimated_monthly_amount,
+  status
+from public.billing_subscriptions
+order by family_group_id;
+
+select
+  event_type,
+  count(*) as event_count
+from public.billing_events
+group by event_type
+order by event_type;
 ```
 
-#### 版本備註與回滾點
+#### 版本備註（Phase 55 已上線）與回滾點
 
 - 版本標識：`phase55_billing_foundation`
-- 套用範圍：Billing Data Foundation（`billing_subscriptions`、`billing_events`、`invoices`）
+- 套用範圍：Billing Data Foundation + `/api/groups` 權益快照回傳 + 設定頁後端來源展示（人數上限、費用預估）
 - 回滾 SQL（緊急）：
 
 ```sql
@@ -223,7 +252,26 @@ drop table if exists public.billing_subscriptions;
 commit;
 ```
 
-回滾時，請先同步核對 prod 中關聯金流/帳務流程未進入正式收費狀態；如已進入試算後續流程，先保留稽核紀錄再還原。
+回滾前核對：
+
+1. 是否有正式帳務流程（含 `billing_events`、`invoices`）已開始寫入；
+2. 若已進入正式結算，請先備份 `billing_events`、`invoices` 再回滾；
+3. 回滾後需補跑權限檢核與 `GET /api/groups` 可用性確認。
+
+版本回滾紀錄（供發版參考）：
+
+- 程式回滾參考點：`HEAD~1`（當下為 `aad562f`）
+- 緊急回滾：
+
+```bash
+git checkout HEAD~1
+```
+
+- 保留可回退標籤（建議於上線前建立）：
+
+```bash
+git tag phase55_release_pre
+```
 
 ---
 
