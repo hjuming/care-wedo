@@ -85,6 +85,12 @@ pnpm lint
 pnpm build
 ```
 
+## Production Observability
+
+- 前端 production error 會透過 `/api/telemetry` 送入 Cloudflare Pages Functions logs。
+- 前端與 Functions 共同使用事件分類：`ocr_failed`、`line_push_failed`、`quota_exceeded`、`auth_failed`、`cron_failed`。
+- 不記錄醫療全文、token、原圖、base64；排查指令與告警門檻請看根目錄 `PRODUCTION_OBSERVABILITY_RUNBOOK.md`。
+
 ## 設計原則
 
 - 長輩可讀：字大、短句、明確按鈕。

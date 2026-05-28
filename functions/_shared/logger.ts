@@ -1,7 +1,27 @@
 const SENSITIVE_KEY_PATTERN = /token|secret|password|credential|apikey|api_key|service_role|image|base64|medical|notes|reminder|purpose|warnings/i;
 const MAX_STRING_LENGTH = 220;
 
+export const OBSERVABILITY_EVENT_CATEGORIES = {
+  OCR_FAILED: "ocr_failed",
+  LINE_PUSH_FAILED: "line_push_failed",
+  QUOTA_EXCEEDED: "quota_exceeded",
+  AUTH_FAILED: "auth_failed",
+  CRON_FAILED: "cron_failed",
+  FRONTEND_FAILED: "frontend_failed",
+  FEEDBACK_FAILED: "feedback_failed",
+} as const;
+
 type LogFields = Record<string, unknown>;
+
+const CATEGORY_RULES: Array<[RegExp, string]> = [
+  [/line\..*push_failed|cron\..*push_failed/i, OBSERVABILITY_EVENT_CATEGORIES.LINE_PUSH_FAILED],
+  [/cron\..*(failed|missing_secret|unauthorized)/i, OBSERVABILITY_EVENT_CATEGORIES.CRON_FAILED],
+  [/quota/i, OBSERVABILITY_EVENT_CATEGORIES.QUOTA_EXCEEDED],
+  [/auth|unauthenticated|unauthorized|invalid_signature/i, OBSERVABILITY_EVENT_CATEGORIES.AUTH_FAILED],
+  [/ocr|gemini|medical/i, OBSERVABILITY_EVENT_CATEGORIES.OCR_FAILED],
+  [/feedback/i, OBSERVABILITY_EVENT_CATEGORIES.FEEDBACK_FAILED],
+  [/frontend/i, OBSERVABILITY_EVENT_CATEGORIES.FRONTEND_FAILED],
+];
 
 function normalizeError(error: unknown) {
   if (error instanceof Error) {
@@ -11,6 +31,12 @@ function normalizeError(error: unknown) {
     };
   }
   return { message: String(error) };
+}
+
+export function classifyLogEvent(event: string) {
+  const eventName = String(event || "");
+  const match = CATEGORY_RULES.find(([pattern]) => pattern.test(eventName));
+  return match?.[1] || eventName;
 }
 
 export function redact(value: unknown, depth = 0): unknown {
@@ -37,6 +63,7 @@ function write(level: "info" | "error", event: string, fields: LogFields = {}) {
   const payload = {
     level,
     event,
+    category: classifyLogEvent(event),
     at: new Date().toISOString(),
     ...(redact(fields) as LogFields),
   };

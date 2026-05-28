@@ -1,5 +1,24 @@
 const SENSITIVE_KEY_PATTERN = /token|secret|authorization|password|key|idtoken|image|base64|medical|notes|reminder|purpose|warnings/i;
 const MAX_STRING_LENGTH = 180;
+const TELEMETRY_ENDPOINT = "/api/telemetry";
+
+export const OBSERVABILITY_EVENT_CATEGORIES = Object.freeze({
+  OCR_FAILED: "ocr_failed",
+  LINE_PUSH_FAILED: "line_push_failed",
+  QUOTA_EXCEEDED: "quota_exceeded",
+  AUTH_FAILED: "auth_failed",
+  CRON_FAILED: "cron_failed",
+  FRONTEND_FAILED: "frontend_failed",
+  FEEDBACK_FAILED: "feedback_failed",
+});
+
+const CATEGORY_RULES = [
+  [/ocr|upload/i, OBSERVABILITY_EVENT_CATEGORIES.OCR_FAILED],
+  [/quota|plan_upgrade/i, OBSERVABILITY_EVENT_CATEGORIES.QUOTA_EXCEEDED],
+  [/auth|login|invite_join/i, OBSERVABILITY_EVENT_CATEGORIES.AUTH_FAILED],
+  [/feedback/i, OBSERVABILITY_EVENT_CATEGORIES.FEEDBACK_FAILED],
+  [/frontend|render|dashboard|profile|calendar/i, OBSERVABILITY_EVENT_CATEGORIES.FRONTEND_FAILED],
+];
 
 function normalizeError(error) {
   if (!error) return null;
@@ -10,6 +29,17 @@ function normalizeError(error) {
     };
   }
   return { message: String(error) };
+}
+
+export function classifyTelemetryEvent(name = "") {
+  const eventName = String(name || "");
+  const match = CATEGORY_RULES.find(([pattern]) => pattern.test(eventName));
+  return match?.[1] || OBSERVABILITY_EVENT_CATEGORIES.FRONTEND_FAILED;
+}
+
+function getCurrentRoute() {
+  if (typeof window === "undefined") return "";
+  return window.location?.pathname || "";
 }
 
 function redact(value, depth = 0) {
@@ -33,11 +63,34 @@ function redact(value, depth = 0) {
   return String(value);
 }
 
+function sendTelemetryToWorker(payload) {
+  if (typeof window === "undefined" || !import.meta.env.PROD) return;
+  if (payload.level !== "error" && payload.category !== OBSERVABILITY_EVENT_CATEGORIES.QUOTA_EXCEEDED) return;
+
+  const body = JSON.stringify(payload);
+  try {
+    if (navigator.sendBeacon) {
+      const sent = navigator.sendBeacon(TELEMETRY_ENDPOINT, new Blob([body], { type: "application/json" }));
+      if (sent) return;
+    }
+    fetch(TELEMETRY_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+      keepalive: true,
+    }).catch(() => null);
+  } catch {
+    // Telemetry must never break the care flow.
+  }
+}
+
 function emit(level, name, details = {}) {
   const payload = {
     level,
     name,
+    category: classifyTelemetryEvent(name),
     at: new Date().toISOString(),
+    route: getCurrentRoute(),
     details: redact(details),
   };
 
@@ -48,6 +101,7 @@ function emit(level, name, details = {}) {
   }
 
   window.dispatchEvent(new CustomEvent("carewedo:telemetry", { detail: payload }));
+  sendTelemetryToWorker(payload);
   return payload;
 }
 

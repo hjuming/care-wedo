@@ -144,6 +144,7 @@ https://care.wedopr.com
 - 照護圈標題列支援切換家庭群組，正在照護者可由頁首快速切換；點選照護者頭像可編輯主要照護者資料。
 - 其他頁面標題列已改成 compact 版，搜尋框與今日頁面對齊，避免排程、紀錄、用藥頁第一屏被標題佔滿。
 - 用藥總表手機版改為欄位標籤卡片；操作改為 `複製文字` 與 `儲存圖片`，比列印更符合長輩實際使用情境。
+- 2026-05-29 已補 Beta observability 基礎：前端 production error 可送入 `/api/telemetry`，Functions log 會帶 `ocr_failed`、`line_push_failed`、`quota_exceeded`、`auth_failed`、`cron_failed` 分類，並新增 Cloudflare tail runbook。
 
 ### 7. 未登入首頁與回饋收集
 
@@ -307,7 +308,7 @@ P0：
 - 照護圈新增照護對象、邀請協作者前補正式費用確認 modal，避免未來接金流後出現靜默升級疑慮。
 - 完成 390px 手機與 LINE WebView 實機檢查，尤其是照護圈、用藥總表、費用確認 modal。
 - 強化藥品去重：藥品代碼、學名、商品名、前綴模糊比對。
-- 建立 production tail / Cloudflare Analytics / Sentry 告警。
+- 接上 Sentry / Cloudflare Analytics 自動告警；目前已具備 `/api/telemetry` 與 Cloudflare tail runbook。
 
 P1：
 

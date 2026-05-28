@@ -1,4 +1,5 @@
 import { getBearerToken, verifyLineIdToken, Env } from "../_shared/supabase";
+import { logError, logEvent } from "../_shared/logger";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -10,12 +11,14 @@ const corsHeaders: Record<string, string> = {
  * Paths that do NOT require JWT authentication.
  * - /api/health: public health check
  * - /api/feedback: public landing page feedback form
+ * - /api/telemetry: public sanitized frontend observability intake
  * - /api/cron/*: protected by CRON_SECRET instead
  * - /api/dashboard GET: returns demo data when unauthenticated
  */
 function isPublicPath(pathname: string, method: string): boolean {
   if (pathname === "/api/health") return true;
   if (pathname === "/api/feedback" && method === "POST") return true;
+  if (pathname === "/api/telemetry" && method === "POST") return true;
   if (pathname === "/api/session") return true;
   if (pathname.startsWith("/api/cron/")) return true;
   // Dashboard GET is allowed without auth (returns demo mode)
@@ -38,6 +41,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     const token = getBearerToken(request);
 
     if (!token) {
+      logEvent("auth.missing_bearer", { path: url.pathname, method: request.method });
       return Response.json({ error: "請先登入" }, { status: 401, headers: corsHeaders });
     }
 
@@ -45,6 +49,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       const identity = await verifyLineIdToken(env, token);
       (context as any).data = { ...(context as any).data, identity };
     } catch (error) {
+      logError("auth.verify_failed", error, { path: url.pathname, method: request.method });
       const message = error instanceof Error ? error.message : "登入已失效，請重新登入。";
       return Response.json({ error: message }, { status: 401, headers: corsHeaders });
     }
