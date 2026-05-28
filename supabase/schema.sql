@@ -187,6 +187,13 @@ create table if not exists public.medications (
   meal_timing text,
   scheduled_time text,
   taken_status text,
+  normalized_name text,
+  brand_name text,
+  generic_name text,
+  drug_code text,
+  dosage_text text,
+  identity_confidence numeric,
+  duplicate_candidate_ids jsonb not null default '[]'::jsonb,
   purpose text,
   warnings text,
   reminder_text text,
@@ -207,7 +214,14 @@ alter table public.medications
   add column if not exists time_slot text,
   add column if not exists meal_timing text,
   add column if not exists scheduled_time text,
-  add column if not exists taken_status text;
+  add column if not exists taken_status text,
+  add column if not exists normalized_name text,
+  add column if not exists brand_name text,
+  add column if not exists generic_name text,
+  add column if not exists drug_code text,
+  add column if not exists dosage_text text,
+  add column if not exists identity_confidence numeric,
+  add column if not exists duplicate_candidate_ids jsonb not null default '[]'::jsonb;
 
 alter table public.user_family_groups
   add column if not exists can_manage boolean not null default true,
@@ -234,6 +248,14 @@ create index if not exists medications_profile_active_created_at_idx
 
 create index if not exists medications_group_id_idx
   on public.medications (group_id);
+
+create index if not exists medications_profile_normalized_name_idx
+  on public.medications (profile_id, normalized_name)
+  where normalized_name is not null;
+
+create index if not exists medications_profile_drug_code_idx
+  on public.medications (profile_id, drug_code)
+  where drug_code is not null;
 
 create table if not exists public.medication_logs (
   id bigserial primary key,

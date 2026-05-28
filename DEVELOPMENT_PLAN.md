@@ -228,7 +228,7 @@ EmailJS 需要的環境變數：
 | PR-CARE-P0-001 | P0 | Production Observability & Alerting | 🟡 基礎完成：前端錯誤、Functions/API、LINE push、cron、OCR 失敗可分類追蹤；待接 Sentry / Cloudflare Analytics 自動通知 |
 | PR-CARE-P0-002 | P0 | Paid Action Confirmation Modal | ✅ 已完成：新增照護對象或共同協作者前顯示目前月費、增加後月費、Beta 不扣款說明 |
 | PR-CARE-P0-003 | P0 | Real Receipt Regression Pack | 🟡 基礎完成：已建立 10 張去識別化 manifest、私有圖片目錄規則、validator 與 runbook；待補真實圖片 hash 與 LINE WebView 實測紀錄 |
-| PR-CARE-P1-001 | P1 | Medication Identity Normalization | 藥名 normalize、商品名/學名拆分、疑似同藥標記、停用藥不進用藥總表 |
+| PR-CARE-P1-001 | P1 | Medication Identity Normalization | 🟡 基礎完成：已補 normalized_name、brand/generic/drug code 欄位、OCR 儲存 identity metadata、同藥不同空白/符號可更新同一筆；待補家人端疑似重複確認 UI |
 | PR-CARE-P1-002 | P1 | Billing Data Foundation | `billing_events`、`billing_subscriptions`、`invoices`、後端 entitlement helper 草案 |
 
 ### P0：實機穩定性
@@ -242,7 +242,7 @@ EmailJS 需要的環境變數：
 
 ### P1：OCR 與資料品質
 
-- 強化藥品去重：藥品代碼、學名、商品名、模糊比對。
+- 強化藥品去重：已補藥名 normalize、商品名/學名/藥碼欄位與疑似同藥候選標記；下一步補家人端確認 UI 與正式藥碼資料源。
 - 將 OCR 信心不足欄位標示給家人後台確認。
 - 家人端顯示「本次資料新增 / 更新」。
 - 建立 OCR 範例資料集與回歸測試。
@@ -288,7 +288,7 @@ pnpm build
 
 目前最後一次驗證狀態：
 
-- `pnpm test`：125 passed
+- `pnpm test`：128 passed
 - `pnpm lint`：passed
 - `pnpm build`：passed
 - P0-002 費用確認 modal：已用 Chrome DevTools Protocol 模擬 390px 手機寬度檢查，`overflowX = false`

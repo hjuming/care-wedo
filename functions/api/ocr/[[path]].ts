@@ -9,7 +9,13 @@ import {
   verifyLineIdToken,
 } from "../../_shared/supabase";
 import { logError, logEvent } from "../../_shared/logger";
-import { parseMedicalText } from "../../_shared/medical_ocr";
+import {
+  buildMedicationIdentity,
+  findMedicationIdentityMatch,
+  isMissingMedicationIdentityColumn,
+  parseMedicalText,
+  stripMedicationIdentityPayload,
+} from "../../_shared/medical_ocr";
 
 type Env = {
   GOOGLE_API_KEY: string;
@@ -29,6 +35,17 @@ type SavedParsedData = {
   document_id: number | null;
   appointment_ids: number[];
   medication_ids: number[];
+};
+
+type ExistingMedicationIdentity = {
+  id: number;
+  name?: string | null;
+  normalized_name?: string | null;
+  brand_name?: string | null;
+  generic_name?: string | null;
+  drug_code?: string | null;
+  dosage?: string | null;
+  dosage_text?: string | null;
 };
 
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
@@ -225,30 +242,72 @@ async function saveParsedData(
     saved.appointment_ids = inserted.map((row) => row.id);
   }
 
-  const medications = (parsed.medications || []).map((med) => ({
-    user_id: userId,
-    group_id: groupId,
-    profile_id: profileId,
-    source_document_id: documentId,
-    created_by_user_id: userId,
-    name: med.name || null,
-    dosage: med.dosage || null,
-    frequency: med.frequency || med.freq || null,
-    time_slot: med.time_slot || null,
-    meal_timing: med.meal_timing || null,
-    scheduled_time: med.scheduled_time || null,
-    purpose: med.purpose || med.use || null,
-    warnings: med.warnings || null,
-    reminder_text: med.reminder_text || null,
-    active: false,
-  }));
+  let existingMeds: ExistingMedicationIdentity[] = [];
+  if (parsed.medications?.length) {
+    try {
+      existingMeds = await supabaseFetch<ExistingMedicationIdentity[]>(
+        env,
+        `medications?profile_id=eq.${profileId}&select=id,name,normalized_name,brand_name,generic_name,drug_code,dosage,dosage_text`,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!isMissingMedicationIdentityColumn(message)) throw error;
+      existingMeds = await supabaseFetch<ExistingMedicationIdentity[]>(
+        env,
+        `medications?profile_id=eq.${profileId}&select=id,name,dosage`,
+      );
+    }
+  }
+
+  const medications = (parsed.medications || []).map((med) => {
+    const identity = buildMedicationIdentity(med, existingMeds);
+    const exactDuplicate = existingMeds.find((existing) => findMedicationIdentityMatch(identity, existing) === "exact");
+    if (exactDuplicate && !identity.duplicateCandidateIds.includes(exactDuplicate.id)) {
+      identity.duplicateCandidateIds = [exactDuplicate.id, ...identity.duplicateCandidateIds];
+    }
+    return {
+      user_id: userId,
+      group_id: groupId,
+      profile_id: profileId,
+      source_document_id: documentId,
+      created_by_user_id: userId,
+      name: med.name || null,
+      dosage: med.dosage || null,
+      frequency: med.frequency || med.freq || null,
+      time_slot: med.time_slot || null,
+      meal_timing: med.meal_timing || null,
+      scheduled_time: med.scheduled_time || null,
+      purpose: med.purpose || med.use || null,
+      warnings: med.warnings || null,
+      reminder_text: med.reminder_text || null,
+      normalized_name: identity.normalizedName || null,
+      brand_name: identity.brandName || null,
+      generic_name: identity.genericName || null,
+      drug_code: identity.drugCode || null,
+      dosage_text: identity.dosageText || null,
+      identity_confidence: identity.confidence,
+      duplicate_candidate_ids: identity.duplicateCandidateIds,
+      active: false,
+    };
+  });
 
   if (medications.length) {
-    const inserted = await supabaseFetch<Array<{ id: number }>>(env, "medications?select=id", {
-      method: "POST",
-      headers: { Prefer: "return=representation" },
-      body: JSON.stringify(medications),
-    });
+    let inserted: Array<{ id: number }>;
+    try {
+      inserted = await supabaseFetch<Array<{ id: number }>>(env, "medications?select=id", {
+        method: "POST",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify(medications),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!isMissingMedicationIdentityColumn(message)) throw error;
+      inserted = await supabaseFetch<Array<{ id: number }>>(env, "medications?select=id", {
+        method: "POST",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify(medications.map((payload) => stripMedicationIdentityPayload(payload))),
+      });
+    }
     saved.medication_ids = inserted.map((row) => row.id);
   }
 

@@ -98,6 +98,12 @@ pnpm build
 - 檢查指令：在專案根目錄執行 `npm run receipt-pack:check`。
 - 操作規範請看根目錄 `REAL_RECEIPT_REGRESSION_RUNBOOK.md`。
 
+## Medication Identity
+
+- OCR 儲存用藥時會寫入 `normalized_name`、`brand_name`、`generic_name`、`drug_code`、`dosage_text`、`identity_confidence`、`duplicate_candidate_ids`。
+- LINE OCR 的正式入庫流程會先用藥碼或 normalized name 找 exact duplicate；疑似同藥只標記候選，不自動合併。
+- Web OCR pending review 會保留 identity metadata，供後續家人端確認 UI 使用。
+
 ## 設計原則
 
 - 長輩可讀：字大、短句、明確按鈕。

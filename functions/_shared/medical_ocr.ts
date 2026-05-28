@@ -126,6 +126,114 @@ function normalizeDate(value: unknown) {
   return "";
 }
 
+type ExistingMedicationIdentity = {
+  id: number;
+  name?: string | null;
+  normalized_name?: string | null;
+  brand_name?: string | null;
+  generic_name?: string | null;
+  drug_code?: string | null;
+  dosage?: string | null;
+  dosage_text?: string | null;
+};
+
+export type MedicationIdentity = {
+  rawName: string;
+  normalizedName: string;
+  brandName?: string;
+  genericName?: string;
+  drugCode?: string;
+  dosageText?: string;
+  confidence: number;
+  duplicateCandidateIds: number[];
+};
+
+const MEDICATION_IDENTITY_FIELDS = [
+  "normalized_name",
+  "brand_name",
+  "generic_name",
+  "drug_code",
+  "dosage_text",
+  "identity_confidence",
+  "duplicate_candidate_ids",
+];
+
+function compactMedicationText(value: unknown) {
+  return cleanText(value)
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[（]/g, "(")
+    .replace(/[）]/g, ")")
+    .replace(/[\s　,，.。・．·/／\\\-—_+|｜:：;；'"`~～()（）[\]【】{}]/g, "");
+}
+
+function extractParentheticalName(value: string) {
+  return value.match(/[（(]([^）)]+)[）)]/)?.[1]?.trim() || "";
+}
+
+function stripParentheticalName(value: string) {
+  return value.replace(/[（(][^）)]+[）)]/g, "").trim();
+}
+
+export function findMedicationIdentityMatch(
+  identity: MedicationIdentity,
+  existing: ExistingMedicationIdentity,
+): "exact" | "fuzzy" | null {
+  const existingCode = cleanText(existing.drug_code);
+  if (identity.drugCode && existingCode && identity.drugCode === existingCode) return "exact";
+
+  const existingNormalized = compactMedicationText(existing.normalized_name || existing.name);
+  if (identity.normalizedName && existingNormalized && identity.normalizedName === existingNormalized) return "exact";
+
+  const genericName = compactMedicationText(identity.genericName);
+  const existingGenericName = compactMedicationText(existing.generic_name);
+  if (genericName && existingGenericName && genericName === existingGenericName) return "fuzzy";
+
+  if (identity.normalizedName && existingNormalized && Math.min(identity.normalizedName.length, existingNormalized.length) >= 6) {
+    if (identity.normalizedName.includes(existingNormalized) || existingNormalized.includes(identity.normalizedName)) {
+      return "fuzzy";
+    }
+  }
+
+  return null;
+}
+
+export function buildMedicationIdentity(
+  med: Record<string, any>,
+  existingMeds: ExistingMedicationIdentity[] = [],
+): MedicationIdentity {
+  const rawName = cleanText(med.name || med.rawName || med.drug_name || med.drugName);
+  const brandName = cleanText(med.brand_name || med.brandName) || stripParentheticalName(rawName);
+  const genericName = cleanText(med.generic_name || med.genericName) || extractParentheticalName(rawName);
+  const drugCode = cleanText(med.drug_code || med.drugCode || med.nhi_code || med.nhiCode);
+  const dosageText = cleanText(med.dosage_text || med.dosageText || med.dosage);
+  const normalizedName = compactMedicationText(rawName || [brandName, genericName, dosageText].filter(Boolean).join(" "));
+  const identity: MedicationIdentity = {
+    rawName,
+    normalizedName,
+    brandName: brandName || undefined,
+    genericName: genericName || undefined,
+    drugCode: drugCode || undefined,
+    dosageText: dosageText || undefined,
+    confidence: normalizedName ? 1 : 0.4,
+    duplicateCandidateIds: [],
+  };
+  identity.duplicateCandidateIds = existingMeds
+    .filter((existing) => findMedicationIdentityMatch(identity, existing) === "fuzzy")
+    .map((existing) => existing.id);
+  if (identity.duplicateCandidateIds.length > 0 && identity.confidence > 0.72) identity.confidence = 0.72;
+  return identity;
+}
+
+export function stripMedicationIdentityPayload<T extends Record<string, unknown>>(payload: T): T {
+  for (const field of MEDICATION_IDENTITY_FIELDS) delete payload[field];
+  return payload;
+}
+
+export function isMissingMedicationIdentityColumn(message: string) {
+  return MEDICATION_IDENTITY_FIELDS.some((field) => message.includes(`medications.${field}`) || message.includes(field));
+}
+
 function extractPatientIdentity(parsed: ParsedMedicalData) {
   const patient = parsed.patient && typeof parsed.patient === "object" ? parsed.patient : {};
   const patientName = cleanText(parsed.patient_name || patient.name || patient.patient_name || patient.display_name);
@@ -409,15 +517,27 @@ async function saveParsedDataToProfile(
 
   if (parsed.medications?.length) {
     // 1. 取得該使用者現有的藥物清單
-    const existingMeds = await supabaseFetch<Array<{ id: number; name: string }>>(
-      env,
-      `medications?profile_id=eq.${targetProfile.id}&select=id,name`
-    );
+    let existingMeds: ExistingMedicationIdentity[];
+    try {
+      existingMeds = await supabaseFetch<ExistingMedicationIdentity[]>(
+        env,
+        `medications?profile_id=eq.${targetProfile.id}&select=id,name,normalized_name,brand_name,generic_name,drug_code,dosage,dosage_text`
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!isMissingMedicationIdentityColumn(message)) throw error;
+      existingMeds = await supabaseFetch<ExistingMedicationIdentity[]>(
+        env,
+        `medications?profile_id=eq.${targetProfile.id}&select=id,name,dosage`
+      );
+    }
 
     for (const med of parsed.medications) {
       const name = med.name || null;
-      // 防呆：尋找是否已經有同名的藥物
-      const duplicate = existingMeds.find(e => e.name === name);
+      const identity = buildMedicationIdentity(med, existingMeds);
+      // 防呆：尋找是否已經有同名或正規化後相同的藥物
+      const duplicate = existingMeds.find((existing) => findMedicationIdentityMatch(identity, existing) === "exact")
+        || existingMeds.find(e => e.name === name);
 
       const payload: Record<string, unknown> = {
         user_id: userId,
@@ -431,6 +551,13 @@ async function saveParsedDataToProfile(
         purpose: med.purpose || med.use || null,
         warnings: med.warnings || null,
         reminder_text: med.reminder_text || null,
+        normalized_name: identity.normalizedName || null,
+        brand_name: identity.brandName || null,
+        generic_name: identity.genericName || null,
+        drug_code: identity.drugCode || null,
+        dosage_text: identity.dosageText || null,
+        identity_confidence: identity.confidence,
+        duplicate_candidate_ids: identity.duplicateCandidateIds,
         active: true
       };
 
@@ -443,11 +570,15 @@ async function saveParsedDataToProfile(
           saved.medication_ids.push(duplicate.id);
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
-          if (!message.includes("medications.profile_id") && !message.includes("medications.group_id")) {
+          const missingScopeColumn = message.includes("medications.profile_id") || message.includes("medications.group_id");
+          if (!missingScopeColumn && !isMissingMedicationIdentityColumn(message)) {
             throw error;
           }
-          delete payload.profile_id;
-          delete payload.group_id;
+          if (isMissingMedicationIdentityColumn(message)) stripMedicationIdentityPayload(payload);
+          if (missingScopeColumn) {
+            delete payload.profile_id;
+            delete payload.group_id;
+          }
           await supabaseFetch(env, `medications?id=eq.${duplicate.id}`, {
             method: "PATCH",
             body: JSON.stringify(payload)
@@ -464,11 +595,15 @@ async function saveParsedDataToProfile(
           if (inserted?.[0]?.id) saved.medication_ids.push(inserted[0].id);
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
-          if (!message.includes("medications.profile_id") && !message.includes("medications.group_id")) {
+          const missingScopeColumn = message.includes("medications.profile_id") || message.includes("medications.group_id");
+          if (!missingScopeColumn && !isMissingMedicationIdentityColumn(message)) {
             throw error;
           }
-          delete payload.profile_id;
-          delete payload.group_id;
+          if (isMissingMedicationIdentityColumn(message)) stripMedicationIdentityPayload(payload);
+          if (missingScopeColumn) {
+            delete payload.profile_id;
+            delete payload.group_id;
+          }
           const inserted = await supabaseFetch<Array<{id: number}>>(env, "medications?select=id", {
             method: "POST",
             headers: { Prefer: "return=representation" },
