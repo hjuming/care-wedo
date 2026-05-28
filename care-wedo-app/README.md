@@ -142,7 +142,7 @@ drop table if exists public.billing_subscriptions;
 commit;
 ```
 
-- 代碼回滾參考：`git checkout HEAD~1`（當下通常為 `aad562f`）。
+- 代碼回滾參考：`git checkout HEAD~1`（當下通常為 `35f77e0`）。
 - 可回退標籤（上線前可建）：`git tag -f phase55_release_pre`
 
 ## 設計原則

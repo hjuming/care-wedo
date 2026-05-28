@@ -304,7 +304,7 @@ commit;
 
 **代碼回滾參考（運維）**：
 
-- Git 回滾基準：`HEAD~1`（當下通常為 `aad562f`）。
+- Git 回滾基準：`HEAD~1`（當下通常為 `35f77e0`）。
 - 緊急回滾：`git checkout HEAD~1`
 - 建議建立回滾標記（上線前）：`git tag -f phase55_release_pre`
 
