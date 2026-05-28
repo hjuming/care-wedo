@@ -8,6 +8,122 @@ const GROUP_LIMITS = {
   maxPaidCollaborators: 5,
   maxMembersIncludingOwner: 6,
 };
+const GROUP_PRICING = {
+  recipientMonthly: 30,
+  collaboratorMonthly: 10,
+};
+
+function calculateGroupMonthlyEstimate({ careProfileCount = 1, collaboratorCount = 0 } = {}) {
+  const recipientCount = Math.max(Number(careProfileCount) || 0, 1);
+  const paidCollaboratorCount = Math.max(Number(collaboratorCount) || 0, 0);
+  const needsPaidCircle = recipientCount > 1 || paidCollaboratorCount > 0;
+  const recipientSubtotal = needsPaidCircle ? recipientCount * GROUP_PRICING.recipientMonthly : 0;
+  const collaboratorSubtotal = paidCollaboratorCount * GROUP_PRICING.collaboratorMonthly;
+
+  return {
+    recipientCount,
+    paidCollaboratorCount,
+    recipientSubtotal,
+    collaboratorSubtotal,
+    total: recipientSubtotal + collaboratorSubtotal,
+  };
+}
+
+function buildPaidActionPreview({ actionType, group, careProfileCount, collaboratorCount }) {
+  const current = calculateGroupMonthlyEstimate({ careProfileCount, collaboratorCount });
+  const next = calculateGroupMonthlyEstimate({
+    careProfileCount: actionType === "create_profile" ? careProfileCount + 1 : careProfileCount,
+    collaboratorCount: actionType === "invite_collaborator" ? collaboratorCount + 1 : collaboratorCount,
+  });
+  return {
+    actionType,
+    groupName: group?.name || "家庭群組",
+    current,
+    next,
+    delta: Math.max(next.total - current.total, 0),
+  };
+}
+
+function PaidActionConfirmationModal({ action, onCancel, onConfirm }) {
+  if (!action) return null;
+
+  if (action.type === "limit_reached") {
+    return (
+      <div className="modal-overlay paid-action-modal-overlay" onClick={onCancel}>
+        <div className="modal-content paid-action-modal" role="dialog" aria-modal="true" aria-labelledby="paid-action-limit-title" onClick={(event) => event.stopPropagation()}>
+          <div className="modal-header">
+            <div>
+              <p className="modal-kicker">單一家庭群組上限</p>
+              <h2 id="paid-action-limit-title">{action.title}</h2>
+            </div>
+            <button type="button" className="btn-close" onClick={onCancel} aria-label="關閉">×</button>
+          </div>
+          <div className="modal-body">
+            <p className="helper-copy">{action.message}</p>
+            <div className="limit-summary-grid">
+              <span>主要照護對象 {GROUP_LIMITS.maxCareProfiles} 位</span>
+              <span>共同協作者 {GROUP_LIMITS.maxPaidCollaborators} 位</span>
+              <span>主帳號 1 位不計費</span>
+            </div>
+            <p className="quota-note quota-note-warning">超過這個，請用其他協作者帳號，另外開設家庭群組。</p>
+            <div className="paid-action-buttons">
+              <button type="button" className="primary-action" onClick={onCancel}>我知道了</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const isProfileAction = action.preview.actionType === "create_profile";
+  const title = isProfileAction ? "新增主要照護對象" : "邀請共同協作者";
+  const deltaLabel = action.preview.delta > 0 ? `+$${action.preview.delta}/月` : "$0";
+  const feeChangeCopy = isProfileAction
+    ? `正式版這個動作會讓「${action.preview.groupName}」月費從 $${action.preview.current.total} 變成 $${action.preview.next.total}。`
+    : `正式版若協作者完成加入，「${action.preview.groupName}」月費會從 $${action.preview.current.total} 變成 $${action.preview.next.total}。`;
+
+  return (
+    <div className="modal-overlay paid-action-modal-overlay" onClick={onCancel}>
+      <div className="modal-content paid-action-modal" role="dialog" aria-modal="true" aria-labelledby="paid-action-title" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-header">
+          <div>
+            <p className="modal-kicker">Beta 費用確認</p>
+            <h2 id="paid-action-title">{title}</h2>
+          </div>
+          <button type="button" className="btn-close" onClick={onCancel} aria-label="關閉">×</button>
+        </div>
+        <div className="modal-body">
+          <p className="helper-copy">目前測試期間不會扣款。{feeChangeCopy}</p>
+          <div className="paid-action-total-row">
+            <span>本次月費影響</span>
+            <strong>{deltaLabel}</strong>
+          </div>
+          <div className="paid-action-breakdown" aria-label="增加後月費明細">
+            <div>
+              <span>主要照護對象</span>
+              <strong>${GROUP_PRICING.recipientMonthly} x {action.preview.next.recipientCount} 位</strong>
+              <em>${action.preview.next.recipientSubtotal}</em>
+            </div>
+            {action.preview.next.paidCollaboratorCount > 0 && (
+              <div>
+                <span>共同協作者</span>
+                <strong>${GROUP_PRICING.collaboratorMonthly} x {action.preview.next.paidCollaboratorCount} 位</strong>
+                <em>${action.preview.next.collaboratorSubtotal}</em>
+              </div>
+            )}
+          </div>
+          <p className="quota-note">
+            正式收費前會再次確認，不會靜默扣款。主帳號不列入協作者費用。
+          </p>
+          <div className="paid-action-buttons">
+            <button type="button" className="primary-action" onClick={onConfirm}>我了解，繼續新增</button>
+            <button type="button" className="secondary-action" onClick={onCancel}>先不要新增</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function GroupSettings({ identity, onGroupChange, onProfileCreated }) {
   const [data, setData] = useState({ groups: [], care_profiles: [], user_memberships: [] });
@@ -19,6 +135,7 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
   const [loading, setLoading] = useState(false);
   const [updatingGroupId, setUpdatingGroupId] = useState(null);
   const [copiedCode, setCopiedCode] = useState(null);
+  const [pendingPaidAction, setPendingPaidAction] = useState(null);
 
   const loadGroups = useCallback(async () => {
     if (!identity || (identity.status !== "demo" && !identity.idToken)) return;
@@ -52,15 +169,41 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
     return `邀請你加入 Care WEDO「${group.name || "家庭群組"}」，一起照顧家人。\n\n邀請碼：${code}\n加入網址：${inviteUrl}\n\n打開網址後，用 LINE 登入並完成基本資料，就能同步看今日照護、未來行程與提醒。\n\n要收到家人上傳摘要與每日提醒，也請加入 LINE 照護小管家：\n${CARE_WEDO_LINE_URL}`;
   }
 
-  function copyInviteCode(group) {
-    if (isCollaboratorLimitReached(group)) {
-      setError("此家庭群組已達 5 位協作者上限。超過這個，請用其他協作者帳號，另外開設家庭群組。");
-      return;
-    }
+  function executeInviteCopy(group, copyMode = "full") {
     const message = buildInviteMessage(group, group.invite_code);
-    navigator.clipboard.writeText(message);
+    navigator.clipboard.writeText(copyMode === "code" ? group.invite_code : message);
     setCopiedCode(group.invite_code);
     setTimeout(() => setCopiedCode(null), 2000);
+  }
+
+  function showLimitModal(kind, group) {
+    const title = kind === "collaborator"
+      ? "已達 5 位共同協作者上限"
+      : "已達 4 位主要照護對象上限";
+    const message = kind === "collaborator"
+      ? `「${group?.name || "這個群組"}」已達共同協作者上限。`
+      : `「${group?.name || "這個群組"}」已達主要照護對象上限。`;
+    setPendingPaidAction({ type: "limit_reached", title, message });
+  }
+
+  function requestInviteConfirmation(group, copyMode = "full") {
+    setError(null);
+    setSuccess(null);
+    if (isCollaboratorLimitReached(group)) {
+      showLimitModal("collaborator", group);
+      return;
+    }
+    setPendingPaidAction({
+      type: "invite_collaborator",
+      copyMode,
+      group,
+      preview: buildPaidActionPreview({
+        actionType: "invite_collaborator",
+        group,
+        careProfileCount: group?.care_profile_count ?? 0,
+        collaboratorCount: getCollaboratorCount(group),
+      }),
+    });
   }
 
   function openLineProfile(lineUserId) {
@@ -93,12 +236,6 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
     return pictureUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=E6F0F1&color=315F68&bold=true`;
   }
 
-  function copyInviteCodeOnly(code) {
-    navigator.clipboard.writeText(code);
-    setCopiedCode(code);
-    setTimeout(() => setCopiedCode(null), 2000);
-  }
-
   const selectedGroup = data.groups?.find((group) => group.id === selectedGroupId) || null;
   const selectedGroupPlan = selectedGroup?.plan || null;
   const selectedCareProfileCount = selectedGroup?.care_profile_count
@@ -120,33 +257,14 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
     return memberCount >= GROUP_LIMITS.maxMembersIncludingOwner || getCollaboratorCount(group) >= GROUP_LIMITS.maxPaidCollaborators;
   }
 
-  async function handleCreateProfile(event) {
-    event.preventDefault();
-    setError(null);
-    setSuccess(null);
-
-    if (!displayName.trim()) {
-      setError("請輸入照護對象稱呼");
-      return;
-    }
-
-    if (!selectedGroupId) {
-      setError("請先加入或建立一個群組");
-      return;
-    }
-
-    if (selectedRecipientLimitReached) {
-      setError(`「${selectedGroup?.name || "這個群組"}」已達 ${selectedRecipientLimit} 位主要照護對象上限。超過這個，請用其他協作者帳號，另外開設家庭群組。`);
-      return;
-    }
-
+  async function submitCreateProfile({ groupId, profileName, profileRelationship }) {
     setLoading(true);
     try {
       await createCareProfile({
         idToken: identity.idToken,
-        groupId: selectedGroupId,
-        displayName: displayName.trim(),
-        relationship,
+        groupId,
+        displayName: profileName,
+        relationship: profileRelationship,
       });
       setSuccess("已新增照護對象，畫面已更新。");
       setDisplayName("");
@@ -160,6 +278,60 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
       setError(err.message || "建立照護對象失敗");
     } finally {
       setLoading(false);
+    }
+  }
+
+  function requestProfileCreationConfirmation(event) {
+    event.preventDefault();
+    setError(null);
+    setSuccess(null);
+
+    const profileName = displayName.trim();
+    if (!profileName) {
+      setError("請輸入照護對象稱呼");
+      return;
+    }
+
+    if (!selectedGroupId) {
+      setError("請先加入或建立一個群組");
+      return;
+    }
+
+    if (selectedRecipientLimitReached) {
+      showLimitModal("profile", selectedGroup);
+      return;
+    }
+
+    setPendingPaidAction({
+      type: "create_profile",
+      group: selectedGroup,
+      profileName,
+      profileRelationship: relationship,
+      groupId: selectedGroupId,
+      preview: buildPaidActionPreview({
+        actionType: "create_profile",
+        group: selectedGroup,
+        careProfileCount: selectedCareProfileCount,
+        collaboratorCount: getCollaboratorCount(selectedGroup),
+      }),
+    });
+  }
+
+  async function runConfirmedPaidAction() {
+    const action = pendingPaidAction;
+    setPendingPaidAction(null);
+    if (!action || action.type === "limit_reached") return;
+    if (action.type === "invite_collaborator") {
+      executeInviteCopy(action.group, action.copyMode);
+      setSuccess("已複製邀請內容。正式版加入協作者前會再次確認費用。");
+      return;
+    }
+    if (action.type === "create_profile") {
+      await submitCreateProfile({
+        groupId: action.groupId,
+        profileName: action.profileName,
+        profileRelationship: action.profileRelationship,
+      });
     }
   }
 
@@ -272,12 +444,11 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
                     <button
                       type="button"
                       className="btn-copy"
-                      disabled={collaboratorLimitReached}
-                      onClick={() => copyInviteCode(group)}
+                      onClick={() => requestInviteConfirmation(group, "full")}
                     >
                       {copiedCode === group.invite_code ? "已複製邀請文案" : "複製完整邀請"}
                     </button>
-                    <button type="button" className="btn-secondary-sm" disabled={collaboratorLimitReached} onClick={() => copyInviteCodeOnly(group.invite_code)}>
+                    <button type="button" className="btn-secondary-sm" onClick={() => requestInviteConfirmation(group, "code")}>
                       只複製邀請碼
                     </button>
                     <a className="btn-secondary-sm invite-line-link" href={CARE_WEDO_LINE_URL} target="_blank" rel="noopener noreferrer">
@@ -358,7 +529,7 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
         <p className="panel-eyebrow">新增主要照護對象</p>
         <p className="helper-copy">這裡新增的是被照顧的人。每個家庭群組最多 4 位；超過時請另外開設家庭群組。</p>
         {data.groups?.length ? (
-          <form className="profile-create-form" onSubmit={handleCreateProfile}>
+          <form className="profile-create-form" onSubmit={requestProfileCreationConfirmation}>
             <label>
               目標群組
               <select value={selectedGroupId || ""} onChange={(event) => setSelectedGroupId(Number(event.target.value))}>
@@ -389,7 +560,7 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
                 <option value="self">自己</option>
               </select>
             </label>
-            <button type="submit" className="btn-submit" disabled={loading || selectedRecipientLimitReached}>
+            <button type="submit" className="btn-submit" disabled={loading}>
               {loading ? "儲存中..." : "新增照護對象"}
             </button>
           </form>
@@ -397,6 +568,11 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
           <p className="helper-copy">請先建立或加入家人群組，再新增照護對象。</p>
         )}
       </div>
+      <PaidActionConfirmationModal
+        action={pendingPaidAction}
+        onCancel={() => setPendingPaidAction(null)}
+        onConfirm={runConfirmedPaidAction}
+      />
     </div>
   );
 }

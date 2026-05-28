@@ -4997,6 +4997,87 @@ input:focus-visible {
   color: var(--accent);
 }
 
+.paid-action-modal {
+  width: min(560px, calc(100vw - 40px));
+  max-width: calc(100vw - 40px);
+}
+
+.paid-action-modal .modal-body {
+  display: grid;
+  gap: 14px;
+}
+
+.paid-action-total-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid rgba(94, 143, 154, 0.24);
+  border-radius: 12px;
+  background: var(--primary-soft);
+  padding: 14px 16px;
+}
+
+.paid-action-total-row span {
+  color: var(--text-secondary);
+  font-weight: 900;
+}
+
+.paid-action-total-row strong {
+  color: var(--primary-dark);
+  font-size: 28px;
+  line-height: 1.1;
+}
+
+.paid-action-breakdown {
+  display: grid;
+  gap: 10px;
+}
+
+.paid-action-breakdown div,
+.limit-summary-grid {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-strong);
+  padding: 12px 14px;
+}
+
+.paid-action-breakdown div {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+}
+
+.paid-action-breakdown span,
+.limit-summary-grid span {
+  color: var(--accent);
+  font-weight: 900;
+}
+
+.paid-action-breakdown strong {
+  color: var(--text-primary);
+  font-weight: 900;
+}
+
+.paid-action-breakdown em {
+  color: var(--primary-dark);
+  font-style: normal;
+  font-size: 20px;
+  font-weight: 900;
+}
+
+.paid-action-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.paid-action-buttons .primary-action,
+.paid-action-buttons .secondary-action {
+  width: 100%;
+}
+
 /* --- Modal 系統 --- */
 .modal-overlay {
   position: fixed;
@@ -6595,6 +6676,20 @@ button:disabled,
   .billing-line {
     grid-template-columns: 1fr;
     gap: 6px;
+  }
+
+  .paid-action-breakdown div,
+  .paid-action-buttons {
+    grid-template-columns: 1fr;
+  }
+
+  .paid-action-total-row {
+    display: grid;
+  }
+
+  .paid-action-modal {
+    width: calc(100vw - 24px);
+    max-width: calc(100vw - 24px);
   }
 
   .pricing-model-table .plan-tier-row,

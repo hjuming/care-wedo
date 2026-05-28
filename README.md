@@ -1,6 +1,6 @@
 # Care WEDO 醫療照護小管家
 
-> **當前版本：V1.0 Beta（2026-05-27）**
+> **當前版本：V1.0 Beta（2026-05-28）**
 > **正式站**：https://care.wedopr.com
 > **狀態**：LINE 實機流程已進入測試期；照護圈後台改為長輩友善的協作者管理中心。
 
@@ -140,6 +140,7 @@ https://care.wedopr.com
 - 2026-05-27 已將照護圈頁整理為「協作者管理中心」：長輩頁面只保留拍照新增、查看提醒與完成確認；編輯照護對象、手動新增提醒、家庭群組、邀請協作者、家人提醒與費用預估集中在設定頁。
 - 照護圈上限已定稿：每個家庭群組最多 4 位主要照護對象、5 位共同協作者、1 位主帳號；超過時建議用其他協作者帳號另外開設家庭群組。
 - 首頁、方案頁與後台費用預估改採清楚公式：主要照護對象 `$30 x 人數`，共同協作者 `$10 x 人數`，主帳號不列入協作者費用；單一家庭群組正式收費區間為 `$30-250/月`。
+- 新增主要照護對象或邀請共同協作者前會先顯示 Beta 費用確認；測試期間不扣款，正式版加價前需使用者確認，不做靜默升級。
 - 照護圈標題列支援切換家庭群組，正在照護者可由頁首快速切換；點選照護者頭像可編輯主要照護者資料。
 - 其他頁面標題列已改成 compact 版，搜尋框與今日頁面對齊，避免排程、紀錄、用藥頁第一屏被標題佔滿。
 - 用藥總表手機版改為欄位標籤卡片；操作改為 `複製文字` 與 `儲存圖片`，比列印更符合長輩實際使用情境。
@@ -150,7 +151,7 @@ https://care.wedopr.com
 - 首頁清楚界定 Free 與照護圈升級規劃。
 - 測試期間尚未正式收費，介面先讓使用者理解正式版費用與上限。
 - 新增意見回饋區塊，透過 EmailJS 收集使用者建議。
-- 社交分享、SEO、AIO/GEO 基礎已補齊：OG/Twitter meta、JSON-LD、FAQPage、`robots.txt`、`sitemap.xml`、`llms.txt`。
+- 社交分享、SEO、AIO/GEO 基礎已補齊：OG/Twitter meta、JSON-LD、FAQPage、`robots.txt`、`sitemap.xml`、`llms.txt`。下一步需補不執行 JavaScript 也可讀的靜態產品摘要、FAQ、pricing/guide 頁。
 - 所有路徑共用 `/assets/images/og-care-wedo.jpg` 作為社交分享圖片；圖片為 1200x630 JPEG，符合 Facebook / LINE / X 常見 large preview 規格。
 - 2026-05-17 已修復 Facebook Debugger 抓取 403 與預覽圖不顯示問題：`robots.txt` 明確允許 `facebookexternalhit`、`Facebot`、`meta-externalagent`，OG/Twitter meta 改指向 JPG，並對分享圖加上 `X-Robots-Tag: all`。
 
@@ -267,16 +268,16 @@ https://care.wedopr.com
 
 ```bash
 cd care-wedo-app
-npm install
+pnpm install
 npm run dev
 ```
 
 測試與建置：
 
 ```bash
-npm test
-npm run lint
-npm run build
+pnpm test
+pnpm lint
+pnpm build
 ```
 
 ---
@@ -304,6 +305,7 @@ P0：
 
 - 用 5–10 張真實單據完成 LINE 實機回歸測試。
 - 照護圈新增照護對象、邀請協作者前補正式費用確認 modal，避免未來接金流後出現靜默升級疑慮。
+- 完成 390px 手機與 LINE WebView 實機檢查，尤其是照護圈、用藥總表、費用確認 modal。
 - 強化藥品去重：藥品代碼、學名、商品名、前綴模糊比對。
 - 建立 production tail / Cloudflare Analytics / Sentry 告警。
 
@@ -318,6 +320,7 @@ P2：
 
 - 正式付費方案與金流。
 - 建立 `billing_events`、`billing_subscriptions`、`invoices` 草案，讓 $30-250/月模型可被後端核算與稽核。
+- 補靜態 AIO 頁面：`/faq`、`/guide`、`/pricing`，讓 AI crawler 不執行 JavaScript 也能讀到 Care WEDO 是照護提醒工具，不是醫療診斷工具。
 - 照護資料匯出。
 - OCR 低信心欄位人工確認。
 

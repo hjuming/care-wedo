@@ -529,8 +529,32 @@ test("Group settings exposes plan limits before adding care recipients", () => {
   assert.match(component, /maxPaidCollaborators:\s*5/);
   assert.match(component, /另外開設家庭群組/);
   assert.match(component, /quota-note/);
-  assert.match(component, /disabled=\{loading \|\| selectedRecipientLimitReached\}/);
+  assert.match(component, /showLimitModal\("profile", selectedGroup\)/);
+  assert.match(component, /disabled=\{loading\}/);
   assert.match(css, /\.quota-note-warning/);
+});
+
+test("Paid care actions show a beta fee confirmation before continuing", () => {
+  const component = readProjectFile("care-wedo-app/src/components/GroupSettings.jsx");
+  const css = readProjectFile("care-wedo-app/src/index.css");
+
+  assert.match(component, /function PaidActionConfirmationModal/);
+  assert.match(component, /calculateGroupMonthlyEstimate/);
+  assert.match(component, /buildPaidActionPreview/);
+  assert.match(component, /目前測試期間不會扣款/);
+  assert.match(component, /正式版這個動作會讓/);
+  assert.match(component, /正式版若協作者完成加入/);
+  assert.match(component, /我了解，繼續新增/);
+  assert.match(component, /先不要新增/);
+  assert.match(component, /requestProfileCreationConfirmation/);
+  assert.match(component, /requestInviteConfirmation/);
+  assert.match(component, /runConfirmedPaidAction/);
+  assert.match(component, /正式收費前會再次確認，不會靜默扣款/);
+  assert.match(component, /已達 5 位共同協作者上限/);
+  assert.match(css, /\.paid-action-modal/);
+  assert.match(css, /width:\s*min\(560px,\s*calc\(100vw - 40px\)\)/);
+  assert.match(css, /width:\s*calc\(100vw - 24px\)/);
+  assert.match(css, /\.paid-action-breakdown/);
 });
 
 test("Cron endpoints fail closed when CRON_SECRET is not configured", () => {
