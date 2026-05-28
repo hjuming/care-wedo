@@ -104,6 +104,14 @@ pnpm build
 - LINE OCR 的正式入庫流程會先用藥碼或 normalized name 找 exact duplicate；疑似同藥只標記候選，不自動合併。
 - Web OCR pending review 會保留 identity metadata，家人端會看到疑似重複提示；confirm API 只自動合併高信心 exact duplicate。
 
+## Billing Foundation
+
+- `supabase/migration_phase55_billing_foundation.sql` 定義 `billing_subscriptions`、`billing_events`、`invoices`，先讓正式收費前的行為可稽核。
+- billing tables 已啟用 RLS，migration 只 grant 給 `service_role`，暫不開給前端直接查寫。
+- `functions/_shared/supabase.ts` 提供 `resolveGroupBillingEntitlement`，統一計算 4 位主要照護對象、5 位付費協作者、主帳號不計費與 $30-250/月預估。
+- `recordBillingGroupEvent` 會在新增照護對象與新協作者加入後，寫入 `billing_events`、更新 `billing_subscriptions`，並建立當月 draft invoice snapshot；phase 55 尚未套用時不阻斷 Beta 流程。
+- Production Supabase 已套用 phase 55 migration；接金流前需再補正式帳單結算、升降級/取消政策與 webhook。
+
 ## 設計原則
 
 - 長輩可讀：字大、短句、明確按鈕。

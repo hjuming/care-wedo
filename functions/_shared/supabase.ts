@@ -880,6 +880,51 @@ export const MULTIPLE_FAMILY_GROUPS_FEATURE = "multiple_family_groups";
 export const CARE_WEDO_MAX_CARE_PROFILES_PER_GROUP = 4;
 export const CARE_WEDO_MAX_PAID_COLLABORATORS_PER_GROUP = 5;
 export const CARE_WEDO_MAX_MEMBERS_PER_GROUP = CARE_WEDO_MAX_PAID_COLLABORATORS_PER_GROUP + 1;
+export const CARE_WEDO_CARE_PROFILE_MONTHLY_PRICE = 30;
+export const CARE_WEDO_PAID_COLLABORATOR_MONTHLY_PRICE = 10;
+export const CARE_WEDO_GROUP_MONTHLY_PRICE_MAX = 250;
+
+export type GroupBillingEntitlement = {
+  groupId: number;
+  ownerUserId: number | null;
+  planId: string;
+  careProfileCount: number;
+  paidCollaboratorCount: number;
+  memberCount: number;
+  estimatedMonthlyAmount: number;
+  maxCareProfiles: number;
+  maxPaidCollaborators: number;
+  maxMembersIncludingOwner: number;
+  canAddCareProfile: boolean;
+  canInviteCollaborator: boolean;
+};
+
+type BillingEventType =
+  | "care_profile_created"
+  | "collaborator_joined"
+  | "subscription_upgraded"
+  | "subscription_downgraded"
+  | "subscription_canceled";
+
+type BillingSnapshot = {
+  groupId: number;
+  ownerUserId: number | null;
+  planId: string;
+  careProfileCount: number;
+  paidCollaboratorCount: number;
+  memberCount: number;
+  estimatedMonthlyAmount: number;
+};
+
+type BillingGroupEventInput = {
+  groupId: number;
+  actorUserId: number;
+  eventType: BillingEventType;
+  beforeSnapshot?: GroupBillingEntitlement;
+  subjectUserId?: number | null;
+  careProfileId?: number | null;
+  note?: string;
+};
 
 // Fallback plan definition — used when DB lookup fails or group has no plan_id.
 const FREE_PLAN_FALLBACK: PlanRow = {
@@ -915,6 +960,193 @@ async function getGroupRecipientCount(env: Env, groupId: number | null): Promise
     `care_profiles?group_id=eq.${groupId}&select=id`,
   );
   return Math.max(profiles.length, 1);
+}
+
+function calculateCareCircleMonthlyAmount(careProfileCount: number, paidCollaboratorCount: number): number {
+  const amount = (
+    Math.max(careProfileCount, 1) * CARE_WEDO_CARE_PROFILE_MONTHLY_PRICE
+    + Math.max(paidCollaboratorCount, 0) * CARE_WEDO_PAID_COLLABORATOR_MONTHLY_PRICE
+  );
+  return Math.min(amount, CARE_WEDO_GROUP_MONTHLY_PRICE_MAX);
+}
+
+export async function resolveGroupBillingEntitlement(
+  env: Env,
+  groupId: number,
+): Promise<GroupBillingEntitlement> {
+  const [groups, profiles, members, plan] = await Promise.all([
+    supabaseFetch<Array<{ owner_user_id: number | null; plan_id: string | null }>>(
+      env,
+      `family_groups?id=eq.${groupId}&select=owner_user_id,plan_id&limit=1`,
+    ),
+    supabaseFetch<Array<{ id: number }>>(
+      env,
+      `care_profiles?group_id=eq.${groupId}&select=id`,
+    ),
+    supabaseFetch<Array<{ user_id: number }>>(
+      env,
+      `user_family_groups?group_id=eq.${groupId}&select=user_id`,
+    ),
+    getGroupPlan(env, groupId),
+  ]);
+
+  const ownerUserId = groups[0]?.owner_user_id ?? null;
+  const careProfileCount = profiles.length;
+  const paidCollaboratorCount = members
+    .filter((member) => ownerUserId === null || member.user_id !== ownerUserId)
+    .length;
+  const isCareCircle = plan.id === "pro";
+  const maxCareProfiles = isCareCircle ? CARE_WEDO_MAX_CARE_PROFILES_PER_GROUP : plan.max_recipients;
+  const maxPaidCollaborators = isCareCircle
+    ? CARE_WEDO_MAX_PAID_COLLABORATORS_PER_GROUP
+    : Math.max(plan.max_members - 1, 0);
+  const maxMembersIncludingOwner = isCareCircle ? CARE_WEDO_MAX_MEMBERS_PER_GROUP : plan.max_members;
+  const estimatedMonthlyAmount = isCareCircle
+    ? calculateCareCircleMonthlyAmount(careProfileCount, paidCollaboratorCount)
+    : 0;
+
+  return {
+    groupId,
+    ownerUserId,
+    planId: groups[0]?.plan_id || plan.id,
+    careProfileCount,
+    paidCollaboratorCount,
+    memberCount: members.length,
+    estimatedMonthlyAmount,
+    maxCareProfiles,
+    maxPaidCollaborators,
+    maxMembersIncludingOwner,
+    canAddCareProfile: careProfileCount < maxCareProfiles,
+    canInviteCollaborator: paidCollaboratorCount < maxPaidCollaborators
+      && members.length < maxMembersIncludingOwner,
+  };
+}
+
+function serializeBillingSnapshot(entitlement: GroupBillingEntitlement): BillingSnapshot {
+  return {
+    groupId: entitlement.groupId,
+    ownerUserId: entitlement.ownerUserId,
+    planId: entitlement.planId,
+    careProfileCount: entitlement.careProfileCount,
+    paidCollaboratorCount: entitlement.paidCollaboratorCount,
+    memberCount: entitlement.memberCount,
+    estimatedMonthlyAmount: entitlement.estimatedMonthlyAmount,
+  };
+}
+
+function isBillingFoundationMissingError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error || "");
+  if (/billing_subscriptions|billing_events|invoices/i.test(message)) return true;
+  if (/relation .* does not exist|schema cache|Could not find|PGRST20[045]/i.test(message)) return true;
+  return false;
+}
+
+function buildBillingLineItems(snapshot: BillingSnapshot) {
+  return [
+    {
+      label: "主要照護對象",
+      quantity: snapshot.careProfileCount,
+      unit_amount: CARE_WEDO_CARE_PROFILE_MONTHLY_PRICE,
+      amount: snapshot.careProfileCount * CARE_WEDO_CARE_PROFILE_MONTHLY_PRICE,
+    },
+    {
+      label: "共同協作者",
+      quantity: snapshot.paidCollaboratorCount,
+      unit_amount: CARE_WEDO_PAID_COLLABORATOR_MONTHLY_PRICE,
+      amount: snapshot.paidCollaboratorCount * CARE_WEDO_PAID_COLLABORATOR_MONTHLY_PRICE,
+    },
+  ];
+}
+
+async function upsertBillingSubscriptionSnapshot(
+  env: Env,
+  snapshot: BillingSnapshot,
+): Promise<number | null> {
+  const rows = await supabaseFetch<Array<{ id: number }>>(
+    env,
+    "billing_subscriptions?on_conflict=family_group_id&select=id",
+    {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+      body: JSON.stringify({
+        family_group_id: snapshot.groupId,
+        owner_user_id: snapshot.ownerUserId,
+        plan_id: snapshot.planId,
+        status: "beta",
+        currency: "TWD",
+        care_profile_count: snapshot.careProfileCount,
+        paid_collaborator_count: snapshot.paidCollaboratorCount,
+        estimated_monthly_amount: snapshot.estimatedMonthlyAmount,
+        metadata: snapshot,
+        updated_at: new Date().toISOString(),
+      }),
+    },
+  );
+  return rows[0]?.id ?? null;
+}
+
+async function upsertBillingInvoiceDraft(
+  env: Env,
+  snapshot: BillingSnapshot,
+  subscriptionId: number | null,
+): Promise<void> {
+  await supabaseFetch(
+    env,
+    "invoices?on_conflict=family_group_id,period",
+    {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+      body: JSON.stringify({
+        family_group_id: snapshot.groupId,
+        subscription_id: subscriptionId,
+        owner_user_id: snapshot.ownerUserId,
+        period: currentPeriod(),
+        status: "draft",
+        currency: "TWD",
+        care_profile_count: snapshot.careProfileCount,
+        paid_collaborator_count: snapshot.paidCollaboratorCount,
+        amount_due: snapshot.estimatedMonthlyAmount,
+        line_items: buildBillingLineItems(snapshot),
+      }),
+    },
+  );
+}
+
+export async function recordBillingGroupEvent(
+  env: Env,
+  input: BillingGroupEventInput,
+): Promise<boolean> {
+  try {
+    const beforeSnapshot = input.beforeSnapshot
+      ? serializeBillingSnapshot(input.beforeSnapshot)
+      : null;
+    const afterEntitlement = await resolveGroupBillingEntitlement(env, input.groupId);
+    const afterSnapshot = serializeBillingSnapshot(afterEntitlement);
+    const subscriptionId = await upsertBillingSubscriptionSnapshot(env, afterSnapshot);
+    await upsertBillingInvoiceDraft(env, afterSnapshot, subscriptionId);
+    await supabaseFetch(env, "billing_events", {
+      method: "POST",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({
+        family_group_id: input.groupId,
+        subscription_id: subscriptionId,
+        actor_user_id: input.actorUserId,
+        subject_user_id: input.subjectUserId || null,
+        care_profile_id: input.careProfileId || null,
+        event_type: input.eventType,
+        amount_delta: afterSnapshot.estimatedMonthlyAmount - (beforeSnapshot?.estimatedMonthlyAmount || 0),
+        before_snapshot: beforeSnapshot || {},
+        after_snapshot: afterSnapshot,
+        note: input.note || null,
+      }),
+    });
+    return true;
+  } catch (error) {
+    if (!isBillingFoundationMissingError(error)) {
+      console.warn("Care WEDO billing event was not recorded", error);
+    }
+    return false;
+  }
 }
 
 /**

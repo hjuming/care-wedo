@@ -12,6 +12,8 @@ import {
   getUserGroups,
   getUserMemberships,
   joinGroupByCode,
+  recordBillingGroupEvent,
+  resolveGroupBillingEntitlement,
   serializeCareProfile,
   supabaseFetch,
   updateUserFamilyGroupMembership,
@@ -173,7 +175,20 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
         }
       }
 
+      const shouldRecordCollaboratorJoin = existingMembership.length === 0;
+      const beforeBillingSnapshot = shouldRecordCollaboratorJoin
+        ? await resolveGroupBillingEntitlement(env, groups[0].id)
+        : undefined;
       const group = await joinGroupByCode(env, userId, body.code);
+      if (shouldRecordCollaboratorJoin) {
+        await recordBillingGroupEvent(env, {
+          groupId: group.id,
+          actorUserId: userId,
+          subjectUserId: userId,
+          eventType: "collaborator_joined",
+          beforeSnapshot: beforeBillingSnapshot,
+        });
+      }
       return Response.json({ success: true, group });
     }
 
@@ -190,12 +205,20 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
         return Response.json({ error: recipientCheck.message, code: recipientCheck.error }, { status: 403 });
       }
 
+      const beforeBillingSnapshot = await resolveGroupBillingEntitlement(env, body.group_id);
       const profile = await createCareProfile(env, {
         groupId: body.group_id,
         primaryUserId: userId,
         displayName: body.display_name,
         relationship: body.relationship || "family",
         isDefault: false,
+      });
+      await recordBillingGroupEvent(env, {
+        groupId: body.group_id,
+        actorUserId: userId,
+        careProfileId: profile.id,
+        eventType: "care_profile_created",
+        beforeSnapshot: beforeBillingSnapshot,
       });
       return Response.json({ success: true, care_profile: serializeCareProfile(profile) });
     }

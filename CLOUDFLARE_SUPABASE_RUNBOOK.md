@@ -237,6 +237,43 @@ Authentication error [code: 10000]
   - 若此功能開啟，Cloudflare 仍可能前置插入 `meta-externalagent Disallow: /`。
 - 若要透過 API 修改，需要 Cloudflare API token 具備 Bot Management Write 權限；只具備 Pages deploy 權限的 token 無法讀寫 `/zones/{zone_id}/bot_management`。
 
+### Phase 55 上線備忘（2026-05-29）
+
+**執行項目**：`supabase/migration_phase55_billing_foundation.sql` 已在 production Supabase SQL Editor 套用。  
+**驗證方式**：確認三張表已建立，且 `service_role` 具備 select/insert/update/delete 權限。
+
+**查核 SQL**：
+
+```sql
+select schemaname, tablename
+from pg_tables
+where schemaname = 'public'
+  and tablename in ('billing_subscriptions', 'billing_events', 'invoices');
+
+select
+  table_name,
+  privilege_type
+from information_schema.role_table_grants
+where table_schema = 'public'
+  and grantee = 'service_role'
+  and table_name in ('billing_subscriptions', 'billing_events', 'invoices')
+order by table_name, privilege_type;
+```
+
+**版本備註**：
+
+- 版本標記：`phase55_billing_foundation`
+- 內容：新增 `billing_subscriptions`、`billing_events`、`invoices`，`recordBillingGroupEvent` 可落地追蹤新增照護對象與邀請協作者事件，預備正式計費資料稽核。
+- 還原步驟（緊急）：
+
+```sql
+begin;
+drop table if exists public.invoices;
+drop table if exists public.billing_events;
+drop table if exists public.billing_subscriptions;
+commit;
+```
+
 ---
 
 ## 上線驗收清單

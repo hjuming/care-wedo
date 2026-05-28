@@ -120,8 +120,8 @@
 任務：
 
 - [x] 決定金流優先序：優先 LINE Pay，其次藍新、綠界；海外信用卡可評估 Stripe。
-- [ ] 建立 `billing_subscriptions`、`billing_events`、`invoices` 資料表草案。
-- [ ] 建立 plan / entitlement helper，避免前端自行判斷權限。
+- [x] 建立 `billing_subscriptions`、`billing_events`、`invoices` 資料表草案。
+- [x] 建立 plan / entitlement helper，避免前端自行判斷權限。
 - [ ] 設計升級、降級、取消、補差額、退款政策。
 - [ ] 設計付款失敗後的寬限期與提醒。
 
@@ -342,6 +342,8 @@ type MedicationIdentity = {
 
 目的：先建立可稽核資料，再接 LINE Pay / 藍新 / 綠界。
 
+狀態：🟡 基礎完成（2026-05-29）。已補 `supabase/migration_phase55_billing_foundation.sql`、`schema.sql`、RLS/service-role grant、後端 `resolveGroupBillingEntitlement` 與 `recordBillingGroupEvent`；新增照護對象與新協作者加入會寫入 billing event、subscription snapshot 與當月 draft invoice。Production Supabase 尚未套 migration，正式升降級、取消、付款失敗與金流 webhook 尚未接。
+
 建議資料表：
 
 | table | 用途 |
@@ -361,6 +363,6 @@ type MedicationIdentity = {
 - [x] 付費前能看到資料保存、備份與客服聯絡方式。
 - [x] 客服信箱 `Care@wedopr.com` 出現在方案與信任相關頁面。
 - [ ] 所有 UI 改動通過手機 390px 檢查。
-- [x] `pnpm test`：131 passed。
+- [x] `pnpm test`：135 passed。
 - [x] `pnpm lint`：passed。
 - [x] `pnpm build`：passed。

@@ -3,6 +3,7 @@
 > **當前版本：V1.0 Beta（2026-05-28）**
 > **正式站**：https://care.wedopr.com
 > **狀態**：LINE 實機流程已進入測試期；照護圈後台改為長輩友善的協作者管理中心。
+> **Production 上線紀錄**：2026-05-29（Asia/Taipei）已完成 Phase 55（Billing Data Foundation）套用。
 
 Care WEDO 是給長輩與家人使用的照護小幫手。長輩可以在 LINE 上傳藥袋、掛號單、處方箋或預約單照片，也可以直接貼上看診、用藥或提醒文字；系統會用 AI 解析，完整存進資料庫，再用短句提醒長輩重點。
 
@@ -146,6 +147,7 @@ https://care.wedopr.com
 - 用藥總表手機版改為欄位標籤卡片；操作改為 `複製文字` 與 `儲存圖片`，比列印更符合長輩實際使用情境。
 - 2026-05-29 已補 Beta observability 基礎：前端 production error 可送入 `/api/telemetry`，Functions log 會帶 `ocr_failed`、`line_push_failed`、`quota_exceeded`、`auth_failed`、`cron_failed` 分類，並新增 Cloudflare tail runbook。
 - 2026-05-29 已建立真實單據回歸包基礎：`test-fixtures/real-receipt-regression/manifest.json` 定義 10 張台灣單據測試案例；真實圖片放在未追蹤的 private-images 目錄，避免醫療資料進 Git。
+- 2026-05-29 已建立 Billing Data Foundation 草案：新增 `billing_subscriptions`、`billing_events`、`invoices` migration 與後端 `resolveGroupBillingEntitlement` / `recordBillingGroupEvent` helper；新增照護對象與新協作者加入會寫入可稽核事件、subscription snapshot 與當月 draft invoice。Production Supabase 已套用 `supabase/migration_phase55_billing_foundation.sql`。
 
 ### 7. 未登入首頁與回饋收集
 
@@ -183,6 +185,45 @@ https://care.wedopr.com
 
 - Cloudflare Managed robots.txt 可能會在正式站 `robots.txt` 前置插入 AI crawler 規則；若日後再次出現 Meta / Facebook crawler 被擋，請檢查 Cloudflare Dashboard 的 `Security > Bots > Instruct AI bot traffic with robots.txt`。
 - 目前程式層已明確允許社交預覽 crawler，若要修改 Cloudflare Bot Management，需要具備 Bot Management Write 權限的 Cloudflare API token。
+
+### 8.1 Production 上線紀錄補充（Phase 55）
+
+**時間**：2026-05-29（Asia/Taipei）  
+**執行結果**：`supabase/migration_phase55_billing_foundation.sql` 在 production SQL Editor 成功執行（`Success. No rows returned`）。
+
+#### 查核 SQL（已驗證）
+
+```sql
+select schemaname, tablename
+from pg_tables
+where schemaname = 'public'
+  and tablename in ('billing_subscriptions', 'billing_events', 'invoices');
+
+select
+  table_name,
+  privilege_type
+from information_schema.role_table_grants
+where table_schema = 'public'
+  and grantee = 'service_role'
+  and table_name in ('billing_subscriptions', 'billing_events', 'invoices')
+order by table_name, privilege_type;
+```
+
+#### 版本備註與回滾點
+
+- 版本標識：`phase55_billing_foundation`
+- 套用範圍：Billing Data Foundation（`billing_subscriptions`、`billing_events`、`invoices`）
+- 回滾 SQL（緊急）：
+
+```sql
+begin;
+drop table if exists public.invoices;
+drop table if exists public.billing_events;
+drop table if exists public.billing_subscriptions;
+commit;
+```
+
+回滾時，請先同步核對 prod 中關聯金流/帳務流程未進入正式收費狀態；如已進入試算後續流程，先保留稽核紀錄再還原。
 
 ---
 
@@ -226,6 +267,7 @@ https://care.wedopr.com
 
 - 一般測試帳號：照護圈升級能力，登入後照護圈頁顯示實際上限與費用預估。
 - 內部測試權限不顯示為公開方案，不放入公開方案介紹。
+- 商轉前置：後端已補 billing entitlement 與 event helper，主帳號不列入共同協作者費用；正式收費前仍需補升降級/取消政策與金流 webhook。
 
 ---
 
@@ -321,7 +363,7 @@ P1：
 P2：
 
 - 正式付費方案與金流。
-- 建立 `billing_events`、`billing_subscriptions`、`invoices` 草案，讓 $30-250/月模型可被後端核算與稽核。
+- Billing Data Foundation 已補 migration 草案、後端 entitlement helper、paid action event 與 draft invoice snapshot；下一步是套用 production migration、補升降級/取消政策與金流 webhook。
 - 持續補 AIO 內容：把 Beta 訪談、真實使用教學與資料安全聲明整理進 `/faq`、`/guide`、`/pricing`、`/llms.txt`。
 - 照護資料匯出。
 - OCR 低信心欄位人工確認。
