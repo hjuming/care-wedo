@@ -130,6 +130,7 @@ test("Care WEDO session cookie keeps returning users signed in", () => {
   const middleware = readProjectFile("functions/api/_middleware.ts");
   const liff = readProjectFile("care-wedo-app/src/services/liff.js");
   const app = readProjectFile("care-wedo-app/src/App.jsx");
+  const loginSetup = readProjectFile("care-wedo-app/src/components/LoginSetup.jsx");
 
   assert.match(shared, /CARE_WEDO_SESSION_COOKIE = "care_wedo_session"/);
   assert.match(shared, /HttpOnly/);
@@ -146,6 +147,9 @@ test("Care WEDO session cookie keeps returning users signed in", () => {
   assert.match(liff, /createServerSession\(idToken\)/);
   assert.match(liff, /clearServerSession/);
   assert.match(app, /window\.history\.replaceState\(null, "", "\/app"\)/);
+  assert.match(loginSetup, /credentials:\s*"same-origin"/);
+  assert.match(loginSetup, /headers:\s*identity\.idToken\s*\?\s*\{\s*Authorization:\s*`Bearer \$\{identity\.idToken\}`\s*\}\s*:\s*undefined/);
+  assert.match(loginSetup, /\.\.\.\(identity\.idToken\s*\?\s*\{\s*Authorization:\s*`Bearer \$\{identity\.idToken\}`\s*\}\s*:\s*\{\}\)/);
 });
 
 test("LINE links use an external browser handoff page", () => {

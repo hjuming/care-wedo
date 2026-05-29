@@ -18,7 +18,8 @@ export default function LoginSetup({ identity, onSetupComplete }) {
     async function checkFamily() {
       try {
         const res = await fetch("/api/me", {
-          headers: { Authorization: `Bearer ${identity.idToken}` },
+          credentials: "same-origin",
+          headers: identity.idToken ? { Authorization: `Bearer ${identity.idToken}` } : undefined,
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
@@ -55,9 +56,10 @@ export default function LoginSetup({ identity, onSetupComplete }) {
     try {
       const res = await fetch("/api/me", {
         method: "POST",
+        credentials: "same-origin",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${identity.idToken}`,
+          ...(identity.idToken ? { Authorization: `Bearer ${identity.idToken}` } : {}),
         },
         body: JSON.stringify({
           action: "init_family",
