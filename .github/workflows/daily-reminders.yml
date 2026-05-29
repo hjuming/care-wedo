@@ -9,9 +9,11 @@ on:
 jobs:
   trigger-reminders:
     runs-on: ubuntu-latest
+    env:
+      CRON_BASE_URL: https://care-wedo.pages.dev
     steps:
       - name: Trigger Care WEDO Reminders API
         run: |
-          curl -X POST https://care.wedopr.com/api/cron/reminders \
+          curl --fail-with-body --silent --show-error -X POST "$CRON_BASE_URL/api/cron/reminders" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             -w "\nHTTP Status: %{http_code}\n"

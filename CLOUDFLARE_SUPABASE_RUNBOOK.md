@@ -90,6 +90,8 @@ CARE_WEDO_ENV=production
 5. 手動執行 `Daily Medical Reminders` 與 `Evening Fasting Reminders` workflows。
 6. 確認 `/api/cron/reminders`、`/api/cron/evening` 不再回 `CRON_SECRET is not configured.`。
 
+> **2026-05-29 production 檢查補充**：GitHub Actions runner 直接打 `https://care.wedopr.com/api/cron/*` 曾被 Cloudflare challenge 攔下，log 會出現 `Just a moment...` 與 `HTTP Status: 403`。排程 workflow 已改成打 `https://care-wedo.pages.dev/api/cron/*`，並使用 `curl --fail-with-body`，避免假成功。
+
 ### Cloudflare Pages（前端建置）
 
 `wrangler.toml` 的 `[vars]` 區塊已設定：
