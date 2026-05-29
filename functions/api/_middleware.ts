@@ -1,5 +1,6 @@
 import { getBearerToken, verifyLineIdToken, Env } from "../_shared/supabase";
 import { logError, logEvent } from "../_shared/logger";
+import { sendProductionAlert } from "../_shared/alerts";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -50,6 +51,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       (context as any).data = { ...(context as any).data, identity };
     } catch (error) {
       logError("auth.verify_failed", error, { path: url.pathname, method: request.method });
+      await sendProductionAlert(env, "auth.verify_failed", { path: url.pathname, method: request.method, error });
       const message = error instanceof Error ? error.message : "登入已失效，請重新登入。";
       return Response.json({ error: message }, { status: 401, headers: corsHeaders });
     }

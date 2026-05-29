@@ -9,6 +9,7 @@ import {
   verifyLineIdToken,
 } from "../../_shared/supabase";
 import { logError, logEvent } from "../../_shared/logger";
+import { sendProductionAlert } from "../../_shared/alerts";
 import {
   buildMedicationIdentity,
   findMedicationIdentityMatch,
@@ -404,6 +405,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       groupPlan = await checkGroupOcrQuota(env, activeGroupId);
     } catch (quotaError) {
       logError("ocr.quota_exceeded", quotaError, { user_id: userId, group_id: activeGroupId });
+      await sendProductionAlert(env, "ocr.quota_exceeded", {
+        user_id: userId,
+        group_id: activeGroupId,
+        error: quotaError,
+      }, "warning");
       return Response.json(
         { error: quotaError instanceof Error ? quotaError.message : "超過使用次數限制" },
         { status: 429 },
@@ -429,6 +435,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     return Response.json({ success: true, data, saved });
   } catch (error) {
     logError("ocr.request_failed", error, { duration_ms: Date.now() - requestStartedAt });
+    await sendProductionAlert(env, "ocr.request_failed", {
+      duration_ms: Date.now() - requestStartedAt,
+      error,
+    });
     return Response.json(
       { error: error instanceof Error ? error.message : "OCR API failed" },
       { status: 500 },

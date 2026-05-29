@@ -29,6 +29,7 @@ React 19 + Vite 前端，搭配 Cloudflare Pages Functions 與 Supabase。
 - 正式收費公式：主要照護對象 `$30 x 位數`，共同協作者 `$10 x 位數`，單一家庭群組最高 $250/月。
 - 新增照護對象或邀請協作者時，介面會先顯示上限；超過時建議另開家庭群組。
 - 2026-05-28 已補 Beta 費用確認 modal：新增主要照護對象或邀請共同協作者前，顯示目前月費、增加後月費、測試期不扣款與禁止靜默升級說明。
+- 2026-05-29 已補 production webhook 告警：前端 telemetry、Web OCR、LINE OCR、LINE push、auth 與 cron 失敗可透過 `CARE_WEDO_ALERT_WEBHOOK_URL` 自動通知。
 - 用藥總表手機版改為欄位標籤卡片，操作改為 `複製文字` 與 `儲存圖片`。
 
 ## SEO / 社交分享設定

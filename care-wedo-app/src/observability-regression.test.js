@@ -42,6 +42,30 @@ test("Cloudflare Functions use structured beta logging without raw token logging
   assert.doesNotMatch(logger, /Authorization/);
 });
 
+test("production alert webhook is wired for beta-critical failures", () => {
+  const alerts = readProjectFile("functions/_shared/alerts.ts");
+  const telemetryApi = readProjectFile("functions/api/telemetry.ts");
+  const middleware = readProjectFile("functions/api/_middleware.ts");
+  const ocrApi = readProjectFile("functions/api/ocr/[[path]].ts");
+  const callback = readProjectFile("functions/callback.ts");
+  const remindersCron = readProjectFile("functions/api/cron/reminders.ts");
+  const eveningCron = readProjectFile("functions/api/cron/evening.ts");
+  const runbook = readProjectFile("PRODUCTION_OBSERVABILITY_RUNBOOK.md");
+
+  assert.match(alerts, /CARE_WEDO_ALERT_WEBHOOK_URL/);
+  assert.match(alerts, /CARE_WEDO_ALERT_WEBHOOK_SECRET/);
+  assert.match(alerts, /X-Care-WEDO-Alert-Secret/);
+  assert.match(alerts, /redact/);
+  assert.match(telemetryApi, /sendProductionAlert/);
+  assert.match(middleware, /sendProductionAlert/);
+  assert.match(ocrApi, /ocr\.request_failed/);
+  assert.match(callback, /line\.ocr_failed/);
+  assert.match(remindersCron, /cron\.reminders_failed/);
+  assert.match(eveningCron, /cron\.evening_failed/);
+  assert.match(runbook, /CARE_WEDO_ALERT_WEBHOOK_URL/);
+  assert.match(runbook, /不記錄醫療全文/);
+});
+
 test("Observability taxonomy covers beta alert categories", () => {
   const telemetry = readProjectFile("care-wedo-app/src/services/telemetry.js");
   const logger = readProjectFile("functions/_shared/logger.ts");

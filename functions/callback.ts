@@ -1,5 +1,6 @@
 import { parseMedicalImages, parseMedicalText, saveParsedData, saveParsedDataToSelectedProfile, savePendingParsedDataToProfile, Env as OcrEnv } from "./_shared/medical_ocr";
 import { logError, logEvent } from "./_shared/logger";
+import { sendProductionAlert } from "./_shared/alerts";
 import { getAccessibleProfiles, getOrCreateDefaultUser, getUserMemberships, supabaseFetch } from "./_shared/supabase";
 
 type Env = OcrEnv & {
@@ -119,6 +120,11 @@ async function pushText(env: Env, userId: string, text: string, quickReply?: any
   if (!response.ok) {
     const detail = await response.text();
     logError("line.push_failed", new Error(`LINE push failed (${response.status})`), {
+      line_user_suffix: userId.slice(-4),
+      status: response.status,
+      detail,
+    });
+    await sendProductionAlert(env, "line.push_failed", {
       line_user_suffix: userId.slice(-4),
       status: response.status,
       detail,
@@ -695,6 +701,11 @@ async function processImageOCR(env: Env, event: LineEvent) {
       line_user_suffix: lineUserId.slice(-4),
       duration_ms: Date.now() - startedAt,
     });
+    await sendProductionAlert(env, "line.ocr_failed", {
+      line_user_suffix: lineUserId.slice(-4),
+      duration_ms: Date.now() - startedAt,
+      error,
+    });
     const msg = error instanceof Error ? error.message : "未知錯誤";
     await pushText(env, lineUserId, `這張看不清楚。\n請再拍一次。\n\n${msg}`);
   }
@@ -763,6 +774,11 @@ async function processTextOCR(env: Env, event: LineEvent, incomingText: string) 
     logError("line.text_ocr_failed", error, {
       line_user_suffix: lineUserId.slice(-4),
       duration_ms: Date.now() - startedAt,
+    });
+    await sendProductionAlert(env, "line.text_ocr_failed", {
+      line_user_suffix: lineUserId.slice(-4),
+      duration_ms: Date.now() - startedAt,
+      error,
     });
     const msg = error instanceof Error ? error.message : "未知錯誤";
     await pushText(env, lineUserId, `這段文字我暫時整理不了。\n請再貼一次重點段落。\n\n${msg}`);

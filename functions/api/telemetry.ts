@@ -1,4 +1,5 @@
 import { logError, logEvent } from "../_shared/logger";
+import { AlertEnv, sendProductionAlert } from "../_shared/alerts";
 
 type ClientTelemetryPayload = {
   level?: string;
@@ -49,7 +50,7 @@ export const onRequestOptions: PagesFunction = async () => {
   return new Response(null, { status: 204 });
 };
 
-export const onRequestPost: PagesFunction = async ({ request }) => {
+export const onRequestPost: PagesFunction<AlertEnv> = async ({ request, env }) => {
   try {
     const bodyText = await request.text();
     if (bodyText.length > MAX_BODY_BYTES) {
@@ -71,8 +72,12 @@ export const onRequestPost: PagesFunction = async ({ request }) => {
 
     if (level === "error") {
       logError("frontend.telemetry_error", new Error(name), fields);
+      await sendProductionAlert(env, "frontend.telemetry_error", fields);
     } else {
       logEvent("frontend.telemetry_event", fields);
+      if (category === "quota_exceeded") {
+        await sendProductionAlert(env, "frontend.quota_exceeded", fields, "warning");
+      }
     }
 
     return json({ ok: true });

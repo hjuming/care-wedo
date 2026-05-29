@@ -70,6 +70,11 @@ LINE_LOGIN_CHANNEL_ID=<Login Channel ID>
 
 # Cron 排程保護
 CRON_SECRET=<自訂密碼，用於保護排程 API>
+
+# Production 告警（選填；未設定則 no-op）
+CARE_WEDO_ALERT_WEBHOOK_URL=<Slack/Make/Zapier/Google Chat 或自有 webhook>
+CARE_WEDO_ALERT_WEBHOOK_SECRET=<接收端驗證用 secret>
+CARE_WEDO_ENV=production
 ```
 
 > **2026-05-13 smoke test 發現**：正式站 `/api/cron/reminders` 與 `/api/cron/evening` 回傳 `CRON_SECRET is not configured.`。上線測試前需在 Cloudflare Pages production environment 補上 `CRON_SECRET`，且值必須與 GitHub Actions secret `CRON_SECRET` 一致。

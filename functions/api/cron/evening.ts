@@ -1,5 +1,6 @@
 import { supabaseFetch, Env as SupabaseEnv } from "../../_shared/supabase";
 import { logError, logEvent } from "../../_shared/logger";
+import { sendProductionAlert } from "../../_shared/alerts";
 
 const DEFAULT_RECIPIENT = "親愛的家人";
 const BRAND_SIGNATURE = "Care WEDO\n陪你照顧最重要的人\nhttps://care.wedopr.com/app/open";
@@ -54,6 +55,11 @@ async function pushText(env: Env, userId: string, text: string) {
   if (!response.ok) {
     const detail = await response.text();
     logError("cron.evening_push_failed", new Error(`LINE push failed (${response.status})`), {
+      line_user_suffix: userId.slice(-4),
+      status: response.status,
+      detail,
+    });
+    await sendProductionAlert(env, "cron.evening_push_failed", {
       line_user_suffix: userId.slice(-4),
       status: response.status,
       detail,
@@ -260,6 +266,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     return Response.json({ success: true, processed_date: targetDate, sent_count: sentCount });
   } catch (error) {
     logError("cron.evening_failed", error, { duration_ms: Date.now() - startedAt });
+    await sendProductionAlert(env, "cron.evening_failed", {
+      duration_ms: Date.now() - startedAt,
+      error,
+    });
     return Response.json({ error: String(error) }, { status: 500 });
   }
 };

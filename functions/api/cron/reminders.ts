@@ -1,5 +1,6 @@
 import { supabaseFetch, Env as SupabaseEnv } from "../../_shared/supabase";
 import { logError, logEvent } from "../../_shared/logger";
+import { sendProductionAlert } from "../../_shared/alerts";
 
 const DEFAULT_RECIPIENT = "親愛的家人";
 const WEEKDAY_LABELS = ["日", "一", "二", "三", "四", "五", "六"];
@@ -75,6 +76,11 @@ async function pushText(env: Env, userId: string, text: string) {
   if (!response.ok) {
     const detail = await response.text();
     logError("cron.reminders_push_failed", new Error(`LINE push failed (${response.status})`), {
+      line_user_suffix: userId.slice(-4),
+      status: response.status,
+      detail,
+    });
+    await sendProductionAlert(env, "cron.reminders_push_failed", {
       line_user_suffix: userId.slice(-4),
       status: response.status,
       detail,
@@ -377,6 +383,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     return Response.json({ success: true, processed_date: targetDate, users_notified: sentCount });
   } catch (error) {
     logError("cron.reminders_failed", error, { duration_ms: Date.now() - startedAt });
+    await sendProductionAlert(env, "cron.reminders_failed", {
+      duration_ms: Date.now() - startedAt,
+      error,
+    });
     return Response.json({ error: String(error) }, { status: 500 });
   }
 };

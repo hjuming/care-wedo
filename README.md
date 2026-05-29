@@ -146,7 +146,7 @@ https://care.wedopr.com
 - 照護圈標題列支援切換家庭群組，正在照護者可由頁首快速切換；點選照護者頭像可編輯主要照護者資料。
 - 其他頁面標題列已改成 compact 版，搜尋框與今日頁面對齊，避免排程、紀錄、用藥頁第一屏被標題佔滿。
 - 用藥總表手機版改為欄位標籤卡片；操作改為 `複製文字` 與 `儲存圖片`，比列印更符合長輩實際使用情境。
-- 2026-05-29 已補 Beta observability 基礎：前端 production error 可送入 `/api/telemetry`，Functions log 會帶 `ocr_failed`、`line_push_failed`、`quota_exceeded`、`auth_failed`、`cron_failed` 分類，並新增 Cloudflare tail runbook。
+- 2026-05-29 已補 Beta observability 基礎：前端 production error 可送入 `/api/telemetry`，Functions log 會帶 `ocr_failed`、`line_push_failed`、`quota_exceeded`、`auth_failed`、`cron_failed` 分類，並新增 Cloudflare tail runbook 與 `CARE_WEDO_ALERT_WEBHOOK_URL` 自動告警轉發。
 - 2026-05-29 已建立真實單據回歸包基礎：`test-fixtures/real-receipt-regression/manifest.json` 定義 10 張台灣單據測試案例；真實圖片放在未追蹤的 private-images 目錄，避免醫療資料進 Git。
 - 2026-05-29 已建立 Billing Data Foundation 草案：新增 `billing_subscriptions`、`billing_events`、`invoices` migration 與後端 `resolveGroupBillingEntitlement` / `recordBillingGroupEvent` helper；新增照護對象與新協作者加入會寫入可稽核事件、subscription snapshot 與當月 draft invoice。Production Supabase 已套用 `supabase/migration_phase55_billing_foundation.sql`。
 - 同一批次後續更新：`/api/groups` 追加回傳 `billing_entitlement`，照護圈頁使用後端實際權益快照做人數上限與 `estimatedMonthlyAmount` 顯示，避免前端硬編碼上限與稽核口徑不同步。
@@ -399,7 +399,7 @@ P0：
 - 照護圈新增照護對象、邀請協作者前補正式費用確認 modal，避免未來接金流後出現靜默升級疑慮。
 - 完成 390px 手機與 LINE WebView 實機檢查，尤其是照護圈、用藥總表、費用確認 modal。
 - 強化藥品去重：已補藥名正規化、商品名/學名/藥碼欄位、疑似重複候選標記、家人端提示與高信心 exact duplicate 合併；下一步補正式藥碼資料源與完整合併管理。
-- 接上 Sentry / Cloudflare Analytics 自動告警；目前已具備 `/api/telemetry` 與 Cloudflare tail runbook。
+- 已支援 webhook 自動告警；商轉前可再補 Sentry / Cloudflare Analytics。
 
 P1：
 
