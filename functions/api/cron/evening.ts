@@ -98,7 +98,7 @@ function calculateFastingStart(apptTime: string | null, hours: number | null): s
 
 async function fetchFastingAppointments(env: Env, targetDate: string) {
   const baseSelect =
-    "id,type,date,time,hospital,department,fasting_required,fasting_hours,user_id,group_id,profile_id,users(line_user_id)";
+    "id,type,date,time,hospital,department,fasting_required,fasting_hours,user_id,group_id,profile_id,users!appointments_user_id_fkey(line_user_id)";
 
   try {
     return await supabaseFetch<AppointmentWithUser[]>(

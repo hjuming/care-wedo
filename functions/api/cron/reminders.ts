@@ -219,7 +219,7 @@ async function fetchCareProfiles(env: Env, profileIds: number[]) {
 
 async function fetchReminderAppointments(env: Env, targetDate: string) {
   const baseSelect =
-    "id,type,date,time,hospital,department,doctor,number,location,fasting_required,fasting_hours,notes,reminder_text,user_id,group_id,profile_id,users(line_user_id)";
+    "id,type,date,time,hospital,department,doctor,number,location,fasting_required,fasting_hours,notes,reminder_text,user_id,group_id,profile_id,users!appointments_user_id_fkey(line_user_id)";
 
   try {
     return await supabaseFetch<AppointmentWithUser[]>(
@@ -244,7 +244,7 @@ async function fetchReminderAppointments(env: Env, targetDate: string) {
 async function fetchActiveMedications(env: Env) {
   return supabaseFetch<MedicationWithUser[]>(
     env,
-    `medications?active=eq.true&select=id,name,dosage,frequency,purpose,warnings,reminder_text,user_id,group_id,profile_id,users(line_user_id)`,
+    `medications?active=eq.true&select=id,name,dosage,frequency,purpose,warnings,reminder_text,user_id,group_id,profile_id,users!medications_user_id_fkey(line_user_id)`,
   );
 }
 

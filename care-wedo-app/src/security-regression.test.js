@@ -585,6 +585,15 @@ test("Cron endpoints fail closed when CRON_SECRET is not configured", () => {
   }
 });
 
+test("Cron reminder queries pin user ownership relations explicitly", () => {
+  const reminders = readProjectFile("functions/api/cron/reminders.ts");
+  const evening = readProjectFile("functions/api/cron/evening.ts");
+
+  assert.match(reminders, /users!appointments_user_id_fkey\(line_user_id\)/);
+  assert.match(reminders, /users!medications_user_id_fkey\(line_user_id\)/);
+  assert.match(evening, /users!appointments_user_id_fkey\(line_user_id\)/);
+});
+
 test("Daily LINE reminders use family-like copy instead of announcement-style notices", () => {
   const source = readProjectFile("functions/api/cron/reminders.ts");
   const builder = source.slice(source.indexOf("function buildDailyReminderMessage"), source.indexOf("async function fetchCareProfiles"));
