@@ -77,7 +77,7 @@ CARE_WEDO_ALERT_WEBHOOK_SECRET=<接收端驗證用 secret>
 CARE_WEDO_ENV=production
 ```
 
-> **2026-05-13 smoke test 發現**：正式站 `/api/cron/reminders` 與 `/api/cron/evening` 回傳 `CRON_SECRET is not configured.`。上線測試前需在 Cloudflare Pages production environment 補上 `CRON_SECRET`，且值必須與 GitHub Actions secret `CRON_SECRET` 一致。
+> **2026-05-13 smoke test 發現**：正式站 `/api/cron/reminders` 與 `/api/cron/evening` 曾回傳 `CRON_SECRET is not configured.`。此問題已於 **2026-05-29** 修正；目前仍需確保 Cloudflare Pages production 與 GitHub Actions 的 `CRON_SECRET` 維持一致。
 
 ### CRON_SECRET 重設流程
 
@@ -91,6 +91,15 @@ CARE_WEDO_ENV=production
 6. 確認 `/api/cron/reminders`、`/api/cron/evening` 不再回 `CRON_SECRET is not configured.`。
 
 > **2026-05-29 production 檢查補充**：GitHub Actions runner 直接打 `https://care.wedopr.com/api/cron/*` 曾被 Cloudflare challenge 攔下，log 會出現 `Just a moment...` 與 `HTTP Status: 403`。排程 workflow 已改成打 `https://care-wedo.pages.dev/api/cron/*`，並使用 `curl --fail-with-body`，避免假成功。
+
+> **2026-05-29 cron 補充**：`Daily Medical Reminders` 曾再遇到兩個問題，現已修正：
+> 1. `401 Unauthorized`：GitHub Actions secret 與 Cloudflare Pages production `CRON_SECRET` 不一致。
+> 2. `500 Could not embed because more than one relationship was found for 'appointments' and 'users'`：cron 查詢已改為明確指定 `users!appointments_user_id_fkey` / `users!medications_user_id_fkey`。
+>
+> 最新手動驗證：
+> - GitHub Actions `Daily Medical Reminders` run `26616795186`
+> - 成功時間：**2026-05-29 03:49:42 UTC**
+> - 回應：`{"success":true,"processed_date":"2026-05-29","users_notified":6}`
 
 ### Cloudflare Pages（前端建置）
 

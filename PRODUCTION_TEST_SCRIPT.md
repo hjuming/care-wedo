@@ -2,15 +2,15 @@
 
 > 測試版本：V1.0 Beta Candidate  
 > 測試站台：https://care.wedopr.com  
-> 更新日期：2026-05-13  
+> 更新日期：2026-05-29  
 > 測試原則：不要在測試紀錄中貼上 token、idToken、API key、service role key、醫療單據全文或完整個資。
 
 ## 目前已知 P0
 
-- [ ] Cloudflare Pages production environment 需補上 `CRON_SECRET`。2026-05-13 smoke test 顯示 `/api/cron/reminders` 與 `/api/cron/evening` 回傳 `{"error":"CRON_SECRET is not configured."}`，代表 GitHub Actions 即使帶 secret 也無法成功觸發正式推播。
 - [ ] 本機 root `.env` 有實際金鑰，已確認被 `.gitignore` 忽略，但正式上線前仍建議把可疑外流的 token/key 旋轉一次，並只保留在 Cloudflare/GitHub/Supabase/LINE 對應 Secrets 管理介面。
+- [ ] iOS / Android LINE WebView 的完整 OCR 與照護圈流程，仍需照測試腳本逐項實機勾核。
 
-## Codex Smoke Test 紀錄（2026-05-13）
+## Codex Smoke Test 紀錄（2026-05-29 更新）
 
 | 項目 | 結果 |
 |---|---|
@@ -23,8 +23,9 @@
 | `POST /api/groups` 無 Authorization | 401，`請先登入` |
 | `POST /api/ocr/` 無 Authorization | 401，`請先登入` |
 | `GET /api/me` invalid Bearer token | 401，`JWS format error` |
-| `POST /api/cron/reminders` 無 Authorization | 500，`CRON_SECRET is not configured.` |
-| `POST /api/cron/evening` 無 Authorization | 500，`CRON_SECRET is not configured.` |
+| `POST /api/cron/reminders` with GitHub Actions secret | 200，`users_notified: 6`（run `26616795186`） |
+| `POST /api/cron/evening` 無 Authorization | 401/500 fail-closed 預期，需以 secret 或 workflow 驗證 |
+| `pnpm manual:reminder -- --user-id 1` | 可只推單一測試戶，不影響其他用戶 |
 
 ## 0. 測試前檢查
 
@@ -95,6 +96,8 @@
 |---|---|---|
 | 手動執行 Daily Medical Reminders workflow | 目標 LINE 收到早安健康簡報 | [ ] |
 | 手動執行 Evening Fasting Reminders workflow | 目標 LINE 收到晚安空腹提醒 | [ ] |
+| 只想驗證單一測試戶時執行 `pnpm manual:reminder -- --user-id <id> --dry-run` | 先看到提醒預覽，不發送 LINE | [ ] |
+| 只想驗證單一測試戶時執行 `pnpm manual:reminder -- --user-id <id>` | 只該測試戶收到提醒，其他用戶不受影響 | [ ] |
 | 連續觀察 7 天 | 08:00 與 20:00 台灣時間排程無漏送 | [ ] |
 
 ## 7. 安全 Smoke Test

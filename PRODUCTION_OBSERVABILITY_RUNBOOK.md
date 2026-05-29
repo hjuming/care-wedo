@@ -95,6 +95,25 @@ curl -sS https://care.wedopr.com/api/health
 curl -sS https://care.wedopr.com/llms.txt | head
 ```
 
+## 6.1 單人提醒驗證
+
+當我們只想驗證某一位測試戶，不要重送整批 `Daily Medical Reminders` 時，改用單人提醒腳本：
+
+```bash
+set -a
+source .env
+set +a
+pnpm manual:reminder -- --user-id 1 --dry-run
+pnpm manual:reminder -- --user-id 1
+```
+
+- `--dry-run`：只輸出提醒摘要預覽，不發送 LINE。
+- `--user-id`：指定 Care WEDO `users.id`。
+- `--line-user-id`：若只知道 LINE user id，也可直接指定。
+- `--date YYYY-MM-DD`：可重建指定日期的提醒內容，預設為台灣時間今天。
+
+> 這支腳本會直接查 production Supabase 並走正式 LINE Push API，只適合內部驗證，不要拿來取代排程 workflow。
+
 ## 7. 下一步
 
 - 接 Sentry React / Vite production error，source map 只上傳程式碼映射，不上傳醫療資料。
