@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { createCareProfile, fetchGroups, regenerateInvite, removeMember, updateMembership } from "../services/api";
+import { buildCollaboratorContact } from "../services/contact";
 import { resetCareWedoSessionAndReturnHome } from "../services/liff";
 
 const CARE_WEDO_LINE_URL = "https://lin.ee/xzbyyvf";
@@ -227,10 +228,32 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
     });
   }
 
-  function openLineProfile(lineUserId) {
-    if (!lineUserId) return;
-    const lineUrl = `https://line.me/R/ti/p/${encodeURIComponent(lineUserId)}`;
-    window.open(lineUrl, "_blank", "noopener,noreferrer");
+  function getMemberContact(member, currentMembership) {
+    if (isCurrentUserMember(member, currentMembership)) {
+      return { type: "self", href: null, label: "目前登入者" };
+    }
+    const user = getMemberUser(member);
+    return buildCollaboratorContact({
+      lineUserId: user?.line_user_id,
+      email: user?.email,
+    });
+  }
+
+  function handleMemberContact(member, currentMembership) {
+    const contact = getMemberContact(member, currentMembership);
+    if (contact.type === "self") {
+      setSuccess("這是你目前登入的協作者帳號。");
+      return;
+    }
+    if (!contact.href) {
+      setSuccess("這位協作者目前沒有可直接聯絡方式，請先請對方補上 Email 或可公開加入的 LINE ID。");
+      return;
+    }
+    if (contact.type === "email") {
+      window.location.assign(contact.href);
+      return;
+    }
+    window.open(contact.href, "_blank", "noopener,noreferrer");
   }
 
   function getMemberUser(member) {
@@ -501,20 +524,26 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
                   <label>照護協作者</label>
                   <div className="members-grid">
                     {members.map((m, idx) => {
-                      const memberUser = getMemberUser(m);
                       const displayName = getMemberDisplayName(m, idx, membership);
                       const avatarUrl = getMemberAvatar(m, displayName, membership);
+                      const contact = getMemberContact(m, membership);
+                      const contactTitle = contact.type === "self"
+                        ? "目前登入者"
+                        : contact.href
+                          ? `聯絡 ${displayName}`
+                          : "請先補聯絡方式";
                       return (
                         <div key={m.user_id ?? idx} className="member-item member-avatar-item">
                           <button
                             type="button"
                             className="member-avatar-button"
-                            onClick={() => openLineProfile(memberUser?.line_user_id)}
-                            title={memberUser?.line_user_id ? "開啟 LINE" : "尚未提供 LINE 連結"}
+                            onClick={() => handleMemberContact(m, membership)}
+                            title={contactTitle}
                           >
                             <img src={avatarUrl} alt={`${displayName} 頭像`} />
                           </button>
                           <span className="member-label">{displayName}</span>
+                          <span className={`member-contact-tag member-contact-tag-${contact.type}`}>{contact.label}</span>
                           {isAdmin && m.role !== "admin" && (
                             <button
                               type="button"

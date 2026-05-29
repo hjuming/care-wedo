@@ -493,6 +493,26 @@ test("Collaborator controls are centralized in the settings page", () => {
   assert.doesNotMatch(app, /function GlobalCareContactDock/);
 });
 
+test("Collaborator contact action uses reliable contact methods instead of raw LINE U ids", () => {
+  const groupSettings = readProjectFile("care-wedo-app/src/components/GroupSettings.jsx");
+  const contactService = readProjectFile("care-wedo-app/src/services/contact.js");
+  const css = readProjectFile("care-wedo-app/src/index.css");
+
+  assert.match(groupSettings, /buildCollaboratorContact/);
+  assert.match(groupSettings, /getMemberContact/);
+  assert.match(groupSettings, /handleMemberContact/);
+  assert.match(groupSettings, /請先補聯絡方式/);
+  assert.match(groupSettings, /目前沒有可直接聯絡方式/);
+  assert.match(groupSettings, /member-contact-tag/);
+  assert.match(contactService, /normalizeLineContactId/);
+  assert.match(contactService, /\^U\[0-9a-f\]\{20,\}\$/i);
+  assert.match(contactService, /mailto:/);
+  assert.match(contactService, /line\.me\/R\/ti\/p/);
+  assert.match(css, /\.member-contact-tag-line/);
+  assert.match(css, /\.member-contact-tag-email/);
+  assert.match(css, /\.member-contact-tag-none/);
+});
+
 test("Family group creation uses a user feature flag, not group plans", () => {
   const groupsApi = readProjectFile("functions/api/groups.ts");
   const supabase = readProjectFile("functions/_shared/supabase.ts");

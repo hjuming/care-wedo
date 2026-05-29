@@ -5733,6 +5733,34 @@ button:disabled,
   line-height: 1.25;
 }
 
+.member-contact-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.member-contact-tag-line {
+  background: rgba(6, 199, 85, 0.14);
+  color: #12763f;
+}
+
+.member-contact-tag-email {
+  background: rgba(43, 108, 176, 0.12);
+  color: #24558a;
+}
+
+.member-contact-tag-none,
+.member-contact-tag-self {
+  background: rgba(107, 122, 128, 0.12);
+  color: var(--text-secondary);
+}
+
 /* --- 勾選框與任務完成 --- */
 .panel-header-with-action {
   display: flex;
