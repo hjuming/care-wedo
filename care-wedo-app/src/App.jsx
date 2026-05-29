@@ -6,7 +6,7 @@ import MobileBottomNav from "./components/MobileBottomNav";
 import OcrResult from "./components/OcrResult";
 import { patientData, medicines, timeline as initialTimeline } from "./data/patient";
 import { buildGoogleCalendarEventUrl, confirmOcrDocument, createAppointment, deleteAppointment, downloadAppointmentCalendarFile, downloadLocalAppointmentCalendarFile, fetchDashboard, fetchSessionIdentity, joinGroup, markMedicationSlotStatus, ocrAnalyze, ocrAnalyzeText, patchAppointment, patchMedication, updateActiveProfilePreference, updateFamilyNotes, updateProfile, updateProfileOrder } from "./services/api";
-import { buildExternalAppUrl, buildLiffEntryUrl, buildLineAppLiffFallbackUrl, initLineIdentity, isLineInAppBrowser, loginWithLine, logoutLineIdentity, openUrlInExternalBrowser, resetCareWedoSessionAndReturnHome, shouldOpenLiffEntryUrl } from "./services/liff";
+import { buildExternalAppUrl, buildLiffEntryUrl, buildLineAppLiffFallbackUrl, initLineIdentity, isLineInAppBrowser, loginWithLine, logoutLineIdentity, openDashboardInExternalBrowserAfterLineCallback, openUrlInExternalBrowser, resetCareWedoSessionAndReturnHome, shouldOpenLiffEntryUrl } from "./services/liff";
 import { trackError, trackEvent } from "./services/telemetry";
 import { buildTodayTasks, formatTaipeiTodayLabel, groupMedicationsBySchedule, hasSameDayTasks } from "./services/todayTasks";
 import { buildSearchSuggestions, matchSearch } from "./services/search";
@@ -1107,36 +1107,19 @@ function LoginPage() {
 }
 
 export default function App() {
-  const initialSearch = window.location.search;
-  const shouldAutoOpenExternalBrowserAfterCallback = isLineCallbackSearch(initialSearch) && isLineInAppBrowser();
-
-  function resolveRoute(pathname = window.location.pathname, search = window.location.search) {
-    const base = resolveCareWedoRoute(pathname);
-    if (base === "app" && isLineCallbackSearch(search) && isLineInAppBrowser()) return "external-open";
-    return base;
+  function resolveRoute(pathname = window.location.pathname) {
+    return resolveCareWedoRoute(pathname);
   }
 
   const [route, setRoute] = useState(() => {
     // LINE OAuth callback URL must remain untouched until liff.init() completes.
     // We only route the SPA view to /app here; URL cleanup happens after LIFF init.
-    return shouldAutoOpenExternalBrowserAfterCallback
-      ? "external-open"
-      : resolveRoute(window.location.pathname, initialSearch);
+    return resolveRoute(window.location.pathname, window.location.search);
   });
 
   useEffect(() => {
-    if (route !== "external-open" || !isLineCallbackSearch(window.location.search) || !isLineInAppBrowser()) {
-      return undefined;
-    }
-    if (window.location.pathname !== "/app/open") {
-      window.history.replaceState(null, "", `/app/open${window.location.search}`);
-    }
-    return undefined;
-  }, [route]);
-
-  useEffect(() => {
     // 處理瀏覽器上一頁/下一頁
-    const handlePopState = () => setRoute(resolveRoute(window.location.pathname, window.location.search));
+    const handlePopState = () => setRoute(resolveRoute(window.location.pathname));
     window.addEventListener("popstate", handlePopState);
 
     // 攔截所有內部 <a> 點擊，改用 pushState 客戶端導航
@@ -1156,8 +1139,8 @@ export default function App() {
       e.preventDefault();
       window.history.pushState(null, "", href);
       const [pathAndSearch, hash = ""] = href.split("#", 2);
-      const [path, search = ""] = pathAndSearch.split("?", 2);
-      setRoute(resolveRoute(path || "/", search ? `?${search}` : ""));
+      const [path] = pathAndSearch.split("?", 2);
+      setRoute(resolveRoute(path || "/"));
       const hashWithSymbol = hash ? `#${hash}` : "";
       if (hashWithSymbol) {
         window.setTimeout(() => document.querySelector(hashWithSymbol)?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
@@ -1401,6 +1384,9 @@ function DashboardApp() {
         }
 
         setIdentity(lineIdentity);
+        if (await openDashboardInExternalBrowserAfterLineCallback(lineIdentity.idToken)) {
+          return;
+        }
         if (isLineCallbackSearch(window.location.search)) {
           window.history.replaceState(null, "", "/app");
         }

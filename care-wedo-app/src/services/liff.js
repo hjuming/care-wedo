@@ -1,6 +1,13 @@
 // LIFF ID is public. Keep a code fallback so manual local builds cannot produce
 // a login button that silently skips LINE OAuth.
-import { clearServerSession, createServerSession, fetchSessionIdentity } from "./api.js";
+import {
+  clearServerSession,
+  createServerSession,
+  exchangeBrowserHandoffToken,
+  fetchSessionIdentity,
+  issueBrowserHandoffToken,
+} from "./api.js";
+import { isLineCallbackSearch } from "../routing.js";
 
 const DEFAULT_LIFF_ID = "2009972224-fQcfBXw5";
 const LIFF_ID = import.meta.env?.VITE_LINE_LIFF_ID || DEFAULT_LIFF_ID;
@@ -108,6 +115,17 @@ export async function resetCareWedoSessionAndReturnHome() {
 
 /** 初始化 LIFF 並取得身分。在 DashboardApp boot() 中呼叫。 */
 export async function initLineIdentity() {
+  const searchParams = new URLSearchParams(window.location.search || "");
+  const handoffToken = searchParams.get("handoff");
+
+  if (handoffToken) {
+    const handoffSession = await exchangeBrowserHandoffToken(handoffToken).catch(() => null);
+    if (handoffSession) {
+      window.history.replaceState(null, "", "/app");
+      return handoffSession;
+    }
+  }
+
   const serverSession = await fetchSessionIdentity();
   if (serverSession) return serverSession;
 
@@ -204,4 +222,13 @@ export async function loginWithLine() {
 /** 登出並導回未登入首頁 */
 export async function logoutLineIdentity() {
   await resetCareWedoSessionAndReturnHome();
+}
+
+export async function openDashboardInExternalBrowserAfterLineCallback(idToken) {
+  if (!idToken || !isLineInAppBrowser() || !isLineCallbackSearch(window.location.search || "")) return false;
+  const handoffToken = await issueBrowserHandoffToken(idToken).catch(() => null);
+  if (!handoffToken) return false;
+  window.history.replaceState(null, "", `/app/open?handoff=${encodeURIComponent(handoffToken)}`);
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  return true;
 }

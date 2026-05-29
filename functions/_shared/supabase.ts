@@ -14,8 +14,18 @@ export type VerifiedLineIdentity = {
 export const CARE_WEDO_SESSION_COOKIE = "care_wedo_session";
 export const CARE_WEDO_SESSION_MAX_AGE_SECONDS = 60 * 24 * 60 * 60;
 const CARE_WEDO_SESSION_PREFIX = "cw_session.";
+const CARE_WEDO_HANDOFF_PREFIX = "cw_handoff.";
+const CARE_WEDO_HANDOFF_MAX_AGE_SECONDS = 5 * 60;
 
 type CareWedoSessionPayload = {
+  lineUserId: string;
+  name?: string;
+  pictureUrl?: string;
+  iat: number;
+  exp: number;
+};
+
+type CareWedoHandoffPayload = {
   lineUserId: string;
   name?: string;
   pictureUrl?: string;
@@ -348,6 +358,24 @@ export async function createCareWedoSessionToken(
   return `${CARE_WEDO_SESSION_PREFIX}${encodedPayload}.${signature}`;
 }
 
+export async function createCareWedoHandoffToken(
+  env: Env,
+  identity: VerifiedLineIdentity,
+  now = Date.now(),
+): Promise<string> {
+  const issuedAt = Math.floor(now / 1000);
+  const payload: CareWedoHandoffPayload = {
+    lineUserId: identity.lineUserId,
+    name: identity.name,
+    pictureUrl: identity.pictureUrl,
+    iat: issuedAt,
+    exp: issuedAt + CARE_WEDO_HANDOFF_MAX_AGE_SECONDS,
+  };
+  const encodedPayload = base64UrlEncodeText(JSON.stringify(payload));
+  const signature = await signSessionPayload(env, encodedPayload);
+  return `${CARE_WEDO_HANDOFF_PREFIX}${encodedPayload}.${signature}`;
+}
+
 export function buildCareWedoSessionCookie(token: string): string {
   return [
     `${CARE_WEDO_SESSION_COOKIE}=${encodeURIComponent(token)}`,
@@ -385,6 +413,30 @@ export async function verifyCareWedoSessionToken(env: Env, token: string): Promi
   const now = Math.floor(Date.now() / 1000);
   if (!payload.lineUserId || !payload.exp || payload.exp <= now) {
     throw new Error("Care WEDO session expired.");
+  }
+
+  return {
+    lineUserId: payload.lineUserId,
+    name: payload.name,
+    pictureUrl: payload.pictureUrl,
+  };
+}
+
+export async function verifyCareWedoHandoffToken(env: Env, token: string): Promise<VerifiedLineIdentity> {
+  if (!token.startsWith(CARE_WEDO_HANDOFF_PREFIX)) {
+    throw new Error("Invalid Care WEDO handoff.");
+  }
+  const raw = token.slice(CARE_WEDO_HANDOFF_PREFIX.length);
+  const [encodedPayload, signature] = raw.split(".");
+  if (!encodedPayload || !signature) throw new Error("Invalid Care WEDO handoff.");
+
+  const expectedSignature = await signSessionPayload(env, encodedPayload);
+  if (signature !== expectedSignature) throw new Error("Care WEDO handoff signature mismatch.");
+
+  const payload = JSON.parse(base64UrlDecodeText(encodedPayload)) as Partial<CareWedoHandoffPayload>;
+  const now = Math.floor(Date.now() / 1000);
+  if (!payload.lineUserId || !payload.exp || payload.exp <= now) {
+    throw new Error("Care WEDO handoff expired.");
   }
 
   return {

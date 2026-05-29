@@ -21,6 +21,7 @@ function isPublicPath(pathname: string, method: string): boolean {
   if (pathname === "/api/feedback" && method === "POST") return true;
   if (pathname === "/api/telemetry" && method === "POST") return true;
   if (pathname === "/api/session") return true;
+  if (pathname === "/api/session/handoff" && method === "POST") return true;
   if (pathname.startsWith("/api/cron/")) return true;
   // Dashboard GET is allowed without auth (returns demo mode)
   if (pathname === "/api/dashboard" && method === "GET") return true;

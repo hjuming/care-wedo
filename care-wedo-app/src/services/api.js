@@ -53,6 +53,19 @@ export function buildSessionRequest(apiBase = API_BASE, method = "GET", identity
   };
 }
 
+export function buildSessionHandoffRequest(apiBase = API_BASE, token) {
+  return {
+    url: `${apiBase}/session/handoff`,
+    init: {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  };
+}
+
 function appointmentTypeLabel(type) {
   if (type === "family_note") return "家庭提醒";
   if (type === "inspection") return "檢查";
@@ -366,6 +379,30 @@ export async function createServerSession(idToken) {
   return {
     status: "authenticated",
     idToken,
+    profile: data.profile || null,
+    message: null,
+  };
+}
+
+export async function issueBrowserHandoffToken(idToken) {
+  if (!idToken) return null;
+  const { url, init } = buildSessionHandoffRequest(API_BASE, idToken);
+  const res = await fetch(url, init);
+  if (!res.ok) return null;
+  const data = await res.json().catch(() => null);
+  return data?.handoffToken || null;
+}
+
+export async function exchangeBrowserHandoffToken(handoffToken) {
+  if (!handoffToken) return null;
+  const { url, init } = buildSessionHandoffRequest(API_BASE, handoffToken);
+  const res = await fetch(url, init);
+  if (!res.ok) return null;
+  const data = await res.json().catch(() => null);
+  if (!data?.authenticated) return null;
+  return {
+    status: "authenticated",
+    idToken: null,
     profile: data.profile || null,
     message: null,
   };

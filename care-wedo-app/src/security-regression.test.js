@@ -152,14 +152,23 @@ test("LINE links use an external browser handoff page", () => {
   const app = readProjectFile("care-wedo-app/src/App.jsx");
   const routing = readProjectFile("care-wedo-app/src/routing.js");
   const liff = readProjectFile("care-wedo-app/src/services/liff.js");
+  const api = readProjectFile("care-wedo-app/src/services/api.js");
   const callback = readProjectFile("functions/callback.ts");
+  const handoffApi = readProjectFile("functions/api/session/handoff.ts");
+  const middleware = readProjectFile("functions/api/_middleware.ts");
   const reminders = readProjectFile("functions/api/cron/reminders.ts");
 
   assert.match(routing, /external-open/);
   assert.match(app, /function ExternalOpenPage/);
   assert.match(app, /用瀏覽器開啟/);
-  assert.match(app, /shouldAutoOpenExternalBrowserAfterCallback/);
-  assert.ok(app.includes('window.history.replaceState(null, "", `/app/open${window.location.search}`)'));
+  assert.match(app, /openDashboardInExternalBrowserAfterLineCallback/);
+  assert.match(liff, /issueBrowserHandoffToken/);
+  assert.match(liff, /exchangeBrowserHandoffToken/);
+  assert.match(liff, /\/app\/open\?handoff=/);
+  assert.match(api, /buildSessionHandoffRequest/);
+  assert.match(handoffApi, /createCareWedoHandoffToken/);
+  assert.match(handoffApi, /verifyCareWedoHandoffToken/);
+  assert.match(middleware, /pathname === "\/api\/session\/handoff"/);
   assert.match(liff, /liff\.openWindow\(\{ url, external: true \}\)/);
   assert.match(callback, /CARE_WEDO_OPEN_URL = "https:\/\/care\.wedopr\.com\/app\/open"/);
   assert.match(reminders, /https:\/\/care\.wedopr\.com\/app\/open/);

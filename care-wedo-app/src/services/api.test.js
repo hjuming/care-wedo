@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildAppointmentCalendarRequest, buildDashboardRequest, buildGoogleCalendarEventUrl, buildLocalAppointmentCalendarFile, buildSessionRequest, isAuthFailureMessage } from "./api.js";
+import { buildAppointmentCalendarRequest, buildDashboardRequest, buildGoogleCalendarEventUrl, buildLocalAppointmentCalendarFile, buildSessionHandoffRequest, buildSessionRequest, isAuthFailureMessage } from "./api.js";
 
 test("buildDashboardRequest returns the dashboard endpoint without identity data in demo mode", () => {
   assert.deepEqual(buildDashboardRequest("/api"), {
@@ -68,6 +68,19 @@ test("buildSessionRequest creates same-origin session requests", () => {
       credentials: "same-origin",
       headers: {
         Authorization: "Bearer token.123",
+      },
+    },
+  });
+});
+
+test("buildSessionHandoffRequest creates same-origin browser handoff requests", () => {
+  assert.deepEqual(buildSessionHandoffRequest("/api", "handoff-token-123"), {
+    url: "/api/session/handoff",
+    init: {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {
+        Authorization: "Bearer handoff-token-123",
       },
     },
   });
