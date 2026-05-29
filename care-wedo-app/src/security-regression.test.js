@@ -202,6 +202,10 @@ test("Medication view exposes an A4-friendly doctor summary", () => {
   assert.match(medicationArea, /複製文字/);
   assert.match(medicationArea, /儲存圖片/);
   assert.match(medicationArea, /medicationSummarySource/);
+  assert.match(source, /MEDICATION_SLOT_SORT_ORDER/);
+  assert.match(source, /function medicationSlotRank/);
+  assert.match(source, /medication\.active !== false/);
+  assert.match(source, /slotRankA - slotRankB/);
   assert.match(css, /\.medicine-summary-sheet/);
   assert.match(css, /data-label/);
   assert.match(css, /@media print/);

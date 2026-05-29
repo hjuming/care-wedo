@@ -3304,6 +3304,7 @@ const MEDICATION_SLOT_OPTIONS = [
   { value: "bedtime", label: "睡前" },
   { value: "other", label: "其他" },
 ];
+const MEDICATION_SLOT_SORT_ORDER = MEDICATION_SLOT_OPTIONS.map((option) => option.value);
 
 function getMedicationSlotValues(medication = {}) {
   const text = [medication.time_slot, medication.scheduled_time, medication.frequency, medication.reminder_text]
@@ -3319,6 +3320,13 @@ function getMedicationSlotValues(medication = {}) {
   return values;
 }
 
+function medicationSlotRank(medication = {}) {
+  const ranks = Array.from(getMedicationSlotValues(medication))
+    .map((slot) => MEDICATION_SLOT_SORT_ORDER.indexOf(slot))
+    .filter((rank) => rank >= 0);
+  return ranks.length ? Math.min(...ranks) : MEDICATION_SLOT_SORT_ORDER.length;
+}
+
 function uniqueActiveMedications(medications = []) {
   const byId = new Map();
   medications
@@ -3328,7 +3336,12 @@ function uniqueActiveMedications(medications = []) {
       if (!byId.has(key)) byId.set(key, medication);
     });
   return Array.from(byId.values())
-    .sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "zh-Hant"));
+    .sort((a, b) => {
+      const slotRankA = medicationSlotRank(a);
+      const slotRankB = medicationSlotRank(b);
+      if (slotRankA !== slotRankB) return slotRankA - slotRankB;
+      return String(a.name || "").localeCompare(String(b.name || ""), "zh-Hant");
+    });
 }
 
 function medicationScheduleText(medication = {}) {

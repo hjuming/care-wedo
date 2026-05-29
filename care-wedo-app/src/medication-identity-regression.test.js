@@ -50,12 +50,16 @@ test("web OCR pending medications store identity metadata for family review", ()
 
 test("OCR review warns family when a medication may already exist", () => {
   const ocrResult = readProjectFile("care-wedo-app/src/components/OcrResult.jsx");
+  const css = readProjectFile("care-wedo-app/src/index.css");
 
   assert.match(ocrResult, /duplicate_candidate_ids/);
   assert.match(ocrResult, /identity_confidence/);
   assert.match(ocrResult, /可能已存在/);
   assert.match(ocrResult, /請確認是不是同一顆藥/);
-  assert.match(ocrResult, /MedicationDuplicateNotice/);
+  assert.match(ocrResult, /家人人工確認藥名、劑量和用途後再存/);
+  assert.match(ocrResult, /lowConfidenceMedicationCount/);
+  assert.match(ocrResult, /MedicationReviewNotice/);
+  assert.match(css, /\.ocr-save-note\.warning/);
 });
 
 test("OCR confirm merges only high-confidence duplicate medications", () => {

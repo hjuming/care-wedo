@@ -2104,6 +2104,12 @@ input:focus-visible {
   color: #8d2f1f;
 }
 
+.ocr-save-note.warning {
+  border-color: rgba(184, 114, 43, 0.28);
+  background: rgba(255, 246, 230, 0.92);
+  color: #8c561e;
+}
+
 .ocr-card {
   border-top: 1px solid rgba(37, 111, 91, 0.12);
   padding: 12px 0;
@@ -2168,6 +2174,18 @@ input:focus-visible {
   padding: 8px 10px;
   font-size: 0.86rem;
   font-weight: 800;
+}
+
+.ocr-duplicate-note.is-stacked {
+  line-height: 1.55;
+}
+
+.ocr-inline-review-note {
+  grid-column: 1 / -1;
+}
+
+.ocr-inline-review-note .ocr-duplicate-note {
+  margin: 0;
 }
 
 .ocr-edit-grid {

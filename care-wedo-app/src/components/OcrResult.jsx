@@ -104,6 +104,10 @@ export default function OcrResult({ data, onClose, onSaveCorrections, onNavigate
       : "確認後才會放進今日照護、照護排程與用藥清單。";
   }, [draft.appointments.length, draft.medications.length, parsed?.exams?.length]);
 
+  const lowConfidenceMedicationCount = useMemo(() => (
+    draft.medications.filter((medication) => needsManualMedicationReview(medication)).length
+  ), [draft.medications]);
+
   if (!parsed) return null;
 
   async function handleSave() {
@@ -195,6 +199,12 @@ export default function OcrResult({ data, onClose, onSaveCorrections, onNavigate
         </div>
       )}
 
+      {!editing && lowConfidenceMedicationCount > 0 && (
+        <div className="ocr-save-note warning">
+          這次有 {lowConfidenceMedicationCount} 種藥信心較低，建議先由家人人工確認藥名、劑量與用途。
+        </div>
+      )}
+
       {!hasContent && (
         <section className="ocr-card">
           <p className="empty-state">這張單據沒有解析出可保存的提醒。</p>
@@ -267,20 +277,32 @@ function MedicationPreview({ medication }) {
     <div className="ocr-row">
       <strong>{medication.name || "藥名待確認"}</strong>
       <span>{[medication.frequency, medication.dosage, medication.purpose].filter(Boolean).join(" · ")}</span>
-      <MedicationDuplicateNotice medication={medication} />
+      <MedicationReviewNotice medication={medication} />
       {medication.warnings && <em>{medication.warnings}</em>}
     </div>
   );
 }
 
-function MedicationDuplicateNotice({ medication }) {
-  const candidateCount = normalizeDuplicateCandidateIds(medication.duplicate_candidate_ids).length;
-  if (!candidateCount) return null;
+function needsManualMedicationReview(medication = {}) {
   const confidence = Number(medication.identity_confidence || 0);
-  const tone = confidence >= 0.99 ? "系統判斷很可能是同一顆藥" : "OCR 只抓到相似資料，先不要自動合併";
+  return confidence > 0 && confidence < 0.99;
+}
+
+function MedicationReviewNotice({ medication }) {
+  const candidateCount = normalizeDuplicateCandidateIds(medication.duplicate_candidate_ids).length;
+  const confidence = Number(medication.identity_confidence || 0);
+  const needsLowConfidenceReview = needsManualMedicationReview(medication);
+  if (!candidateCount && !needsLowConfidenceReview) return null;
+  const duplicateTone = confidence >= 0.99 ? "系統判斷很可能是同一顆藥" : "OCR 只抓到相似資料，先不要自動合併";
   return (
-    <p className="ocr-duplicate-note">
-      可能已存在，請確認是不是同一顆藥。{tone}。
+    <p className={`ocr-duplicate-note ${candidateCount > 0 && needsLowConfidenceReview ? "is-stacked" : ""}`}>
+      {candidateCount > 0 && (
+        <>可能已存在，請確認是不是同一顆藥。{duplicateTone}。</>
+      )}
+      {candidateCount > 0 && needsLowConfidenceReview && " "}
+      {needsLowConfidenceReview && (
+        <>這筆藥名信心較低，請家人人工確認藥名、劑量和用途後再存。</>
+      )}
     </p>
   );
 }
@@ -314,6 +336,9 @@ function AppointmentEditor({ appointment, onChange }) {
 function MedicationEditor({ medication, onChange }) {
   return (
     <div className="ocr-edit-grid">
+      <div className="ocr-inline-review-note">
+        <MedicationReviewNotice medication={medication} />
+      </div>
       <Field label="藥名" value={medication.name} onChange={(value) => onChange("name", value)} />
       <Field label="劑量" value={medication.dosage} onChange={(value) => onChange("dosage", value)} />
       <Field label="頻率" value={medication.frequency} onChange={(value) => onChange("frequency", value)} />
