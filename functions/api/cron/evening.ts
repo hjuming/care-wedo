@@ -8,6 +8,8 @@ const BRAND_SIGNATURE = "Care WEDO\n陪你照顧最重要的人\nhttps://care.we
 type Env = SupabaseEnv & {
   CRON_SECRET?: string;
   LINE_CHANNEL_ACCESS_TOKEN?: string;
+  REMINDER_TEST_ONLY?: string;
+  REMINDER_TEST_TARGET_NAME?: string;
 };
 
 type AppointmentWithUser = {
@@ -96,14 +98,14 @@ function calculateFastingStart(apptTime: string | null, hours: number | null): s
   return `${dayPrefix} ${formattedHour}:${formattedMin}`;
 }
 
-async function fetchFastingAppointments(env: Env, targetDate: string) {
+async function fetchNextDayAppointments(env: Env, targetDate: string) {
   const baseSelect =
     "id,type,date,time,hospital,department,fasting_required,fasting_hours,user_id,group_id,profile_id,users!appointments_user_id_fkey(line_user_id)";
 
   try {
     return await supabaseFetch<AppointmentWithUser[]>(
       env,
-      `appointments?date=eq.${targetDate}&fasting_required=eq.true&status=in.(upcoming,notified)&select=${baseSelect}`,
+      `appointments?date=eq.${targetDate}&status=eq.upcoming&select=${baseSelect}`,
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -114,10 +116,19 @@ async function fetchFastingAppointments(env: Env, targetDate: string) {
     const fallbackSelect = baseSelect.replace("type,", "");
     const rows = await supabaseFetch<AppointmentWithUser[]>(
       env,
-      `appointments?date=eq.${targetDate}&fasting_required=eq.true&status=in.(upcoming,notified)&select=${fallbackSelect}`,
+      `appointments?date=eq.${targetDate}&status=eq.upcoming&select=${fallbackSelect}`,
     );
     return rows.map((row) => ({ ...row, type: "clinic_visit" }));
   }
+}
+
+async function fetchLineIdsByUserName(env: Env, displayName: string) {
+  const encodedName = encodeURIComponent(`*${displayName}*`);
+  const rows = await supabaseFetch<{ line_user_id: string | null }[]>(
+    env,
+    `users?select=line_user_id&name=ilike.${encodedName}`,
+  );
+  return new Set(rows.map((row) => row.line_user_id).filter((lineId): lineId is string => !!lineId && lineId !== "web-mvp"));
 }
 
 async function fetchCareProfiles(env: Env, profileIds: number[]) {
@@ -181,11 +192,17 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const targetDate = twTime.toISOString().split("T")[0];
     logEvent("cron.evening_started", { target_date: targetDate });
 
-    const fastingApts = await fetchFastingAppointments(env, targetDate);
+    const tomorrowApts = await fetchNextDayAppointments(env, targetDate);
+    const testOnly = env.REMINDER_TEST_ONLY !== "0";
+    const testTargetName = env.REMINDER_TEST_TARGET_NAME?.trim() || "日月MING";
+    const allowedLineIds = testOnly ? await fetchLineIdsByUserName(env, testTargetName) : null;
+    if (testOnly && allowedLineIds && allowedLineIds.size === 0) {
+      logEvent("cron.evening_test_target_not_found", { target_name: testTargetName });
+    }
     const profileIds = new Set<number>();
     const groupIds = new Set<number>();
 
-    for (const apt of fastingApts) {
+    for (const apt of tomorrowApts) {
       if (apt.profile_id) profileIds.add(apt.profile_id);
       if (apt.group_id) groupIds.add(apt.group_id);
     }
@@ -215,9 +232,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     }
 
     const userAlerts = new Map<string, AppointmentWithUser[]>();
-    for (const apt of fastingApts) {
+    for (const apt of tomorrowApts) {
       const lineIds = resolveLineRecipients(apt, groupRecipientsById, profileMap);
       for (const lineId of lineIds) {
+        if (allowedLineIds && !allowedLineIds.has(lineId)) continue;
         if (!userAlerts.has(lineId)) userAlerts.set(lineId, []);
         userAlerts.get(lineId)!.push(apt);
       }
@@ -227,8 +245,6 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
     for (const [lineUserId, appointments] of userAlerts.entries()) {
       if (appointments.length === 0) continue;
-
-      const lines = ["晚安", "提醒您接下來的注意事項。", ""];
 
       for (const apt of appointments) {
         const profile = apt.profile_id ? profileMap.get(apt.profile_id) : undefined;
@@ -243,27 +259,30 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
           apt.type === "exercise" ? "運動" :
           apt.type === "other" || apt.type === "reminder" ? "提醒" :
           "看診";
-        lines.push(`${name} 明天${apt.time ? ` ${apt.time}` : ""} 要去 ${apt.hospital || "醫院"} ${typeLabel}。`);
-        const hours = apt.fasting_hours || 8;
-        const startTimeText = calculateFastingStart(apt.time, hours);
-        lines.push(`${startTimeText} 開始，先不要吃東西。水能不能喝，要看單子上的說明。`);
-        lines.push("健保卡和單子也先放好，明天比較不會急。");
-        lines.push("");
+        const lines = [
+          "【明日行程提醒】",
+          `${name} 明天${apt.time ? ` ${apt.time}` : ""} ${apt.hospital || "醫院"} ${typeLabel}。`,
+        ];
+        if (apt.fasting_required) {
+          const hours = apt.fasting_hours || 8;
+          const startTimeText = calculateFastingStart(apt.time, hours);
+          lines.push(`空腹提醒：${startTimeText} 開始禁食。`);
+        }
+        lines.push(BRAND_SIGNATURE);
+        await pushText(env, lineUserId, lines.join("\n").trim());
+        sentCount++;
       }
-
-      lines.push(BRAND_SIGNATURE);
-
-      await pushText(env, lineUserId, lines.filter((line, index, all) => line !== "" || all[index - 1] !== "").join("\n").trim());
-      sentCount++;
     }
 
     logEvent("cron.evening_completed", {
       processed_date: targetDate,
-      sent_count: sentCount,
-      fasting_appointment_count: fastingApts.length,
+      messages_sent: sentCount,
+      appointment_count: tomorrowApts.length,
+      test_only: testOnly,
+      test_target_name: testTargetName,
       duration_ms: Date.now() - startedAt,
     });
-    return Response.json({ success: true, processed_date: targetDate, sent_count: sentCount });
+    return Response.json({ success: true, processed_date: targetDate, messages_sent: sentCount });
   } catch (error) {
     logError("cron.evening_failed", error, { duration_ms: Date.now() - startedAt });
     await sendProductionAlert(env, "cron.evening_failed", {
