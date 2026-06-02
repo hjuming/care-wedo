@@ -117,9 +117,9 @@ https://care.wedopr.com
 
 | 通知類型 | 發送時間 | 篩選邏輯 | 收件人 |
 |---|---:|---|---|
-| 一般門診、看牙、檢查、領藥 | 當天 08:00 | `appointments.date = 今天` 且 `status = upcoming` | `receive_daily_brief = true` 的群組成員 |
+| 明日行程提醒（門診、看牙、檢查、領藥等；需空腹時加註） | 前一天 20:00 | `appointments.date = 明天` 且 `status = upcoming` | `receive_evening_alert = true` 的群組成員 |
+| 今日事件提醒（門診、看牙、檢查、領藥等） | 當天 08:00 | `appointments.date = 今天` 且 `status = upcoming` | `receive_daily_brief = true` 的群組成員 |
 | 吃藥簡報 | 每天 08:00 | `medications.active = true` | `receive_daily_brief = true` 的群組成員 |
-| 空腹提醒 | 前一天 20:00 | `appointments.date = 明天` 且 `fasting_required = true` | `receive_evening_alert = true` 的群組成員 |
 | 上傳資料摘要 | 上傳成功後立即 | 上傳資料完成 OCR 與歸屬後觸發 | 上傳本人收到整理結果；同群組其他 `receive_upload_summary = true` 成員收到摘要 |
 
 上傳摘要補充：

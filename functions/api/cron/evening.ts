@@ -4,6 +4,8 @@ import { sendProductionAlert } from "../../_shared/alerts";
 
 const DEFAULT_RECIPIENT = "親愛的家人";
 const BRAND_SIGNATURE = "Care WEDO\n陪你照顧最重要的人\nhttps://care.wedopr.com/app/open";
+const TAIPEI_OFFSET_MS = 8 * 60 * 60 * 1000;
+const DELAYED_EVENING_GRACE_HOUR = 6;
 
 type Env = SupabaseEnv & {
   CRON_SECRET?: string;
@@ -38,6 +40,32 @@ type RecipientRow = {
   user_id: number;
   users: { line_user_id: string } | null;
 };
+
+function taipeiDateString(date: Date) {
+  return new Date(date.getTime() + TAIPEI_OFFSET_MS).toISOString().split("T")[0];
+}
+
+function taipeiHour(date: Date) {
+  return new Date(date.getTime() + TAIPEI_OFFSET_MS).getUTCHours();
+}
+
+function resolveEveningTargetDate(now: Date) {
+  const taipeiNow = new Date(now.getTime() + TAIPEI_OFFSET_MS);
+  const target = new Date(taipeiNow);
+
+  // GitHub scheduled jobs can arrive after midnight in Taiwan. Treat early-morning
+  // runs as the delayed previous-evening reminder instead of jumping to the next day.
+  if (taipeiHour(now) >= DELAYED_EVENING_GRACE_HOUR) {
+    target.setUTCDate(target.getUTCDate() + 1);
+  }
+
+  return target.toISOString().split("T")[0];
+}
+
+function targetDateLabel(targetDate: string, todayDate: string) {
+  if (targetDate === todayDate) return "今天";
+  return "明天";
+}
 
 async function pushText(env: Env, userId: string, text: string) {
   if (!env.LINE_CHANNEL_ACCESS_TOKEN) return;
@@ -187,10 +215,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const startedAt = Date.now();
   try {
     const now = new Date();
-    const twTime = new Date(now.getTime() + 8 * 60 * 60 * 1000);
-    twTime.setDate(twTime.getDate() + 1);
-    const targetDate = twTime.toISOString().split("T")[0];
-    logEvent("cron.evening_started", { target_date: targetDate });
+    const todayDate = taipeiDateString(now);
+    const targetDate = resolveEveningTargetDate(now);
+    const dateLabel = targetDateLabel(targetDate, todayDate);
+    logEvent("cron.evening_started", { target_date: targetDate, taipei_today: todayDate });
 
     const tomorrowApts = await fetchNextDayAppointments(env, targetDate);
     const testOnly = env.REMINDER_TEST_ONLY !== "0";
@@ -261,7 +289,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
           "看診";
         const lines = [
           "【明日行程提醒】",
-          `${name} 明天${apt.time ? ` ${apt.time}` : ""} ${apt.hospital || "醫院"} ${typeLabel}。`,
+          `${name} ${dateLabel}${apt.time ? ` ${apt.time}` : ""} ${apt.hospital || "醫院"} ${typeLabel}。`,
         ];
         if (apt.fasting_required) {
           const hours = apt.fasting_hours || 8;

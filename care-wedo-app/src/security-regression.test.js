@@ -152,6 +152,13 @@ test("Care WEDO session cookie keeps returning users signed in", () => {
   assert.match(loginSetup, /\.\.\.\(identity\.idToken\s*\?\s*\{\s*Authorization:\s*`Bearer \$\{identity\.idToken\}`\s*\}\s*:\s*\{\}\)/);
 });
 
+test("Returning cookie sessions run the setup check without a readable idToken", () => {
+  const loginSetup = readProjectFile("care-wedo-app/src/components/LoginSetup.jsx");
+
+  assert.match(loginSetup, /identity\?\.status === "authenticated" && step === "check"/);
+  assert.doesNotMatch(loginSetup, /if \(identity\?\.idToken && step === "check"\)/);
+});
+
 test("LINE links use an external browser handoff page", () => {
   const app = readProjectFile("care-wedo-app/src/App.jsx");
   const routing = readProjectFile("care-wedo-app/src/routing.js");
@@ -313,7 +320,10 @@ test("Appointment cards expose edit and soft-delete controls with scoped APIs", 
   const calendarView = app.slice(app.indexOf("function CalendarView"), app.indexOf("const MEDICATION_SLOT_OPTIONS"));
   const recordsView = app.slice(app.indexOf("function RecordsView"), app.indexOf("function SettingsView"));
   const editSaveHandler = app.slice(app.indexOf("async function handleAppointmentUpdateSave"), app.indexOf("async function handleAppointmentDelete"));
-  const deleteHandler = app.slice(app.indexOf("async function handleAppointmentDelete"), app.indexOf("async function handleAddAppointmentToCalendar"));
+  const deleteHandler = app.slice(app.indexOf("async function handleAppointmentDelete"), app.indexOf("async function handleAppointmentCopySave"));
+  const copySaveHandler = app.slice(app.indexOf("async function handleAppointmentCopySave"), app.indexOf("async function handleAddAppointmentToCalendar"));
+  const editModalMount = app.slice(app.indexOf("{editingAppointment && ("), app.indexOf("{showFamilyNotesEditor && ("));
+  const editModal = app.slice(app.indexOf("function ManualReminderModal"), app.indexOf("function OverviewView"));
 
   assert.match(app, /deleteAppointment/);
   assert.match(app, /editingAppointment/);
@@ -321,6 +331,12 @@ test("Appointment cards expose edit and soft-delete controls with scoped APIs", 
   assert.match(recordsView, /onEditRecord/);
   assert.match(editSaveHandler, /patchAppointment\(editingAppointment\.id/);
   assert.match(deleteHandler, /deleteAppointment\(editingAppointment\.id/);
+  assert.match(copySaveHandler, /createAppointment\(\{ \.\.\.payload, profile_id: activeProfileId \}/);
+  assert.doesNotMatch(copySaveHandler, /patchAppointment/);
+  assert.doesNotMatch(copySaveHandler, /deleteAppointment/);
+  assert.match(editModalMount, /onCopy=\{handleAppointmentCopySave\}/);
+  assert.match(editModal, /複製成新提醒/);
+  assert.match(editModal, /handleCopySubmit/);
   assert.match(api, /export async function deleteAppointment/);
   assert.match(api, /method: "DELETE"/);
   assert.match(updateApi, /onRequestDelete/);
@@ -634,7 +650,7 @@ test("Daily LINE reminders use family-like copy instead of announcement-style no
   assert.doesNotMatch(evening, /itemPrefix/);
 });
 
-test("Morning reminders target today's appointments while evening fasting targets tomorrow", () => {
+test("Morning reminders target today while evening reminders tolerate delayed schedule runs", () => {
   const morning = readProjectFile("functions/api/cron/reminders.ts");
   const evening = readProjectFile("functions/api/cron/evening.ts");
   const morningHandler = morning.slice(morning.indexOf("export const onRequestPost"));
@@ -642,8 +658,11 @@ test("Morning reminders target today's appointments while evening fasting target
 
   assert.match(morningHandler, /const targetDate = today/);
   assert.doesNotMatch(morningHandler, /setDate\(twTime\.getDate\(\) \+ 1\)/);
-  assert.match(eveningHandler, /setDate\(twTime\.getDate\(\) \+ 1\)/);
-  assert.match(eveningHandler, /fetchFastingAppointments\(env,\s*targetDate\)/);
+  assert.match(evening, /DELAYED_EVENING_GRACE_HOUR = 6/);
+  assert.match(eveningHandler, /const targetDate = resolveEveningTargetDate\(now\)/);
+  assert.doesNotMatch(eveningHandler, /twTime\.setDate/);
+  assert.match(eveningHandler, /fetchNextDayAppointments\(env,\s*targetDate\)/);
+  assert.match(eveningHandler, /targetDateLabel\(targetDate,\s*todayDate\)/);
 });
 
 test("Appointment calendar export is an authenticated ICS endpoint", () => {
@@ -670,7 +689,8 @@ test("Future appointment cards expose a calendar file export action", () => {
   assert.match(calendarView, />\s*Apple \/ 手機行事曆\s*</);
   assert.match(calendarView, />\s*複製提醒文字\s*</);
   assert.match(calendarView, /event-card-actions[\s\S]*card-corner-calendar/);
-  assert.match(calendarView.slice(calendarView.indexOf('<div className="event-card-actions"'), calendarView.indexOf('<div className="event-type">')), /card-corner-edit/);
+  assert.match(calendarView, /event-card-edit-actions[\s\S]*card-corner-edit/);
+  assert.doesNotMatch(calendarView.slice(calendarView.indexOf('<div className="event-card-actions"'), calendarView.indexOf('<div className="event-type">')), /card-corner-edit/);
   assert.match(calendarView, /onEditAppointment\?\.\(apt\)/);
   assert.doesNotMatch(calendarView, /event-edit-action/);
   assert.match(calendarView, />\s*拍照新增照護資料\s*</);

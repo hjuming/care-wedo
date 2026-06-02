@@ -3174,7 +3174,7 @@ input:focus-visible {
   display: grid;
   grid-template-columns: 54px minmax(0, 1fr);
   gap: 14px;
-  padding: 16px 150px 16px 16px;
+  padding: 16px 150px 72px 16px;
 }
 
 .event-card-actions {
@@ -3185,6 +3185,14 @@ input:focus-visible {
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.event-card-edit-actions {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .card-corner-edit,
@@ -5330,6 +5338,31 @@ input:focus-visible {
   padding: 18px;
 }
 
+.modal-copy-zone {
+  display: grid;
+  gap: 14px;
+  border: 1px solid rgba(94, 143, 154, 0.24);
+  border-radius: 18px;
+  background: rgba(221, 235, 237, 0.42);
+  padding: 18px;
+}
+
+.modal-copy-zone strong {
+  color: var(--primary-dark);
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.modal-copy-zone p {
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-size: 16px;
+}
+
+.modal-copy-zone .copy-subtle {
+  justify-self: start;
+}
+
 .modal-danger-zone strong {
   color: var(--danger);
   font-size: 18px;
@@ -6647,12 +6680,19 @@ button:disabled,
   }
 
   .event-row {
-    padding: 88px 16px 16px;
+    padding: 88px 16px 88px;
   }
 
   .event-card-actions {
     top: 16px;
     right: 16px;
+    left: 16px;
+    justify-content: flex-end;
+  }
+
+  .event-card-edit-actions {
+    right: 16px;
+    bottom: 16px;
     left: 16px;
     justify-content: flex-end;
   }

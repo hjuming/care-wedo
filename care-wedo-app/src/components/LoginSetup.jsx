@@ -40,13 +40,13 @@ export default function LoginSetup({ identity, onSetupComplete }) {
       }
     }
 
-    if (identity?.idToken && step === "check") {
+    if (identity?.status === "authenticated" && step === "check") {
       checkFamily();
     }
     return () => {
       isMounted = false;
     };
-  }, [identity?.idToken, retryToken, step]);
+  }, [identity?.status, identity?.idToken, retryToken, step]);
 
   async function handleSetup(e) {
     e.preventDefault();

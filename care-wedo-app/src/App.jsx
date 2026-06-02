@@ -1820,6 +1820,15 @@ function DashboardApp() {
     setEditingAppointment(null);
   }
 
+  async function handleAppointmentCopySave(payload) {
+    if (!activeProfileId) {
+      throw new Error("請先選擇照護對象。");
+    }
+    await createAppointment({ ...payload, profile_id: activeProfileId }, { idToken: identity.idToken });
+    await loadDashboard(identity, activeProfileId, activeGroupId);
+    setEditingAppointment(null);
+  }
+
   async function handleAddAppointmentToCalendar(appointment) {
     if (!appointment?.id) return;
 
@@ -2143,6 +2152,7 @@ function DashboardApp() {
           onClose={() => setEditingAppointment(null)}
           onSave={handleAppointmentUpdateSave}
           onDelete={handleAppointmentDelete}
+          onCopy={handleAppointmentCopySave}
         />
       )}
 
@@ -2786,7 +2796,17 @@ function buildReminderFormData(appointment = null) {
   };
 }
 
-function ManualReminderModal({ mode = "create", initialAppointment = null, onClose, onSave, onDelete }) {
+function buildReminderPayload(formData) {
+  return {
+    ...formData,
+    date: normalizeDateInput(formData.date),
+    title: typeLabel(formData.type),
+    department: formData.department,
+    fasting_hours: formData.fasting_required ? formData.fasting_hours : null,
+  };
+}
+
+function ManualReminderModal({ mode = "create", initialAppointment = null, onClose, onSave, onDelete, onCopy }) {
   const [formData, setFormData] = useState(() => initialAppointment ? buildReminderFormData(initialAppointment) : {
     type: "clinic_visit",
     date: todayInTaipei(),
@@ -2801,6 +2821,7 @@ function ManualReminderModal({ mode = "create", initialAppointment = null, onClo
   });
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [copying, setCopying] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState("");
 
@@ -2809,17 +2830,22 @@ function ManualReminderModal({ mode = "create", initialAppointment = null, onClo
     setSaving(true);
     setError("");
     try {
-      await onSave({
-        ...formData,
-        date: normalizeDateInput(formData.date),
-        title: typeLabel(formData.type),
-        department: formData.department,
-        fasting_hours: formData.fasting_required ? formData.fasting_hours : null,
-      });
+      await onSave(buildReminderPayload(formData));
     } catch (err) {
       setError(err.message || "新增提醒失敗");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleCopySubmit() {
+    setCopying(true);
+    setError("");
+    try {
+      await onCopy?.(buildReminderPayload(formData));
+    } catch (err) {
+      setError(err.message || "複製失敗，請再試一次");
+      setCopying(false);
     }
   }
 
@@ -2965,6 +2991,17 @@ function ManualReminderModal({ mode = "create", initialAppointment = null, onClo
                 rows={4}
               />
             </div>
+            {mode === "edit" && onCopy && (
+              <div className="modal-copy-zone">
+                <div>
+                  <strong>複製提醒</strong>
+                  <p>會用目前表單內容建立新提醒。先改日期再複製，原本那筆不會被修改。</p>
+                </div>
+                <button type="button" className="secondary-action subtle copy-subtle" onClick={handleCopySubmit} disabled={saving || deleting || copying}>
+                  {copying ? "複製中..." : "複製成新提醒"}
+                </button>
+              </div>
+            )}
             {mode === "edit" && onDelete && (
               <div className="modal-danger-zone">
                 <div>
@@ -3224,9 +3261,6 @@ function CalendarView({ appointments, careName = "", onUpload, onAddToCalendar, 
         {futureAppointments.length ? futureAppointments.map((apt) => (
           <article key={apt.id} id={`event-${apt.date}`} className="event-row">
             <div className="event-card-actions">
-              <button type="button" className="card-corner-edit" onClick={() => onEditAppointment?.(apt)} aria-label={`編輯 ${apt.title || apt.department || "提醒"}`}>
-                編輯
-              </button>
               <button type="button" className="card-corner-calendar" onClick={() => setCalendarActionAppointment(apt)} aria-label={`加入 ${apt.title || apt.department || "提醒"} 到行事曆`}>
                 加入行事曆
               </button>
@@ -3238,6 +3272,11 @@ function CalendarView({ appointments, careName = "", onUpload, onAddToCalendar, 
               <p>{[apt.hospital, apt.doctor && `${apt.doctor}醫師`, apt.number && `${apt.number}號`].filter(Boolean).join(" ｜ ")}</p>
               {apt.location && <p className="location-line">地點：{apt.location}</p>}
               {apt.notes && <p className="soft-note">{apt.notes}</p>}
+            </div>
+            <div className="event-card-edit-actions">
+              <button type="button" className="card-corner-edit" onClick={() => onEditAppointment?.(apt)} aria-label={`編輯 ${apt.title || apt.department || "提醒"}`}>
+                編輯
+              </button>
             </div>
           </article>
         )) : (
