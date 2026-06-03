@@ -235,6 +235,27 @@ function normalizeCareDocument(document, index) {
   };
 }
 
+function hasDisplayableCareDocument(document) {
+  const title = String(document.document_title || "").trim();
+  const summary = document.ai_summary || {};
+  const briefing = summary.doctor_briefing || {};
+  const hasBriefing = Object.values(briefing).some((value) => {
+    if (Array.isArray(value)) return value.some((item) => String(item || "").trim());
+    return Boolean(String(value || "").trim());
+  });
+  const hasMeaningfulTitle = title && title !== "醫療文件";
+
+  return Boolean(
+    document.has_original_file
+    || hasMeaningfulTitle
+    || document.source_hospital
+    || document.document_date
+    || document.original_file_name
+    || document.page_count
+    || hasBriefing
+  );
+}
+
 function dashboardHasCareData(data) {
   return Boolean((data?.appointments?.length || 0) + (data?.medications?.length || 0) + (data?.documents?.length || 0) + (data?.checklist?.length || 0));
 }
@@ -1541,7 +1562,8 @@ function DashboardApp() {
     const source = isPersonalMode && dashboard ? (dashboard.documents || []) : [];
     return source
       .filter((document) => !isPersonalMode || belongsToActiveCareScope(document, activeProfileId, activeGroupId))
-      .map(normalizeCareDocument);
+      .map(normalizeCareDocument)
+      .filter(hasDisplayableCareDocument);
   }, [dashboard, isPersonalMode, activeProfileId, activeGroupId]);
 
   const documents = useMemo(() => {

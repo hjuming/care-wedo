@@ -75,6 +75,8 @@ test("frontend exposes document library upload and doctor display mode", () => {
   assert.match(api, /deleteCareDocument/);
   assert.match(app, /CareDocumentUploadModal/);
   assert.match(app, /CareDocumentDetailModal/);
+  assert.match(app, /function hasDisplayableCareDocument/);
+  assert.match(app, /\.filter\(hasDisplayableCareDocument\)/);
   assert.match(app, /醫師快速摘要/);
   assert.match(app, /開啟原始檔/);
   assert.match(app, /醫療文件/);
