@@ -181,6 +181,43 @@ function profileLabel(profile: CareProfile | undefined | null) {
   return profile?.display_name?.trim() || DEFAULT_RECIPIENT;
 }
 
+function appointmentTypeLabel(type?: string | null) {
+  if (type === "inspection") return "檢查";
+  if (type === "refill_reminder") return "領藥";
+  if (type === "medication") return "用藥";
+  if (type === "measurement") return "量測";
+  if (type === "document") return "文件";
+  if (type === "rehab") return "復健";
+  if (type === "exercise") return "運動";
+  if (type === "other" || type === "reminder") return "提醒";
+  return "看診";
+}
+
+function buildEveningReminderMessage(
+  appointments: AppointmentWithUser[],
+  profileMap: Map<number, CareProfile>,
+  dateLabel: string,
+  scheduleTitle: string,
+) {
+  const lines = ["晚安", "提醒您接下來的注意事項。", ""];
+  lines.push(scheduleTitle.replace(/[【】]/g, ""));
+
+  for (const apt of appointments.slice(0, 8)) {
+    const profile = apt.profile_id ? profileMap.get(apt.profile_id) : undefined;
+    const name = profileLabel(profile);
+    const typeLabel = appointmentTypeLabel(apt.type);
+    lines.push(`- ${name} ${dateLabel}${apt.time ? ` ${apt.time}` : ""} ${apt.hospital || "醫院"} ${typeLabel}。`);
+    if (apt.fasting_required) {
+      const hours = apt.fasting_hours || 8;
+      const startTimeText = calculateFastingStart(apt.time, hours);
+      lines.push(`  空腹提醒：${startTimeText} 開始禁食。`);
+    }
+  }
+
+  lines.push(BRAND_SIGNATURE);
+  return lines.join("\n").trim();
+}
+
 function resolveLineRecipients(
   item: { group_id: number | null; profile_id: number | null; users: { line_user_id: string } | null },
   groupRecipients: Map<number, string[]>,
@@ -273,33 +310,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
     for (const [lineUserId, appointments] of userAlerts.entries()) {
       if (appointments.length === 0) continue;
-
-      for (const apt of appointments) {
-        const profile = apt.profile_id ? profileMap.get(apt.profile_id) : undefined;
-        const name = profileLabel(profile);
-        const typeLabel =
-          apt.type === "inspection" ? "檢查" :
-          apt.type === "refill_reminder" ? "領藥" :
-          apt.type === "medication" ? "用藥" :
-          apt.type === "measurement" ? "量測" :
-          apt.type === "document" ? "文件" :
-          apt.type === "rehab" ? "復健" :
-          apt.type === "exercise" ? "運動" :
-          apt.type === "other" || apt.type === "reminder" ? "提醒" :
-          "看診";
-        const lines = [
-          dateLabel === "今天" ? "【今日行程提醒】" : "【明日行程提醒】",
-          `${name} ${dateLabel}${apt.time ? ` ${apt.time}` : ""} ${apt.hospital || "醫院"} ${typeLabel}。`,
-        ];
-        if (apt.fasting_required) {
-          const hours = apt.fasting_hours || 8;
-          const startTimeText = calculateFastingStart(apt.time, hours);
-          lines.push(`空腹提醒：${startTimeText} 開始禁食。`);
-        }
-        lines.push(BRAND_SIGNATURE);
-        await pushText(env, lineUserId, lines.join("\n").trim());
-        sentCount++;
-      }
+      const scheduleTitle = dateLabel === "今天" ? "【今日行程提醒】" : "【明日行程提醒】";
+      const msgText = buildEveningReminderMessage(appointments, profileMap, dateLabel, scheduleTitle);
+      await pushText(env, lineUserId, msgText);
+      sentCount++;
     }
 
     logEvent("cron.evening_completed", {

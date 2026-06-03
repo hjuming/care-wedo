@@ -1,5 +1,6 @@
 import {
   AppointmentRow,
+  CareDocumentRow,
   CareProfileRow,
   FREE_OCR_MONTHLY_LIMIT,
   MedicationRow,
@@ -15,6 +16,7 @@ import {
   hasUserFeatureFlag,
   serializeCareProfile,
   serializeAppointment,
+  serializeCareDocument,
   serializeMedication,
   supabaseFetch,
   verifyLineIdToken,
@@ -123,6 +125,7 @@ const STATIC_DEMO_DASHBOARD = {
       status: "upcoming",
     },
   ],
+  documents: [],
   medications: [
     {
       id: 0,
@@ -267,6 +270,41 @@ async function fetchMedications(env: Env, groupId: number | null, profileId: num
   return supabaseFetch<MedicationRow[]>(env, path);
 }
 
+function filterDocumentsByHistoryAccess(documents: CareDocumentRow[], canViewHistory: boolean): CareDocumentRow[] {
+  if (canViewHistory) return documents;
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - FREE_HISTORY_RETENTION_DAYS);
+  return documents.filter((document) => {
+    const createdAt = document.created_at ? new Date(document.created_at) : null;
+    return createdAt && !Number.isNaN(createdAt.getTime()) && createdAt >= cutoff;
+  });
+}
+
+async function fetchDocuments(
+  env: Env,
+  groupId: number | null,
+  profileId: number | null,
+  options: { canViewHistory?: boolean } = {},
+): Promise<CareDocumentRow[]> {
+  if (!groupId) return [];
+  const canViewHistory = options.canViewHistory !== false;
+  const path = profileId
+    ? `care_documents?group_id=eq.${groupId}&profile_id=eq.${profileId}&status=neq.deleted&deleted_at=is.null&select=*&order=document_date.desc.nullslast,captured_at.desc.nullslast,created_at.desc&limit=50`
+    : `care_documents?group_id=eq.${groupId}&status=neq.deleted&deleted_at=is.null&select=*&order=document_date.desc.nullslast,captured_at.desc.nullslast,created_at.desc&limit=50`;
+  try {
+    const documents = await supabaseFetch<CareDocumentRow[]>(env, path);
+    return filterDocumentsByHistoryAccess(documents, canViewHistory);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (!/care_documents\.deleted_at|deleted_at.*column|Could not find.*deleted_at/i.test(message)) throw error;
+    const fallbackPath = profileId
+      ? `care_documents?group_id=eq.${groupId}&profile_id=eq.${profileId}&status=neq.deleted&select=*&order=captured_at.desc.nullslast,created_at.desc&limit=50`
+      : `care_documents?group_id=eq.${groupId}&status=neq.deleted&select=*&order=captured_at.desc.nullslast,created_at.desc&limit=50`;
+    const documents = await supabaseFetch<CareDocumentRow[]>(env, fallbackPath);
+    return filterDocumentsByHistoryAccess(documents, canViewHistory);
+  }
+}
+
 function todayInTaipei() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Taipei" });
 }
@@ -337,6 +375,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
         ...buildPlanUsage(FREE_PLAN_DEMO, 0),
         patient: { name: identity.name || "我", age: "", dept: "", diagnoses: [] },
         appointments: [],
+        documents: [],
         medications: [],
         checklist: [],
         groups: [],
@@ -381,6 +420,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
         ...buildPlanUsage(groupPlan, ocrUsed, recipientCount, hasUnlimitedAccess),
         patient: { name: identity.name || "我", age: "", dept: "", diagnoses: [] },
         appointments: [],
+        documents: [],
         medications: [],
         checklist: [],
         groups,
@@ -409,9 +449,10 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     const canViewHistory = canPlanViewHistory(groupPlan, hasUnlimitedAccess);
 
     // Step 4: Fetch care data scoped to group + profile
-    const [appointments, medications, members] = await Promise.all([
+    const [appointments, medications, documents, members] = await Promise.all([
       fetchAppointments(env, activeGroupId, activeProfileId, { canViewHistory }),
       fetchMedications(env, activeGroupId, activeProfileId),
+      fetchDocuments(env, activeGroupId, activeProfileId, { canViewHistory }),
       fetchDashboardMembers(env, activeGroupId, userId),
     ]);
     const todayMedicationLogs = await fetchTodayMedicationLogs(env, medications);
@@ -443,6 +484,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       permission_version: buildPermissionVersion(groupPlan, hasUnlimitedAccess),
       care_profiles: profiles.map(serializeCareProfile),
       appointments: appointments.map(serializeAppointment),
+      documents: documents.map(serializeCareDocument),
       medications: medications.map((medication) => {
         const logs = todayMedicationLogs.get(medication.id) || [];
         const takenLog = logs.find((log) => log.status === "taken");

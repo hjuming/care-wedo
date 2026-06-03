@@ -58,7 +58,8 @@ export default function TermsPage() {
       <section className="landing-section legal-section">
         <h2>4. 資料責任</h2>
         <ul className="legal-list">
-          <li>您上傳的資料（醫院單據、照護紀錄）由您自行負責確認其正確性。</li>
+          <li>您上傳的資料（醫院單據、病歷文件、用藥紀錄、照護紀錄）由您自行負責確認其正確性。</li>
+          <li>若您選擇保存原始檔，Care WEDO 只提供家庭照護查閱與門診出示用途；請勿將登入帳號或文件連結提供給未授權人士。</li>
           <li>AI OCR 解析結果為自動產生，可能存在誤差，請以原始醫院文件為準。</li>
           <li>Care WEDO 不對因資料遺失、系統中斷或 AI 解析錯誤造成的任何損失負責。</li>
         </ul>

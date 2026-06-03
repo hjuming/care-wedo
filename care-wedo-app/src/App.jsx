@@ -5,7 +5,7 @@ import LoginSetup from "./components/LoginSetup";
 import MobileBottomNav from "./components/MobileBottomNav";
 import OcrResult from "./components/OcrResult";
 import { patientData, medicines, timeline as initialTimeline } from "./data/patient";
-import { buildGoogleCalendarEventUrl, confirmOcrDocument, createAppointment, deleteAppointment, downloadAppointmentCalendarFile, downloadLocalAppointmentCalendarFile, fetchDashboard, fetchSessionIdentity, joinGroup, markMedicationSlotStatus, ocrAnalyze, ocrAnalyzeText, patchAppointment, patchMedication, updateActiveProfilePreference, updateFamilyNotes, updateProfile, updateProfileOrder } from "./services/api";
+import { buildGoogleCalendarEventUrl, confirmOcrDocument, createAppointment, deleteAppointment, deleteCareDocument, downloadAppointmentCalendarFile, downloadLocalAppointmentCalendarFile, fetchDashboard, fetchDocumentDetail, fetchDocumentFileUrl, fetchSessionIdentity, joinGroup, markMedicationSlotStatus, ocrAnalyze, ocrAnalyzeText, patchAppointment, patchMedication, updateActiveProfilePreference, updateFamilyNotes, updateProfile, updateProfileOrder, uploadCareDocument } from "./services/api";
 import { buildExternalAppUrl, buildLiffEntryUrl, buildLineAppLiffFallbackUrl, initLineIdentity, isLineInAppBrowser, loginWithLine, logoutLineIdentity, openDashboardInExternalBrowserAfterLineCallback, openUrlInExternalBrowser, resetCareWedoSessionAndReturnHome, shouldOpenLiffEntryUrl } from "./services/liff";
 import { trackError, trackEvent } from "./services/telemetry";
 import { buildTodayTasks, formatTaipeiTodayLabel, groupMedicationsBySchedule, hasSameDayTasks } from "./services/todayTasks";
@@ -201,8 +201,42 @@ function normalizeMedication(med, index) {
   };
 }
 
+function documentTypeLabel(type) {
+  if (type === "medical_record") return "病歷";
+  if (type === "medication_record") return "用藥紀錄";
+  if (type === "lab_report") return "檢驗";
+  if (type === "imaging_report") return "影像";
+  if (type === "prescription") return "處方";
+  if (type === "appointment_slip") return "預約單";
+  return "文件";
+}
+
+function normalizeCareDocument(document, index) {
+  const summary = document.ai_summary || {};
+  return {
+    id: document.id || `demo-doc-${index}`,
+    group_id: document.group_id || null,
+    profile_id: document.profile_id || null,
+    document_type: document.document_type || "other",
+    document_title: document.document_title || summary.document_title || document.original_file_name || "醫療文件",
+    source_hospital: document.source_hospital || summary.source_hospital || "",
+    document_date: document.document_date || summary.document_date || "",
+    original_file_name: document.original_file_name || "",
+    mime_type: document.mime_type || "",
+    file_size_bytes: document.file_size_bytes || null,
+    page_count: document.page_count || null,
+    summary_status: document.summary_status || "pending",
+    preserve_original_file: document.preserve_original_file !== false,
+    has_original_file: Boolean(document.has_original_file),
+    ai_summary: summary,
+    status: document.status || "uploaded",
+    captured_at: document.captured_at || "",
+    created_at: document.created_at || "",
+  };
+}
+
 function dashboardHasCareData(data) {
-  return Boolean((data?.appointments?.length || 0) + (data?.medications?.length || 0) + (data?.checklist?.length || 0));
+  return Boolean((data?.appointments?.length || 0) + (data?.medications?.length || 0) + (data?.documents?.length || 0) + (data?.checklist?.length || 0));
 }
 
 function sameRecordId(left, right) {
@@ -1243,6 +1277,10 @@ function DashboardApp() {
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [showManualReminder, setShowManualReminder] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState(null);
+  const [showDocumentUpload, setShowDocumentUpload] = useState(false);
+  const [documentDetail, setDocumentDetail] = useState(null);
+  const [documentDetailLoading, setDocumentDetailLoading] = useState(false);
+  const [documentNotice, setDocumentNotice] = useState("");
   const [showFamilyNotesEditor, setShowFamilyNotesEditor] = useState(false);
   const [showPlanDetails, setShowPlanDetails] = useState(false);
   const [familyNotes, setFamilyNotes] = useState([]);
@@ -1275,6 +1313,7 @@ function DashboardApp() {
         ...(dashboardShellRef.current || {}),
         ...nextData,
         appointments: [],
+        documents: [],
         medications: [],
         checklist: [],
       };
@@ -1498,9 +1537,31 @@ function DashboardApp() {
     return allMedications.filter((item) => matchSearch(item, searchQuery));
   }, [allMedications, searchQuery]);
 
+  const allDocuments = useMemo(() => {
+    const source = isPersonalMode && dashboard ? (dashboard.documents || []) : [];
+    return source
+      .filter((document) => !isPersonalMode || belongsToActiveCareScope(document, activeProfileId, activeGroupId))
+      .map(normalizeCareDocument);
+  }, [dashboard, isPersonalMode, activeProfileId, activeGroupId]);
+
+  const documents = useMemo(() => {
+    return allDocuments.filter((item) => matchSearch({
+      ...item,
+      title: item.document_title,
+      hospital: item.source_hospital,
+      department: documentTypeLabel(item.document_type),
+      notes: JSON.stringify(item.ai_summary || {}),
+    }, searchQuery));
+  }, [allDocuments, searchQuery]);
+
   const searchSuggestions = useMemo(() => {
-    return buildSearchSuggestions([...allAppointments, ...allMedications]);
-  }, [allAppointments, allMedications]);
+    return buildSearchSuggestions([...allAppointments, ...allMedications, ...allDocuments.map((document) => ({
+      hospital: document.source_hospital,
+      department: documentTypeLabel(document.document_type),
+      title: document.document_title,
+      notes: document.original_file_name,
+    }))]);
+  }, [allAppointments, allMedications, allDocuments]);
 
   const nextAppointment = useMemo(() => {
     return appointments
@@ -1694,6 +1755,85 @@ function DashboardApp() {
   function handleUploadConfirm() {
     setShowUploadGuide(false);
     fileInputRef.current?.click();
+  }
+
+  async function handleCareDocumentUpload({ file, preserveOriginalFile, documentType }) {
+    if (!activeProfileId) {
+      throw new Error("請先選擇照護對象。");
+    }
+    setScanning(true);
+    setOcrError(null);
+    setDocumentNotice("");
+    try {
+      const result = await uploadCareDocument(file, {
+        idToken: identity.idToken,
+        profileId: activeProfileId,
+        preserveOriginalFile,
+        documentType,
+      });
+      trackEvent("frontend.document_upload", {
+        profileId: activeProfileId,
+        documentType,
+        preserveOriginalFile,
+        documentId: result.document?.id,
+      });
+      setShowDocumentUpload(false);
+      setDocumentNotice("文件已存入照護紀錄。");
+      await loadDashboard(identity, activeProfileId, activeGroupId);
+      if (result.document?.id) {
+        await handleDocumentOpen(result.document);
+      }
+    } catch (err) {
+      trackError("frontend.document_upload", err, { profileId: activeProfileId, documentType });
+      const message = err instanceof Error ? err.message : "文件上傳失敗";
+      if (isQuotaLimitMessage(message)) {
+        showPlanUpgradePrompt("quota", "document_upload", message);
+      }
+      throw err;
+    } finally {
+      setScanning(false);
+    }
+  }
+
+  async function handleDocumentOpen(document) {
+    setDocumentNotice("");
+    setDocumentDetail(document);
+    if (!document?.id || String(document.id).startsWith("demo-")) return;
+    setDocumentDetailLoading(true);
+    try {
+      const result = await fetchDocumentDetail(document.id, { idToken: identity.idToken });
+      setDocumentDetail(result.document || document);
+    } catch (err) {
+      trackError("frontend.document_detail", err, { documentId: document.id });
+      setDocumentNotice(err instanceof Error ? err.message : "無法取得文件內容。");
+    } finally {
+      setDocumentDetailLoading(false);
+    }
+  }
+
+  async function handleDocumentFileOpen(document) {
+    if (!document?.id) return;
+    try {
+      const result = await fetchDocumentFileUrl(document.id, { idToken: identity.idToken });
+      window.open(result.url, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      trackError("frontend.document_file_url", err, { documentId: document.id });
+      setDocumentNotice(err instanceof Error ? err.message : "無法開啟原始文件。");
+    }
+  }
+
+  async function handleDocumentDelete(document) {
+    if (!document?.id) return;
+    if (!window.confirm("確定要刪除這份醫療文件嗎？")) return;
+    try {
+      await deleteCareDocument(document.id, { idToken: identity.idToken });
+      setDocumentDetail(null);
+      setDocumentNotice("文件已刪除。");
+      await loadDashboard(identity, activeProfileId, activeGroupId);
+    } catch (err) {
+      trackError("frontend.document_delete", err, { documentId: document.id });
+      setDocumentNotice(err instanceof Error ? err.message : "無法刪除文件。");
+    }
   }
 
   async function handleOcrCorrectionsSave({ appointments: correctedAppointments = [], medications: correctedMedications = [] }) {
@@ -2092,10 +2232,14 @@ function DashboardApp() {
           {activeSection === "records" && (
             <RecordsView
               records={allAppointments}
+              documents={documents}
               searchQuery={searchQuery}
               onUpload={handleUploadClick}
+              onUploadDocument={() => setShowDocumentUpload(true)}
+              onOpenDocument={handleDocumentOpen}
               onEditRecord={setEditingAppointment}
               canViewHistory={canViewHistory}
+              documentNotice={documentNotice}
               onUpgradeRequired={(reason) => showPlanUpgradePrompt(reason, "records_history")}
             />
           )}
@@ -2135,6 +2279,24 @@ function DashboardApp() {
           onConfirm={handleUploadConfirm}
           onTextSubmit={handleTextUpload}
           onClose={() => setShowUploadGuide(false)}
+        />
+      )}
+
+      {showDocumentUpload && (
+        <CareDocumentUploadModal
+          onClose={() => setShowDocumentUpload(false)}
+          onSave={handleCareDocumentUpload}
+        />
+      )}
+
+      {documentDetail && (
+        <CareDocumentDetailModal
+          document={documentDetail}
+          loading={documentDetailLoading}
+          notice={documentNotice}
+          onClose={() => setDocumentDetail(null)}
+          onOpenFile={() => handleDocumentFileOpen(documentDetail)}
+          onDelete={() => handleDocumentDelete(documentDetail)}
         />
       )}
 
@@ -2729,6 +2891,180 @@ function UploadGuide({ onConfirm, onTextSubmit, onClose }) {
           <button type="button" className="secondary-action" onClick={onClose}>取消</button>
           <button type="button" className="secondary-action" onClick={() => onTextSubmit?.(text)} disabled={!text.trim()}>整理文字</button>
           <button type="button" className="primary-action" onClick={onConfirm}>開始拍照</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CareDocumentUploadModal({ onClose, onSave }) {
+  const [file, setFile] = useState(null);
+  const [documentType, setDocumentType] = useState("medical_record");
+  const [preserveOriginalFile, setPreserveOriginalFile] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    if (!file) {
+      setError("請先選擇 PDF 或圖片。");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      await onSave({ file, preserveOriginalFile, documentType });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "文件上傳失敗。");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <form className="modal-content care-document-upload-modal" onSubmit={handleSubmit} role="dialog" aria-modal="true" aria-labelledby="care-document-upload-title" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-header">
+          <div>
+            <p className="modal-kicker">醫療文件庫</p>
+            <h2 id="care-document-upload-title">上傳病歷或用藥紀錄</h2>
+          </div>
+          <button type="button" className="btn-close" onClick={onClose} aria-label="關閉">×</button>
+        </div>
+        <div className="modal-body">
+          <div className="form-group">
+            <label htmlFor="care-document-file">文件</label>
+            <input
+              id="care-document-file"
+              type="file"
+              accept="application/pdf,image/jpeg,image/png,image/webp"
+              onChange={(event) => setFile(event.target.files?.[0] || null)}
+            />
+          </div>
+          <div className="form-group">
+            <label htmlFor="care-document-type">類型</label>
+            <select id="care-document-type" value={documentType} onChange={(event) => setDocumentType(event.target.value)}>
+              <option value="medical_record">病歷紀錄</option>
+              <option value="medication_record">用藥紀錄</option>
+              <option value="lab_report">檢驗報告</option>
+              <option value="imaging_report">影像報告</option>
+              <option value="prescription">處方箋</option>
+              <option value="appointment_slip">預約單</option>
+              <option value="other">其他文件</option>
+            </select>
+          </div>
+          <label className="settings-toggle document-preserve-toggle">
+            <input
+              type="checkbox"
+              checked={preserveOriginalFile}
+              onChange={(event) => setPreserveOriginalFile(event.target.checked)}
+            />
+            <span>
+              <strong>保存原始檔</strong>
+              <small>門診時可開啟 PDF 或圖片給醫師核對。</small>
+            </span>
+          </label>
+          {file && (
+            <div className="document-selected-file">
+              <strong>{file.name}</strong>
+              <span>{file.type || "未知格式"}・{Math.max(file.size / 1024 / 1024, 0.01).toFixed(2)} MB</span>
+            </div>
+          )}
+          {error && <p className="notice-danger">{error}</p>}
+        </div>
+        <div className="modal-footer">
+          <button type="button" className="secondary-action" onClick={onClose}>取消</button>
+          <button type="submit" className="primary-action" disabled={saving}>{saving ? "整理中..." : "上傳並整理"}</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function briefingList(summary, key) {
+  const value = summary?.doctor_briefing?.[key] || summary?.[key] || [];
+  if (Array.isArray(value)) return value.filter(Boolean).slice(0, 8);
+  if (typeof value === "string" && value.trim()) return [value.trim()];
+  return [];
+}
+
+function CareDocumentDetailModal({ document, loading, notice, onClose, onOpenFile, onDelete }) {
+  const summary = document.ai_summary || {};
+  const briefingSections = [
+    ["major_history", "重大病史"],
+    ["recent_symptoms", "近期狀況"],
+    ["current_treatment", "目前治療"],
+    ["current_medications", "用藥重點"],
+    ["recent_exams", "檢查摘要"],
+    ["upcoming_plan", "後續安排"],
+    ["questions_for_doctor", "門診可確認"],
+  ].map(([key, label]) => ({ key, label, items: briefingList(summary, key) })).filter((section) => section.items.length);
+  const appointments = document.linked_appointments || [];
+  const medications = document.linked_medications || [];
+  const sourceWarning = summary?.doctor_briefing?.source_warning || summary?.source_warning || "";
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content care-document-detail-modal" role="dialog" aria-modal="true" aria-labelledby="care-document-detail-title" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-header">
+          <div>
+            <p className="modal-kicker">{documentTypeLabel(document.document_type)}</p>
+            <h2 id="care-document-detail-title">{document.document_title || "醫療文件"}</h2>
+          </div>
+          <button type="button" className="btn-close" onClick={onClose} aria-label="關閉">×</button>
+        </div>
+        <div className="modal-body">
+          <div className="document-meta-strip">
+            <span>{document.source_hospital || "院所待確認"}</span>
+            <span>{document.document_date ? formatDateLabel(document.document_date) : "日期待確認"}</span>
+            {document.page_count && <span>{document.page_count} 頁</span>}
+          </div>
+          {loading && <p className="helper-copy">正在讀取文件內容...</p>}
+          {notice && <p className="calendar-action-notice">{notice}</p>}
+          {sourceWarning && <p className="document-source-warning">{sourceWarning}</p>}
+
+          <section className="doctor-briefing-panel" aria-label="醫師快速摘要">
+            <h3>醫師快速摘要</h3>
+            {briefingSections.length ? (
+              <div className="doctor-briefing-grid">
+                {briefingSections.map((section) => (
+                  <article key={section.key} className="briefing-block">
+                    <strong>{section.label}</strong>
+                    <ul>
+                      {section.items.map((item, index) => <li key={`${section.key}-${index}`}>{item}</li>)}
+                    </ul>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="helper-copy">這份文件尚未產生摘要。</p>
+            )}
+          </section>
+
+          <section className="document-linked-section" aria-label="關聯資料">
+            <h3>已帶入照護資料</h3>
+            <div className="document-linked-grid">
+              <article>
+                <strong>行程</strong>
+                {appointments.length ? appointments.slice(0, 4).map((apt) => (
+                  <span key={apt.id}>{formatDateLabel(apt.date, apt.time)}・{apt.title || apt.department || typeLabel(apt.type)}</span>
+                )) : <span>沒有新增行程</span>}
+              </article>
+              <article>
+                <strong>用藥</strong>
+                {medications.length ? medications.slice(0, 5).map((med) => (
+                  <span key={med.id}>{med.name || "藥名待確認"}・{med.dosage || med.frequency || "用法待確認"}</span>
+                )) : <span>沒有新增用藥</span>}
+              </article>
+            </div>
+          </section>
+        </div>
+        <div className="modal-footer care-document-actions">
+          {document.has_original_file && (
+            <button type="button" className="primary-action" onClick={onOpenFile}>開啟原始檔</button>
+          )}
+          <button type="button" className="secondary-action" onClick={onClose}>關閉</button>
+          <button type="button" className="inline-danger-action" onClick={onDelete}>刪除</button>
         </div>
       </div>
     </div>
@@ -3726,11 +4062,12 @@ async function copyText(text) {
   document.body.removeChild(textarea);
 }
 
-function RecordsView({ records, searchQuery, onUpload, onEditRecord, canViewHistory = true, onUpgradeRequired }) {
+function RecordsView({ records, documents = [], searchQuery, onUpload, onUploadDocument, onOpenDocument, onEditRecord, canViewHistory = true, documentNotice = "", onUpgradeRequired }) {
   const [mode, setMode] = useState("future");
   const [copyNotice, setCopyNotice] = useState({ id: null, message: "" });
   const activeMode = canViewHistory ? mode : "future";
-  const modeLabel = activeMode === "history" ? "歷史紀錄" : "未來安排";
+  const isDocumentMode = mode === "documents";
+  const modeLabel = isDocumentMode ? "醫療文件" : activeMode === "history" ? "歷史紀錄" : "未來安排";
 
   function handleModeChange(nextMode) {
     if (nextMode === "history" && !canViewHistory) {
@@ -3775,20 +4112,35 @@ function RecordsView({ records, searchQuery, onUpload, onEditRecord, canViewHist
       <div className="record-mode-switch" role="group" aria-label="查詢紀錄模式">
         <button
           type="button"
-          className={activeMode === "future" ? "active" : ""}
+          className={!isDocumentMode && activeMode === "future" ? "active" : ""}
           onClick={() => handleModeChange("future")}
         >
           未來安排
         </button>
         <button
           type="button"
-          className={activeMode === "history" ? "active" : ""}
+          className={!isDocumentMode && activeMode === "history" ? "active" : ""}
           onClick={() => handleModeChange("history")}
         >
           歷史紀錄
         </button>
+        <button
+          type="button"
+          className={isDocumentMode ? "active" : ""}
+          onClick={() => handleModeChange("documents")}
+        >
+          醫療文件
+        </button>
       </div>
-      {grouped.length ? grouped.map(([month, items]) => (
+      {documentNotice && <p className="calendar-action-notice">{documentNotice}</p>}
+      {isDocumentMode ? (
+        <DocumentLibraryView
+          documents={documents}
+          searchQuery={searchQuery}
+          onUploadDocument={onUploadDocument}
+          onOpenDocument={onOpenDocument}
+        />
+      ) : grouped.length ? grouped.map(([month, items]) => (
         <section key={month} className="record-month-group">
           <h3 className="month-divider">{month.replace("-", " 年 ")} 月</h3>
           <div className="records-stack">
@@ -3845,6 +4197,63 @@ function RecordsView({ records, searchQuery, onUpload, onEditRecord, canViewHist
           onPrimary={onUpload}
         />
       )}
+    </div>
+  );
+}
+
+function DocumentLibraryView({ documents, searchQuery, onUploadDocument, onOpenDocument }) {
+  const grouped = useMemo(() => {
+    const groups = {};
+    documents
+      .filter((document) => document.status !== "deleted")
+      .sort((a, b) => String(b.document_date || b.created_at || "").localeCompare(String(a.document_date || a.created_at || "")))
+      .forEach((document) => {
+        const date = document.document_date || document.created_at || "";
+        const month = date && date.includes("-") ? date.slice(0, 7) : "未分類日期";
+        if (!groups[month]) groups[month] = [];
+        groups[month].push(document);
+      });
+    return Object.entries(groups).sort((a, b) => b[0].localeCompare(a[0]));
+  }, [documents]);
+
+  if (!documents.length) {
+    return (
+      <EmptyGuide
+        title={searchQuery ? "沒有符合的文件。" : "目前沒有醫療文件。"}
+        description={searchQuery ? "換一個醫院、文件類型、藥名或日期試試看。" : "可以上傳醫院申請回來的病歷、用藥紀錄、檢查報告或處方箋。"}
+        primaryLabel="上傳病歷文件"
+        onPrimary={onUploadDocument}
+      />
+    );
+  }
+
+  return (
+    <div className="document-library-view">
+      <div className="document-library-actions">
+        <button type="button" className="primary-action" onClick={onUploadDocument}>上傳病歷文件</button>
+      </div>
+      {grouped.map(([month, items]) => (
+        <section key={month} className="record-month-group">
+          <h3 className="month-divider">{month === "未分類日期" ? month : `${month.replace("-", " 年 ")} 月`}</h3>
+          <div className="document-card-grid">
+            {items.map((document) => (
+              <article key={document.id} className="document-library-card">
+                <button type="button" className="document-card-main" onClick={() => onOpenDocument?.(document)}>
+                  <span className="record-type-chip record-type-icon">{documentTypeLabel(document.document_type).slice(0, 2)}</span>
+                  <span>
+                    <strong>{document.document_title}</strong>
+                    <small>{[document.source_hospital, document.document_date && formatDateLabel(document.document_date), document.page_count && `${document.page_count} 頁`].filter(Boolean).join(" ｜ ")}</small>
+                  </span>
+                </button>
+                <div className="document-card-footer">
+                  <span>{document.has_original_file ? "已保存原始檔" : "只保存摘要"}</span>
+                  <button type="button" className="record-edit-button" onClick={() => onOpenDocument?.(document)}>給醫師看</button>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      ))}
     </div>
   );
 }

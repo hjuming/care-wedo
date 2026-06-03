@@ -402,7 +402,7 @@ export async function createPendingLineOcrDocument(
   return { documentId: inserted[0].id, groupId: careContext.groupId };
 }
 
-async function saveParsedDataToProfile(
+export async function saveParsedDataToProfile(
   env: Env,
   parsed: ParsedMedicalData,
   userId: number,

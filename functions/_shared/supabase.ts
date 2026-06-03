@@ -217,13 +217,25 @@ export type CareDocumentRow = {
   profile_id: number | null;
   uploaded_by_user_id: number | null;
   document_type: string;
-  // appointment_slip / prescription / lab_order / imaging_order / medication_bag / other
+  // medical_record / medication_record / lab_report / imaging_report / prescription / appointment_slip / other
   source_file_url: string | null;
+  storage_bucket?: string | null;
+  storage_path?: string | null;
+  original_file_name?: string | null;
+  mime_type?: string | null;
+  file_size_bytes?: number | null;
+  page_count?: number | null;
+  document_title?: string | null;
+  source_hospital?: string | null;
+  document_date?: string | null;
+  summary_status?: string | null;
+  preserve_original_file?: boolean | null;
   ocr_text: string | null;
   ai_summary: Record<string, unknown> | null;
   status: string;
-  // uploaded / processing / draft / confirmed / failed
+  // uploaded / processing / pending_review / confirmed / failed / deleted
   captured_at: string | null;
+  deleted_at?: string | null;
   created_at: string;
 };
 
@@ -903,6 +915,30 @@ export function serializeMedication(row: MedicationRow) {
     warnings: row.warnings,
     reminder_text: row.reminder_text,
     active: row.active !== false,
+  };
+}
+
+export function serializeCareDocument(row: CareDocumentRow) {
+  return {
+    id: row.id,
+    group_id: row.group_id,
+    profile_id: row.profile_id || null,
+    uploaded_by_user_id: row.uploaded_by_user_id || null,
+    document_type: row.document_type || "other",
+    document_title: row.document_title || null,
+    source_hospital: row.source_hospital || null,
+    document_date: row.document_date || null,
+    original_file_name: row.original_file_name || null,
+    mime_type: row.mime_type || null,
+    file_size_bytes: row.file_size_bytes || null,
+    page_count: row.page_count || null,
+    summary_status: row.summary_status || row.status || "pending",
+    preserve_original_file: row.preserve_original_file !== false,
+    has_original_file: Boolean(row.preserve_original_file !== false && row.storage_path),
+    ai_summary: row.ai_summary || null,
+    status: row.status || "uploaded",
+    captured_at: row.captured_at || null,
+    created_at: row.created_at,
   };
 }
 

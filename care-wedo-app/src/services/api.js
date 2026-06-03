@@ -340,6 +340,74 @@ export async function confirmOcrDocument(documentId, { idToken }) {
   return res.json();
 }
 
+export async function fetchDocuments({ idToken, profileId, type, q } = {}) {
+  const query = new URLSearchParams();
+  if (profileId) query.set("profile_id", profileId);
+  if (type) query.set("type", type);
+  if (q) query.set("q", q);
+  const res = await fetch(`${API_BASE}/documents${query.toString() ? `?${query.toString()}` : ""}`, {
+    headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw createApiError(err.error || "無法取得文件", res.status);
+  }
+  return res.json();
+}
+
+export async function uploadCareDocument(file, { idToken, profileId, preserveOriginalFile = true, documentType = "other" } = {}) {
+  const formData = new FormData();
+  formData.append("file", file);
+  if (profileId) formData.append("profile_id", String(profileId));
+  formData.append("preserve_original_file", preserveOriginalFile ? "true" : "false");
+  formData.append("document_type", documentType);
+
+  const res = await fetch(`${API_BASE}/documents/upload`, {
+    method: "POST",
+    headers: idToken ? { Authorization: `Bearer ${idToken}` } : undefined,
+    body: formData,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw createApiError(err.error || "文件上傳失敗", res.status);
+  }
+  return res.json();
+}
+
+export async function fetchDocumentDetail(documentId, { idToken } = {}) {
+  const res = await fetch(`${API_BASE}/documents/${encodeURIComponent(documentId)}`, {
+    headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw createApiError(err.error || "無法取得文件", res.status);
+  }
+  return res.json();
+}
+
+export async function fetchDocumentFileUrl(documentId, { idToken } = {}) {
+  const res = await fetch(`${API_BASE}/documents/${encodeURIComponent(documentId)}/file-url`, {
+    headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw createApiError(err.error || "無法開啟原始文件", res.status);
+  }
+  return res.json();
+}
+
+export async function deleteCareDocument(documentId, { idToken } = {}) {
+  const res = await fetch(`${API_BASE}/documents/${encodeURIComponent(documentId)}`, {
+    method: "DELETE",
+    headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw createApiError(err.error || "無法刪除文件", res.status);
+  }
+  return res.json();
+}
+
 export async function fetchDashboard(identity) {
   const { url, init } = buildDashboardRequest(API_BASE, identity);
   const res = await fetch(url, init);

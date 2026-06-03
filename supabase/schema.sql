@@ -296,13 +296,39 @@ create table if not exists public.care_documents (
   document_type text not null default 'other',
   -- appointment_slip / prescription / lab_order / imaging_order / medication_bag / other
   source_file_url text,
+  storage_bucket text,
+  storage_path text,
+  original_file_name text,
+  mime_type text,
+  file_size_bytes bigint,
+  page_count integer,
+  document_title text,
+  source_hospital text,
+  document_date date,
+  summary_status text not null default 'pending',
+  preserve_original_file boolean not null default true,
   ocr_text text,
   ai_summary jsonb,
   status text not null default 'uploaded',
   -- uploaded / processing / pending_review / confirmed / failed
   captured_at timestamptz,
+  deleted_at timestamptz,
   created_at timestamptz not null default now()
 );
+
+alter table public.care_documents
+  add column if not exists storage_bucket text,
+  add column if not exists storage_path text,
+  add column if not exists original_file_name text,
+  add column if not exists mime_type text,
+  add column if not exists file_size_bytes bigint,
+  add column if not exists page_count integer,
+  add column if not exists document_title text,
+  add column if not exists source_hospital text,
+  add column if not exists document_date date,
+  add column if not exists summary_status text not null default 'pending',
+  add column if not exists preserve_original_file boolean not null default true,
+  add column if not exists deleted_at timestamptz;
 
 -- Add FK for source_document_id now that care_documents exists.
 -- Check by column name (not constraint name) to avoid duplicates
@@ -414,6 +440,25 @@ create index if not exists care_documents_group_profile_idx
 
 create index if not exists care_documents_status_idx
   on public.care_documents (status, created_at desc);
+
+create index if not exists care_documents_profile_date_idx
+  on public.care_documents (profile_id, document_date desc, created_at desc);
+
+create index if not exists care_documents_type_idx
+  on public.care_documents (document_type, created_at desc);
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'care-documents',
+  'care-documents',
+  false,
+  26214400,
+  array['application/pdf', 'image/jpeg', 'image/png', 'image/webp']::text[]
+)
+on conflict (id) do update set
+  public = false,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
 
 create index if not exists appointments_source_document_idx
   on public.appointments (source_document_id);
