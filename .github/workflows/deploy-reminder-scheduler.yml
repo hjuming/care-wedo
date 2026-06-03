@@ -1,0 +1,35 @@
+name: Deploy Reminder Scheduler
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "workers/reminder-scheduler/**"
+      - ".github/workflows/deploy-reminder-scheduler.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Deploy Cloudflare Cron Worker
+        run: npx wrangler@4 deploy --config workers/reminder-scheduler/wrangler.toml
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Sync scheduler secret
+        run: printf "%s" "$CRON_SECRET" | npx wrangler@4 secret put CRON_SECRET --config workers/reminder-scheduler/wrangler.toml
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}

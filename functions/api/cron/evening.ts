@@ -288,7 +288,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
           apt.type === "other" || apt.type === "reminder" ? "提醒" :
           "看診";
         const lines = [
-          "【明日行程提醒】",
+          dateLabel === "今天" ? "【今日行程提醒】" : "【明日行程提醒】",
           `${name} ${dateLabel}${apt.time ? ` ${apt.time}` : ""} ${apt.hospital || "醫院"} ${typeLabel}。`,
         ];
         if (apt.fasting_required) {

@@ -129,6 +129,7 @@ https://care.wedopr.com
 - 系統刻意排除上傳本人，不讓同一個人收到兩次。
 - 沒有 LINE user id、`web-mvp` 測試帳號或關閉該通知者，不會收到推播。
 - LINE Login 只代表完成網頁身份驗證；若家人要收到 LINE 推播，仍需要加入 Care WEDO LINE 照護小管家。邀請文案需同時提供群組加入網址與 LINE 小管家連結。
+- 2026-06-03 production 檢查發現：GitHub Actions schedule 可能延遲 2-4 小時甚至跨日，不適合準點醫療提醒；正式 20:00 / 08:00 觸發改由 Cloudflare Cron Worker `care-wedo-reminder-scheduler` 執行，GitHub workflow 僅保留手動備援。
 - 2026-05-29 production 檢查發現：GitHub Actions 排程打 custom domain 時會被 Cloudflare bot challenge 擋下；提醒 workflow 已改為打 `care-wedo.pages.dev/api/cron/*`，並在非 2xx 時直接 fail，避免表面成功但實際沒送出。
 - LINE 對話窗中的登入 callback（含 `code` / `liff.state`）會先導向 `/app/open`，再以外部瀏覽器重新開啟同一個 callback URL，完成身分驗證後可直接進入後台，降低留在 LINE 視窗操作困擾。
 

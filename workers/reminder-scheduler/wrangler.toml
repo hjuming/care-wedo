@@ -1,0 +1,12 @@
+name = "care-wedo-reminder-scheduler"
+main = "src/index.ts"
+compatibility_date = "2026-06-03"
+
+[vars]
+CRON_BASE_URL = "https://care-wedo.pages.dev"
+
+[triggers]
+crons = [
+  "0 12 * * *", # Taiwan 20:00, previous-night next-day schedule reminder
+  "0 0 * * *",  # Taiwan 08:00, same-day schedule reminder
+]

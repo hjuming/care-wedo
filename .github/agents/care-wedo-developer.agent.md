@@ -58,7 +58,7 @@ Use this agent for ongoing feature development, bug fixes, refactors, and implem
 | Database | Supabase PostgreSQL (RLS enabled) |
 | AI OCR | Gemini 2.5 Flash Vision API |
 | Notifications | LINE Messaging API (Push + Reply) |
-| Cron | GitHub Actions → `/api/cron/*` |
+| Cron | Cloudflare Cron Worker → `/api/cron/*`; GitHub Actions manual backup only |
 
 ## Key File Map
 

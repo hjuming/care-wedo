@@ -621,6 +621,28 @@ test("Cron endpoints fail closed when CRON_SECRET is not configured", () => {
   }
 });
 
+test("Reminder schedules use Cloudflare Cron Worker instead of GitHub scheduled workflows", () => {
+  const worker = readProjectFile("workers/reminder-scheduler/src/index.ts");
+  const config = readProjectFile("workers/reminder-scheduler/wrangler.toml");
+  const deployWorkflow = readProjectFile(".github/workflows/deploy-reminder-scheduler.yml");
+  const eveningWorkflow = readProjectFile(".github/workflows/evening-fasting.yml");
+  const morningWorkflow = readProjectFile(".github/workflows/daily-reminders.yml");
+
+  assert.match(config, /name = "care-wedo-reminder-scheduler"/);
+  assert.match(config, /crons = \[[\s\S]*"0 12 \* \* \*"[\s\S]*"0 0 \* \* \*"[\s\S]*\]/);
+  assert.match(worker, /const EVENING_CRON = "0 12 \* \* \*"/);
+  assert.match(worker, /const MORNING_CRON = "0 0 \* \* \*"/);
+  assert.match(worker, /endpoint: "\/api\/cron\/evening"/);
+  assert.match(worker, /endpoint: "\/api\/cron\/reminders"/);
+  assert.match(worker, /ctx\.waitUntil\(triggerReminder\(env, controller\.cron\)\)/);
+  assert.match(deployWorkflow, /wrangler@4 deploy --config workers\/reminder-scheduler\/wrangler\.toml/);
+  assert.match(deployWorkflow, /secret put CRON_SECRET --config workers\/reminder-scheduler\/wrangler\.toml/);
+  assert.doesNotMatch(eveningWorkflow, /schedule:/);
+  assert.doesNotMatch(morningWorkflow, /schedule:/);
+  assert.match(eveningWorkflow, /workflow_dispatch/);
+  assert.match(morningWorkflow, /workflow_dispatch/);
+});
+
 test("Cron reminder queries pin user ownership relations explicitly", () => {
   const reminders = readProjectFile("functions/api/cron/reminders.ts");
   const evening = readProjectFile("functions/api/cron/evening.ts");
@@ -663,6 +685,7 @@ test("Morning reminders target today while evening reminders tolerate delayed sc
   assert.doesNotMatch(eveningHandler, /twTime\.setDate/);
   assert.match(eveningHandler, /fetchNextDayAppointments\(env,\s*targetDate\)/);
   assert.match(eveningHandler, /targetDateLabel\(targetDate,\s*todayDate\)/);
+  assert.match(eveningHandler, /dateLabel === "今天" \? "【今日行程提醒】" : "【明日行程提醒】"/);
 });
 
 test("Appointment calendar export is an authenticated ICS endpoint", () => {
