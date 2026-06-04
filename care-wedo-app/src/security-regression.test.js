@@ -643,12 +643,12 @@ test("Reminder schedules use Cloudflare Cron Worker instead of GitHub scheduled 
   assert.match(morningWorkflow, /workflow_dispatch/);
 });
 
-test("Cron reminder queries pin user ownership relations explicitly", () => {
+test("Cron reminder queries pin appointment ownership relations explicitly", () => {
   const reminders = readProjectFile("functions/api/cron/reminders.ts");
   const evening = readProjectFile("functions/api/cron/evening.ts");
 
   assert.match(reminders, /users!appointments_user_id_fkey\(line_user_id\)/);
-  assert.match(reminders, /users!medications_user_id_fkey\(line_user_id\)/);
+  assert.doesNotMatch(reminders, /users!medications_user_id_fkey\(line_user_id\)/);
   assert.match(evening, /users!appointments_user_id_fkey\(line_user_id\)/);
 });
 
@@ -662,6 +662,9 @@ test("Daily LINE reminders use family-like copy instead of announcement-style no
   assert.match(evening, /"晚安",\s*"提醒您接下來的注意事項。"/);
   assert.match(evening, /Care WEDO\\n陪你照顧最重要的人\\nhttps:\/\/care\.wedopr\.com/);
   assert.match(source, /!place\.includes\(doctor\)/);
+  assert.doesNotMatch(source, /今日用藥/);
+  assert.doesNotMatch(source, /fetchReminderMedications/);
+  assert.doesNotMatch(source, /buildMedicationReminderLine/);
   assert.doesNotMatch(builder, /接下來的預約先提醒你：/);
   assert.doesNotMatch(builder, /親愛的家人，早安/);
   assert.doesNotMatch(builder, /地址：/);

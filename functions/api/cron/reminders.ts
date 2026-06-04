@@ -34,22 +34,6 @@ type AppointmentWithUser = {
   users: { line_user_id: string } | null;
 };
 
-type MedicationWithUser = {
-  id: number;
-  name: string | null;
-  dosage: string | null;
-  frequency: string | null;
-  time_slot: string | null;
-  meal_timing: string | null;
-  scheduled_time: string | null;
-  reminder_text: string | null;
-  active: boolean;
-  user_id: number;
-  group_id: number | null;
-  profile_id: number | null;
-  users: { line_user_id: string } | null;
-};
-
 type CareProfile = {
   id: number;
   group_id: number | null;
@@ -174,33 +158,16 @@ function buildAppointmentReminderLine(apt: AppointmentWithUser, profile: CarePro
   return `${name} ${when}${when ? " " : ""}${appointmentActionLabel(apt)}。`;
 }
 
-function medicationScheduleLabel(medication: MedicationWithUser) {
-  return [medication.scheduled_time, medication.time_slot, medication.meal_timing, medication.frequency]
-    .map((item) => item?.trim())
-    .find(Boolean) || "";
-}
-
-function buildMedicationReminderLine(medication: MedicationWithUser, profile: CareProfile | undefined) {
-  const name = profileLabel(profile);
-  const schedule = medicationScheduleLabel(medication);
-  const medicineName = medication.name?.trim() || "藥名待確認";
-  const detail = [medication.dosage, schedule ? "" : medication.frequency, medication.reminder_text]
-    .map((item) => item?.trim())
-    .filter(Boolean)
-    .join("，");
-
-  return `${name} ${schedule ? `${schedule} ` : ""}用藥：${medicineName}${detail ? `（${detail}）` : ""}。`;
-}
-
 function buildDailyReminderMessage(
   appointments: AppointmentWithUser[],
-  medications: MedicationWithUser[],
   profileMap: Map<number, CareProfile>,
   todayStr: string,
 ) {
   const lines = ["早安", "提醒您接下來的注意事項。", ""];
 
-  if (appointments.length > 0) {
+  if (appointments.length === 0) {
+    lines.push("今天目前沒有需要提醒的項目。");
+  } else {
     lines.push("今日行程");
     for (const apt of appointments.slice(0, 6)) {
       const profile = apt.profile_id ? profileMap.get(apt.profile_id) : undefined;
@@ -210,19 +177,6 @@ function buildDailyReminderMessage(
       if (apt.fasting_required) lines.push(`  空腹提醒：前 ${apt.fasting_hours || 8} 小時禁食。`);
       if (apt.notes) lines.push(`  ${apt.notes}`);
     }
-  }
-
-  if (medications.length > 0) {
-    if (appointments.length > 0) lines.push("");
-    lines.push("今日用藥");
-    for (const medication of medications.slice(0, 8)) {
-      const profile = medication.profile_id ? profileMap.get(medication.profile_id) : undefined;
-      lines.push(`- ${buildMedicationReminderLine(medication, profile)}`);
-    }
-  }
-
-  if (appointments.length === 0 && medications.length === 0) {
-    lines.push("今天目前沒有需要提醒的項目。");
   }
 
   lines.push(BRAND_SIGNATURE);
@@ -260,16 +214,6 @@ async function fetchReminderAppointments(env: Env, targetDate: string) {
     );
     return rows.map((row) => ({ ...row, type: "clinic_visit" }));
   }
-}
-
-async function fetchReminderMedications(env: Env) {
-  const baseSelect =
-    "id,name,dosage,frequency,time_slot,meal_timing,scheduled_time,reminder_text,active,user_id,group_id,profile_id,users!medications_user_id_fkey(line_user_id)";
-
-  return supabaseFetch<MedicationWithUser[]>(
-    env,
-    `medications?active=eq.true&select=${baseSelect}&order=created_at.desc`,
-  );
 }
 
 async function fetchLineIdsByUserName(env: Env, displayName: string) {
@@ -328,10 +272,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const targetDate = today;
     logEvent("cron.reminders_started", { target_date: targetDate });
 
-    const [reminders, medications] = await Promise.all([
-      fetchReminderAppointments(env, targetDate),
-      fetchReminderMedications(env),
-    ]);
+    const reminders = await fetchReminderAppointments(env, targetDate);
     const testOnly = env.REMINDER_TEST_ONLY !== "0";
     const testTargetName = env.REMINDER_TEST_TARGET_NAME?.trim() || "日月MING";
     const allowedLineIds = testOnly ? await fetchLineIdsByUserName(env, testTargetName) : null;
@@ -345,10 +286,6 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     for (const apt of reminders) {
       if (apt.profile_id) profileIds.add(apt.profile_id);
       if (apt.group_id) groupIds.add(apt.group_id);
-    }
-    for (const medication of medications) {
-      if (medication.profile_id) profileIds.add(medication.profile_id);
-      if (medication.group_id) groupIds.add(medication.group_id);
     }
 
     const careProfiles = await fetchCareProfiles(env, Array.from(profileIds));
@@ -375,36 +312,27 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       groupRecipientsById.set(groupId, Array.from(lineIds));
     }
 
-    const userBriefings = new Map<string, { appointments: AppointmentWithUser[]; medications: MedicationWithUser[] }>();
+    const userBriefings = new Map<string, AppointmentWithUser[]>();
 
     for (const apt of reminders) {
       const lineIds = resolveLineRecipients(apt, groupRecipientsById, profileMap);
       for (const lineId of lineIds) {
         if (allowedLineIds && !allowedLineIds.has(lineId)) continue;
-        if (!userBriefings.has(lineId)) userBriefings.set(lineId, { appointments: [], medications: [] });
-        userBriefings.get(lineId)!.appointments.push(apt);
-      }
-    }
-
-    for (const medication of medications) {
-      const lineIds = resolveLineRecipients(medication, groupRecipientsById, profileMap);
-      for (const lineId of lineIds) {
-        if (allowedLineIds && !allowedLineIds.has(lineId)) continue;
-        if (!userBriefings.has(lineId)) userBriefings.set(lineId, { appointments: [], medications: [] });
-        userBriefings.get(lineId)!.medications.push(medication);
+        if (!userBriefings.has(lineId)) userBriefings.set(lineId, []);
+        userBriefings.get(lineId)!.push(apt);
       }
     }
 
     let sentCount = 0;
 
-    for (const [lineUserId, briefing] of userBriefings.entries()) {
-      if (briefing.appointments.length === 0 && briefing.medications.length === 0) continue;
+    for (const [lineUserId, appointments] of userBriefings.entries()) {
+      if (appointments.length === 0) continue;
 
-      const msgText = buildDailyReminderMessage(briefing.appointments, briefing.medications, profileMap, today);
+      const msgText = buildDailyReminderMessage(appointments, profileMap, today);
       await pushText(env, lineUserId, msgText);
       sentCount++;
 
-      for (const apt of briefing.appointments) {
+      for (const apt of appointments) {
         await markAsNotified(env, apt.id);
       }
     }
