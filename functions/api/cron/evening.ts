@@ -1,6 +1,7 @@
 import { supabaseFetch, Env as SupabaseEnv } from "../../_shared/supabase";
 import { logError, logEvent } from "../../_shared/logger";
 import { sendProductionAlert } from "../../_shared/alerts";
+import { recordLinePushLog } from "../../_shared/line_push_logs";
 
 const DEFAULT_RECIPIENT = "親愛的家人";
 const BRAND_SIGNATURE = "Care WEDO\n陪你照顧最重要的人\nhttps://care.wedopr.com/app/open";
@@ -41,6 +42,12 @@ type RecipientRow = {
   users: { line_user_id: string } | null;
 };
 
+type LineRecipient = {
+  lineId: string;
+  userId: number | null;
+  groupId: number | null;
+};
+
 function taipeiDateString(date: Date) {
   return new Date(date.getTime() + TAIPEI_OFFSET_MS).toISOString().split("T")[0];
 }
@@ -68,7 +75,9 @@ function targetDateLabel(targetDate: string, todayDate: string) {
 }
 
 async function pushText(env: Env, userId: string, text: string) {
-  if (!env.LINE_CHANNEL_ACCESS_TOKEN) return;
+  if (!env.LINE_CHANNEL_ACCESS_TOKEN) {
+    return { status: "skipped" as const, errorMessage: "LINE channel access token is not configured." };
+  }
 
   const response = await fetch("https://api.line.me/v2/bot/message/push", {
     method: "POST",
@@ -94,7 +103,10 @@ async function pushText(env: Env, userId: string, text: string) {
       status: response.status,
       detail,
     });
+    return { status: "failed" as const, httpStatus: response.status, errorMessage: detail };
   }
+
+  return { status: "sent" as const, httpStatus: response.status };
 }
 
 function calculateFastingStart(apptTime: string | null, hours: number | null): string {
@@ -219,8 +231,8 @@ function buildEveningReminderMessage(
 }
 
 function resolveLineRecipients(
-  item: { group_id: number | null; profile_id: number | null; users: { line_user_id: string } | null },
-  groupRecipients: Map<number, string[]>,
+  item: { user_id: number | null; group_id: number | null; profile_id: number | null; users: { line_user_id: string } | null },
+  groupRecipients: Map<number, LineRecipient[]>,
   profileMap: Map<number, CareProfile>,
 ) {
   const profile = item.profile_id ? profileMap.get(item.profile_id) : undefined;
@@ -232,10 +244,14 @@ function resolveLineRecipients(
 
   const lineId = item.users?.line_user_id;
   if (lineId && lineId !== "web-mvp") {
-    return [lineId];
+    return [{ lineId, userId: item.user_id, groupId }];
   }
 
   return [];
+}
+
+function uniqueNumbers(values: Array<number | null | undefined>) {
+  return Array.from(new Set(values.filter((value): value is number => Number.isInteger(value) && value > 0)));
 }
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
@@ -280,40 +296,74 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     }
 
     const recipientRows = await loadGroupRecipients(env, Array.from(groupIds), "receive_evening_alert");
-    const groupRecipients = new Map<number, Set<string>>();
+    const groupRecipients = new Map<number, Map<string, LineRecipient>>();
 
     for (const row of recipientRows) {
       const lineId = row.users?.line_user_id;
       if (!lineId || lineId === "web-mvp") continue;
       if (!groupRecipients.has(row.group_id)) {
-        groupRecipients.set(row.group_id, new Set());
+        groupRecipients.set(row.group_id, new Map());
       }
-      groupRecipients.get(row.group_id)!.add(lineId);
+      groupRecipients.get(row.group_id)!.set(lineId, {
+        lineId,
+        userId: row.user_id,
+        groupId: row.group_id,
+      });
     }
 
-    const groupRecipientsById = new Map<number, string[]>();
-    for (const [groupId, lineIds] of groupRecipients.entries()) {
-      groupRecipientsById.set(groupId, Array.from(lineIds));
+    const groupRecipientsById = new Map<number, LineRecipient[]>();
+    for (const [groupId, recipients] of groupRecipients.entries()) {
+      groupRecipientsById.set(groupId, Array.from(recipients.values()));
     }
 
-    const userAlerts = new Map<string, AppointmentWithUser[]>();
+    const userAlerts = new Map<string, { recipient: LineRecipient; appointments: AppointmentWithUser[] }>();
     for (const apt of tomorrowApts) {
-      const lineIds = resolveLineRecipients(apt, groupRecipientsById, profileMap);
-      for (const lineId of lineIds) {
-        if (allowedLineIds && !allowedLineIds.has(lineId)) continue;
-        if (!userAlerts.has(lineId)) userAlerts.set(lineId, []);
-        userAlerts.get(lineId)!.push(apt);
+      const recipients = resolveLineRecipients(apt, groupRecipientsById, profileMap);
+      for (const recipient of recipients) {
+        if (allowedLineIds && !allowedLineIds.has(recipient.lineId)) continue;
+        if (!userAlerts.has(recipient.lineId)) {
+          userAlerts.set(recipient.lineId, { recipient, appointments: [] });
+        }
+        userAlerts.get(recipient.lineId)!.appointments.push(apt);
       }
     }
 
     let sentCount = 0;
 
-    for (const [lineUserId, appointments] of userAlerts.entries()) {
+    for (const [lineUserId, alert] of userAlerts.entries()) {
+      const { recipient, appointments } = alert;
       if (appointments.length === 0) continue;
       const scheduleTitle = dateLabel === "今天" ? "【今日行程提醒】" : "【明日行程提醒】";
       const msgText = buildEveningReminderMessage(appointments, profileMap, dateLabel, scheduleTitle);
-      await pushText(env, lineUserId, msgText);
-      sentCount++;
+      const pushResult = await pushText(env, lineUserId, msgText);
+      const logGroupIds = uniqueNumbers(appointments.map((apt) => apt.group_id ?? (apt.profile_id ? profileMap.get(apt.profile_id)?.group_id : null)));
+      const logProfileIds = uniqueNumbers(appointments.map((apt) => apt.profile_id));
+
+      await recordLinePushLog(env, {
+        eventType: "evening_appointment_reminder",
+        recipientUserId: recipient.userId,
+        groupId: logGroupIds.length === 1 ? logGroupIds[0] : recipient.groupId,
+        profileId: logProfileIds.length === 1 ? logProfileIds[0] : null,
+        targetDate,
+        sourceTable: "appointments",
+        sourceIds: appointments.map((apt) => apt.id),
+        lineUserSuffix: lineUserId.slice(-4),
+        status: pushResult.status,
+        httpStatus: pushResult.httpStatus,
+        errorMessage: pushResult.errorMessage,
+        messageLength: msgText.length,
+        itemCount: appointments.length,
+        metadata: {
+          test_only: testOnly,
+          date_label: dateLabel,
+          group_ids: logGroupIds,
+          profile_ids: logProfileIds,
+        },
+      });
+
+      if (pushResult.status === "sent") {
+        sentCount++;
+      }
     }
 
     logEvent("cron.evening_completed", {

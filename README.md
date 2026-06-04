@@ -3,7 +3,7 @@
 > **當前版本：V1.0 Beta（2026-05-29）**
 > **正式站**：https://care.wedopr.com
 > **狀態**：LINE 實機流程已進入測試期；照護圈後台改為長輩友善的協作者管理中心。
-> **Production 上線紀錄**：2026-05-29（Asia/Taipei）已完成 Phase 55（Billing Data Foundation）套用。
+> **Production 上線紀錄**：2026-06-04（Asia/Taipei）已完成 Phase 57（LINE Push Audit Logs）程式上線；資料庫 migration 待 production 套用。
 
 Care WEDO 是給長輩與家人使用的照護小幫手。長輩可以在 LINE 上傳藥袋、掛號單、處方箋或預約單照片，也可以直接貼上看診、用藥或提醒文字；系統會用 AI 解析，完整存進資料庫，再用短句提醒長輩重點。
 
@@ -118,8 +118,7 @@ https://care.wedopr.com
 | 通知類型 | 發送時間 | 篩選邏輯 | 收件人 |
 |---|---:|---|---|
 | 明日行程提醒（門診、看牙、檢查、領藥等；需空腹時加註） | 前一天 20:00 | `appointments.date = 明天` 且 `status = upcoming` | `receive_evening_alert = true` 的群組成員 |
-| 今日事件提醒（門診、看牙、檢查、領藥等） | 當天 08:00 | `appointments.date = 今天` 且 `status = upcoming` | `receive_daily_brief = true` 的群組成員 |
-| 吃藥簡報 | 每天 08:00 | `medications.active = true` | `receive_daily_brief = true` 的群組成員 |
+| 今日行程提醒（門診、看牙、檢查、領藥等） | 當天 08:00 | `appointments.date = 今天` 且 `status = upcoming` | `receive_daily_brief = true` 的群組成員 |
 | 上傳資料摘要 | 上傳成功後立即 | 上傳資料完成 OCR 與歸屬後觸發 | 上傳本人收到整理結果；同群組其他 `receive_upload_summary = true` 成員收到摘要 |
 
 上傳摘要補充：
@@ -130,6 +129,8 @@ https://care.wedopr.com
 - 沒有 LINE user id、`web-mvp` 測試帳號或關閉該通知者，不會收到推播。
 - LINE Login 只代表完成網頁身份驗證；若家人要收到 LINE 推播，仍需要加入 Care WEDO LINE 照護小管家。邀請文案需同時提供群組加入網址與 LINE 小管家連結。
 - 2026-06-03 production 檢查發現：GitHub Actions schedule 可能延遲 2-4 小時甚至跨日，不適合準點醫療提醒；正式 20:00 / 08:00 觸發改由 Cloudflare Cron Worker `care-wedo-reminder-scheduler` 執行，GitHub workflow 僅保留手動備援。
+- 2026-06-04 已固定 production 排程規則：08:00 只送「今日行程提醒」，不主動推播完整用藥清單；用藥仍保存在後台與「給醫生看」總表。
+- 2026-06-04 已新增 `line_push_logs` 去識別化推播稽核：只存事件類型、送達狀態、HTTP 狀態、收件者內部 user id、LINE 後四碼、訊息長度與來源 appointment ids，不存完整 LINE id、不存推播全文、不存醫療內容。
 - 2026-05-29 production 檢查發現：GitHub Actions 排程打 custom domain 時會被 Cloudflare bot challenge 擋下；提醒 workflow 已改為打 `care-wedo.pages.dev/api/cron/*`，並在非 2xx 時直接 fail，避免表面成功但實際沒送出。
 - LINE 對話窗中的登入 callback（含 `code` / `liff.state`）會先導向 `/app/open`，再以外部瀏覽器重新開啟同一個 callback URL，完成身分驗證後可直接進入後台，降低留在 LINE 視窗操作困擾。
 
@@ -398,10 +399,10 @@ https://care.wedopr.com/callback
 P0：
 
 - 用 10 張真實單據完成 LINE 實機回歸測試；目前已建立去識別化 manifest 與驗證工具，待放入本機私有圖片與實測紀錄。
-- 照護圈新增照護對象、邀請協作者前補正式費用確認 modal，避免未來接金流後出現靜默升級疑慮。
 - 完成 390px 手機與 LINE WebView 實機檢查，尤其是照護圈、用藥總表、費用確認 modal。
 - 強化藥品去重：已補藥名正規化、商品名/學名/藥碼欄位、疑似重複候選標記、家人端提示與高信心 exact duplicate 合併；下一步補正式藥碼資料源與完整合併管理。
 - 已支援 webhook 自動告警；商轉前可再補 Sentry / Cloudflare Analytics。
+- LINE 推播稽核已補 `line_push_logs` 程式與 migration；production 資料庫套用 Phase 57 後，可查每日/晚間提醒是否實際送出。
 
 P1：
 
@@ -413,7 +414,7 @@ P1：
 P2：
 
 - 正式付費方案與金流。
-- Billing Data Foundation 已補 migration 草案、後端 entitlement helper、paid action event 與 draft invoice snapshot；下一步是套用 production migration、補升降級/取消政策與金流 webhook。
+- Billing Data Foundation 已上線：已補後端 entitlement helper、paid action event 與 draft invoice snapshot；下一步補升降級/取消政策與金流 webhook。
 - 持續補 AIO 內容：把 Beta 訪談、真實使用教學與資料安全聲明整理進 `/faq`、`/guide`、`/pricing`、`/llms.txt`。
 - 照護資料匯出。
 - 家人端 OCR 低信心藥物已標示人工確認；下一步補欄位級確認與新增/更新狀態標示。

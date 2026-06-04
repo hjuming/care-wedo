@@ -562,7 +562,7 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
                 <div className="settings-toggle-list">
                   <label>我的通知設定</label>
                   {[
-                    { field: "receive_daily_brief", label: "每日簡報" },
+                    { field: "receive_daily_brief", label: "今日行程提醒" },
                     { field: "receive_evening_alert", label: "晚間提醒" },
                     { field: "receive_upload_summary", label: "上傳摘要通知" },
                   ].map((item) => (

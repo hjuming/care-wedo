@@ -115,9 +115,8 @@ https://care.wedopr.com
 
 | 通知類型 | 發送時間 | 系統條件 | 收件設定 |
 |---|---:|---|---|
-| 一般門診、看牙、檢查、領藥 | 當天 08:00 | `appointments.date = 今天` 且 `status = upcoming` | `receive_daily_brief = true` |
-| 吃藥簡報 | 每天 08:00 | `medications.active = true` | `receive_daily_brief = true` |
-| 空腹提醒 | 前一天 20:00 | `appointments.date = 明天` 且 `fasting_required = true` | `receive_evening_alert = true` |
+| 今日行程提醒（門診、看牙、檢查、領藥） | 當天 08:00 | `appointments.date = 今天` 且 `status = upcoming` | `receive_daily_brief = true` |
+| 明日行程提醒（需空腹時加註） | 前一天 20:00 | `appointments.date = 明天` 且 `status = upcoming` | `receive_evening_alert = true` |
 | 上傳資料摘要 | 上傳成功後立即 | OCR 完成並歸屬到照護對象後觸發 | 上傳本人 + 同群組其他 `receive_upload_summary = true` 成員 |
 
 上傳摘要細節：
@@ -229,6 +228,7 @@ EmailJS 需要的環境變數：
 | PR-CARE-P0-001 | P0 | Production Observability & Alerting | 🟡 基礎完成：前端錯誤、Functions/API、LINE push、cron、OCR 失敗可分類追蹤，並可透過 `CARE_WEDO_ALERT_WEBHOOK_URL` 自動通知；待商轉前補 Sentry / Cloudflare Analytics |
 | PR-CARE-P0-002 | P0 | Paid Action Confirmation Modal | ✅ 已完成：新增照護對象或共同協作者前顯示目前月費、增加後月費、Beta 不扣款說明 |
 | PR-CARE-P0-003 | P0 | Real Receipt Regression Pack | 🟡 基礎完成：已建立 10 張去識別化 manifest、私有圖片目錄規則、validator 與 runbook；待補真實圖片 hash 與 LINE WebView 實測紀錄 |
+| PR-CARE-P0-004 | P0 | LINE Push Audit Logs | 🟡 程式完成：每日/晚間提醒只保存去識別化推播稽核，不保存完整 LINE id、不保存推播全文；待 production 套用 Phase 57 migration |
 | PR-CARE-P1-001 | P1 | Medication Identity Normalization | 🟡 基礎完成：已補 normalized_name、brand/generic/drug code 欄位、OCR 儲存 identity metadata、同藥不同空白/符號更新同一筆、家人端疑似重複提示；待補正式藥碼資料源 |
 | PR-CARE-P1-002 | P1 | Billing Data Foundation | 🟡 基礎完成：已完成 `billing_events`、`billing_subscriptions`、`invoices` migration 套用，`/api/groups` 回傳 `billing_entitlement` 並被設定頁作為主要來源；待補前端正式收費結帳、升降級/取消政策與金流 webhook |
 
@@ -240,6 +240,7 @@ EmailJS 需要的環境變數：
 - 補所有 UI 改動的 390px 手機與 LINE WebView 檢查，尤其是照護圈、用藥總表、費用確認。
 - Cloudflare tail log 建立常用排查指令：已整理至 `PRODUCTION_OBSERVABILITY_RUNBOOK.md`。
 - 補上正式告警：已支援 webhook 自動通知；Sentry 或 Cloudflare Analytics 可作為商轉前增強。
+- LINE 推播稽核：已補 `line_push_logs` 程式與 migration；08:00 production 規則固定只送今日行程提醒，不主動推播完整用藥清單。
 
 ### P1：OCR 與資料品質
 

@@ -656,6 +656,9 @@ test("Daily LINE reminders use family-like copy instead of announcement-style no
   const source = readProjectFile("functions/api/cron/reminders.ts");
   const builder = source.slice(source.indexOf("function buildDailyReminderMessage"), source.indexOf("async function fetchCareProfiles"));
   const evening = readProjectFile("functions/api/cron/evening.ts");
+  const readme = readProjectFile("README.md");
+  const developmentPlan = readProjectFile("DEVELOPMENT_PLAN.md");
+  const groupSettings = readProjectFile("care-wedo-app/src/components/GroupSettings.jsx");
 
   assert.match(builder, /"早安",\s*"提醒您接下來的注意事項。"/);
   assert.match(source, /Care WEDO\\n陪你照顧最重要的人\\nhttps:\/\/care\.wedopr\.com/);
@@ -673,6 +676,42 @@ test("Daily LINE reminders use family-like copy instead of announcement-style no
   assert.doesNotMatch(builder, /`【\$\{label\}】`/);
   assert.doesNotMatch(evening, /提醒您一下/);
   assert.doesNotMatch(evening, /itemPrefix/);
+  assert.match(readme, /今日行程提醒/);
+  assert.match(developmentPlan, /今日行程提醒/);
+  assert.match(groupSettings, /今日行程提醒/);
+  assert.doesNotMatch(readme, /吃藥簡報/);
+  assert.doesNotMatch(developmentPlan, /吃藥簡報/);
+  assert.doesNotMatch(groupSettings, /每日簡報/);
+  assert.doesNotMatch(groupSettings, /用藥提醒通知/);
+});
+
+test("LINE reminder pushes are recorded as de-identified audit logs", () => {
+  const migration = readProjectFile("supabase/migration_phase57_line_push_logs.sql");
+  const schema = readProjectFile("supabase/schema.sql");
+  const shared = readProjectFile("functions/_shared/line_push_logs.ts");
+  const morning = readProjectFile("functions/api/cron/reminders.ts");
+  const evening = readProjectFile("functions/api/cron/evening.ts");
+
+  for (const source of [migration, schema]) {
+    assert.match(source, /create table if not exists public\.line_push_logs/);
+    assert.match(source, /line_user_suffix text/);
+    assert.match(source, /message_character_count integer/);
+    assert.match(source, /source_ids jsonb/);
+    assert.match(source, /alter table public\.line_push_logs enable row level security/);
+    assert.match(source, /revoke all on public\.line_push_logs from anon, authenticated/);
+    assert.match(source, /grant select, insert, update, delete on public\.line_push_logs to service_role/);
+  }
+
+  assert.match(shared, /recordLinePushLog/);
+  assert.match(shared, /line_push_logs/);
+  assert.match(shared, /message_character_count/);
+  assert.match(shared, /line_user_suffix/);
+  assert.doesNotMatch(shared, /message_text/);
+  assert.doesNotMatch(shared, /line_user_id/);
+  assert.match(morning, /recordLinePushLog/);
+  assert.match(morning, /daily_appointment_reminder/);
+  assert.match(evening, /recordLinePushLog/);
+  assert.match(evening, /evening_appointment_reminder/);
 });
 
 test("Morning reminders target today while evening reminders tolerate delayed schedule runs", () => {

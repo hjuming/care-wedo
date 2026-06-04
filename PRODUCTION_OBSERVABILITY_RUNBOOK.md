@@ -114,6 +114,53 @@ pnpm manual:reminder -- --user-id 1
 
 > 這支腳本會直接查 production Supabase 並走正式 LINE Push API，只適合內部驗證，不要拿來取代排程 workflow。
 
+## 6.2 LINE 推播稽核查詢
+
+Phase 57 起，每日與晚間提醒會寫入 `line_push_logs`。這張表只保存去識別化營運資料，不保存完整 LINE user id、不保存推播全文、不保存醫療內容。
+
+檢查今天實際送出的提醒：
+
+```sql
+select
+  event_type,
+  status,
+  target_date,
+  recipient_user_id,
+  group_id,
+  profile_id,
+  line_user_suffix,
+  item_count,
+  message_character_count,
+  http_status,
+  created_at
+from public.line_push_logs
+where created_at >= now() - interval '1 day'
+order by created_at desc;
+```
+
+檢查失敗或略過的推播：
+
+```sql
+select
+  event_type,
+  status,
+  http_status,
+  error_message,
+  metadata,
+  created_at
+from public.line_push_logs
+where status <> 'sent'
+order by created_at desc
+limit 50;
+```
+
+預期事件類型：
+
+| event_type | 說明 |
+|---|---|
+| `daily_appointment_reminder` | 08:00 今日行程提醒，不包含完整用藥清單 |
+| `evening_appointment_reminder` | 20:00 明日行程提醒，需空腹時加註 |
+
 ## 7. 下一步
 
 - 接 Sentry React / Vite production error，source map 只上傳程式碼映射，不上傳醫療資料。
