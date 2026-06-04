@@ -88,6 +88,20 @@ test("Mobile care pages keep important Chinese text readable", () => {
   assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.invite-code-row\s*\{[\s\S]*grid-template-columns: 1fr/);
 });
 
+test("Mobile dashboard headers stay compact so care actions remain above the fold", () => {
+  const css = readProjectFile("care-wedo-app/src/index.css");
+
+  const mobile = css.slice(css.indexOf("@media (max-width: 760px)"), css.indexOf("@media (min-width: 761px) and (max-width: 1024px)"));
+  assert.match(mobile, /\.toolbar\s*\{[\s\S]*gap: 8px[\s\S]*margin-bottom: 10px/);
+  assert.match(mobile, /\.section-heading-row,\n\s*\.section-heading-row\.is-compact\s*\{[\s\S]*flex: 0 0 auto[\s\S]*min-height: 44px/);
+  assert.match(mobile, /\.section-heading-row\.is-compact h2\s*\{[\s\S]*font-size: 26px/);
+  assert.match(mobile, /\.section-heading-row::before\s*\{[\s\S]*box-shadow: none/);
+  assert.match(mobile, /\.content-search-panel\s*\{[\s\S]*margin-bottom: 14px/);
+  assert.match(mobile, /\.calendar-layout\s*\{[\s\S]*gap: 12px/);
+  assert.match(mobile, /\.record-mode-switch\s*\{[\s\S]*margin-bottom: 12px/);
+  assert.doesNotMatch(mobile, /\.section-heading-row\s*\{[\s\S]*flex: 1 1 280px/);
+});
+
 test("iPad portrait uses bottom navigation without floating management controls", () => {
   const css = readProjectFile("care-wedo-app/src/index.css");
 

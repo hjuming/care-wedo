@@ -4386,6 +4386,57 @@ input:focus-visible {
     align-items: stretch;
   }
 
+  .toolbar {
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .section-heading-row,
+  .section-heading-row.is-compact {
+    flex: 0 0 auto;
+    width: 100%;
+    min-height: 44px;
+    padding-left: 12px;
+  }
+
+  .section-heading-row.is-compact h2 {
+    font-size: 26px;
+    line-height: 1.18;
+  }
+
+  .section-heading-row::before {
+    top: 8px;
+    bottom: 8px;
+    width: 4px;
+    box-shadow: none;
+  }
+
+  .content-search-panel {
+    margin-bottom: 14px;
+  }
+
+  .search-box {
+    gap: 5px;
+    font-size: 14px;
+  }
+
+  .search-box input {
+    min-height: 52px;
+    padding: 11px 14px;
+    font-size: 16px;
+  }
+
+  .search-suggestions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 7px;
+  }
+
+  .search-suggestions button {
+    min-height: 42px;
+    padding: 5px 6px;
+    font-size: 14px;
+  }
+
   .hero-highlights {
     display: none;
   }
@@ -4431,6 +4482,49 @@ input:focus-visible {
   .dashboard-grid,
   .content-area {
     padding-bottom: 96px;
+  }
+
+  .content-area {
+    padding: 12px 12px calc(112px + env(safe-area-inset-bottom));
+  }
+
+  .calendar-layout {
+    gap: 12px;
+  }
+
+  .calendar-board,
+  .event-list {
+    padding: 12px;
+  }
+
+  .calendar-head {
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .month-nav strong {
+    font-size: 18px;
+  }
+
+  .calendar-weekdays,
+  .calendar-days {
+    gap: 5px;
+  }
+
+  .calendar-day {
+    min-height: 40px;
+    border-radius: 10px;
+  }
+
+  .record-mode-switch {
+    margin-bottom: 12px;
+    padding: 6px;
+    gap: 6px;
+  }
+
+  .record-mode-switch button {
+    min-height: 48px;
+    font-size: 16px;
   }
 
   .avatar-manager {
