@@ -6,11 +6,11 @@ import {
   MedicationRow,
   MULTIPLE_FAMILY_GROUPS_FEATURE,
   PlanRow,
-  getBearerToken,
   getAccessibleProfiles,
+  getAuthenticatedUser,
+  getBearerToken,
   getGroupOcrUsage,
   getGroupPlan,
-  getOrCreateDefaultUser,
   getUserActiveProfileId,
   getUserGroups,
   hasUserFeatureFlag,
@@ -19,7 +19,7 @@ import {
   serializeCareDocument,
   serializeMedication,
   supabaseFetch,
-  verifyLineIdToken,
+  VerifiedCareIdentity,
 } from "../_shared/supabase";
 
 type Env = {
@@ -144,6 +144,7 @@ const STATIC_DEMO_DASHBOARD = {
   active_group_id: null,
   active_group_name: null,
   family_notes: [],
+  line_push_audit: [],
   needs_setup: false,
   needs_profile_setup: false,
 };
@@ -160,6 +161,11 @@ function parseGroupId(request: Request): number | null {
   if (!value) return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function identityDisplayName(identity: VerifiedCareIdentity | null): string {
+  if (!identity) return "我";
+  return identity.name || (identity.provider === "supabase" ? identity.email : "") || "我";
 }
 
 // requestedProfileId must belong to the accessible profiles list.
@@ -193,6 +199,17 @@ type DashboardMemberRow = {
   users: { name: string | null; line_user_id: string | null; picture_url: string | null } | null;
 };
 
+type LinePushAuditRow = {
+  id: number;
+  event_type: string;
+  target_date: string | null;
+  item_count: number | null;
+  status: string;
+  http_status: number | null;
+  line_user_suffix: string | null;
+  created_at: string;
+};
+
 async function fetchDashboardMembers(env: Env, groupId: number | null, currentUserId: number) {
   if (!groupId) return [];
 
@@ -215,6 +232,26 @@ async function fetchDashboardMembers(env: Env, groupId: number | null, currentUs
       receive_evening_alert: row.receive_evening_alert !== false,
       receive_upload_summary: row.receive_upload_summary !== false,
     }));
+}
+
+async function fetchLinePushAuditLogs(env: Env, groupId: number | null): Promise<LinePushAuditRow[]> {
+  if (!groupId) return [];
+  try {
+    return await supabaseFetch<LinePushAuditRow[]>(
+      env,
+      `line_push_logs?group_id=eq.${groupId}&select=id,event_type,target_date,item_count,status,http_status,line_user_suffix,created_at&order=created_at.desc&limit=8`,
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (/line_push_logs|PGRST205|Could not find the table/i.test(message)) {
+      console.warn(JSON.stringify({
+        event: "dashboard.line_push_logs_missing",
+        message: "line_push_logs table is not available; continuing without reminder audit summaries.",
+      }));
+      return [];
+    }
+    throw error;
+  }
 }
 
 function filterAppointmentsByHistoryAccess(appointments: AppointmentRow[], canViewHistory: boolean): AppointmentRow[] {
@@ -350,14 +387,13 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   try {
     // ── Unauthenticated: return static demo, zero DB queries ──────────────────
     const token = getBearerToken(request);
-    const identity = token ? await verifyLineIdToken(env, token) : null;
-
-    if (!identity) {
+    if (!token) {
       return Response.json(STATIC_DEMO_DASHBOARD);
     }
 
     // ── Authenticated path ────────────────────────────────────────────────────
-    const userId = await getOrCreateDefaultUser(env, identity.lineUserId, identity);
+    const { userId, identity } = await getAuthenticatedUser(env, request);
+    const userDisplayName = identityDisplayName(identity);
     const requestedProfileId = parseProfileId(request);
     const requestedGroupId = parseGroupId(request);
 
@@ -373,7 +409,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
         ...STATIC_DEMO_DASHBOARD,
         mode: "personal",
         ...buildPlanUsage(FREE_PLAN_DEMO, 0),
-        patient: { name: identity.name || "我", age: "", dept: "", diagnoses: [] },
+        patient: { name: userDisplayName, age: "", dept: "", diagnoses: [] },
         appointments: [],
         documents: [],
         medications: [],
@@ -382,6 +418,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
         active_group_id: null,
         active_group_name: null,
         family_notes: [],
+        line_push_audit: [],
         care_profiles: [],
         active_profile_id: null,
         permission_version: buildPermissionVersion(FREE_PLAN_DEMO, false),
@@ -418,7 +455,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
         ...STATIC_DEMO_DASHBOARD,
         mode: "personal",
         ...buildPlanUsage(groupPlan, ocrUsed, recipientCount, hasUnlimitedAccess),
-        patient: { name: identity.name || "我", age: "", dept: "", diagnoses: [] },
+        patient: { name: userDisplayName, age: "", dept: "", diagnoses: [] },
         appointments: [],
         documents: [],
         medications: [],
@@ -427,6 +464,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
         active_group_id: groupId,
         active_group_name: activeGroup?.name || "家庭群組",
         family_notes: [],
+        line_push_audit: await fetchLinePushAuditLogs(env, groupId),
         care_profiles: profiles.map(serializeCareProfile),
         active_profile_id: null,
         permission_version: buildPermissionVersion(groupPlan, hasUnlimitedAccess),
@@ -449,11 +487,12 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     const canViewHistory = canPlanViewHistory(groupPlan, hasUnlimitedAccess);
 
     // Step 4: Fetch care data scoped to group + profile
-    const [appointments, medications, documents, members] = await Promise.all([
+    const [appointments, medications, documents, members, linePushAuditLogs] = await Promise.all([
       fetchAppointments(env, activeGroupId, activeProfileId, { canViewHistory }),
       fetchMedications(env, activeGroupId, activeProfileId),
       fetchDocuments(env, activeGroupId, activeProfileId, { canViewHistory }),
       fetchDashboardMembers(env, activeGroupId, userId),
+      fetchLinePushAuditLogs(env, activeGroupId),
     ]);
     const todayMedicationLogs = await fetchTodayMedicationLogs(env, medications);
     const familyNotes = appointments
@@ -469,7 +508,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
 
     return Response.json({
       patient: {
-        name: selectedProfile.display_name || identity.name || "家人",
+        name: selectedProfile.display_name || userDisplayName || "家人",
         age: "",
         dept: selectedProfile.main_department || appointments[0]?.department || "醫療照護",
         diagnoses: [],
@@ -480,6 +519,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       active_group_id: activeGroupId,
       active_group_name: activeGroup?.name || "家庭群組",
       family_notes: familyNotes,
+      line_push_audit: linePushAuditLogs,
       active_profile_id: activeProfileId,
       permission_version: buildPermissionVersion(groupPlan, hasUnlimitedAccess),
       care_profiles: profiles.map(serializeCareProfile),

@@ -56,14 +56,21 @@ test("real receipt regression pack covers beta-critical OCR scenarios", () => {
 
 test("real receipt regression validator and documentation are wired", () => {
   const script = readProjectFile("scripts/validate-real-receipt-pack.mjs");
+  const smokeRunner = readProjectFile("scripts/real-receipt-smoke-runner.mjs");
   const runbook = readProjectFile("REAL_RECEIPT_REGRESSION_RUNBOOK.md");
   const packageJson = readProjectFile("package.json");
 
   assert.match(script, /care-wedo-real-receipt-regression-v1/);
   assert.match(script, /raw_medical_images_committed/);
   assert.match(script, /duplicate_upload/);
+  assert.match(smokeRunner, /private_image_directory/);
+  assert.match(smokeRunner, /sha256/);
+  assert.match(smokeRunner, /CARE_WEDO_REAL_RECEIPT_SMOKE_URL/);
+  assert.match(smokeRunner, /DRY_RUN/);
   assert.match(runbook, /10 張/);
   assert.match(runbook, /去識別化/);
   assert.match(runbook, /LINE WebView/);
+  assert.match(runbook, /receipt-pack:smoke/);
   assert.match(packageJson, /receipt-pack:check/);
+  assert.match(packageJson, /receipt-pack:smoke/);
 });

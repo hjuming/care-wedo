@@ -11,6 +11,19 @@ export type VerifiedLineIdentity = {
   pictureUrl?: string;
 };
 
+export type VerifiedSupabaseIdentity = {
+  provider: "supabase";
+  authUserId: string;
+  authProvider: string;
+  email?: string;
+  name?: string;
+  pictureUrl?: string;
+};
+
+export type VerifiedCareIdentity =
+  | (VerifiedLineIdentity & { provider: "line" })
+  | VerifiedSupabaseIdentity;
+
 export const CARE_WEDO_SESSION_COOKIE = "care_wedo_session";
 export const CARE_WEDO_SESSION_MAX_AGE_SECONDS = 60 * 24 * 60 * 60;
 const CARE_WEDO_SESSION_PREFIX = "cw_session.";
@@ -321,6 +334,38 @@ function base64UrlDecodeText(value: string): string {
   return new TextDecoder().decode(bytes);
 }
 
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const [, payload] = token.split(".");
+    if (!payload) return null;
+    return JSON.parse(base64UrlDecodeText(payload)) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function readString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function readRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function looksLikeSupabaseAccessToken(env: Env, token: string): boolean {
+  if (token.startsWith(CARE_WEDO_SESSION_PREFIX)) return false;
+  const payload = decodeJwtPayload(token);
+  if (!payload) return false;
+
+  const issuer = readString(payload.iss) || "";
+  const authIssuerPrefix = `${env.SUPABASE_URL.replace(/\/$/, "")}/auth/v1`;
+  return (
+    issuer.startsWith(authIssuerPrefix)
+    || payload.aud === "authenticated"
+    || payload.role === "authenticated"
+  );
+}
+
 function getSessionSecret(env: Env): string {
   const secret = env.CARE_WEDO_SESSION_SECRET || env.SUPABASE_SERVICE_ROLE_KEY;
   if (!secret) throw new Error("Care WEDO session secret is not configured.");
@@ -491,6 +536,55 @@ export async function verifyLineIdToken(env: Env, token: string): Promise<Verifi
   };
 }
 
+export async function verifySupabaseAccessToken(env: Env, token: string): Promise<VerifiedSupabaseIdentity> {
+  assertSupabaseEnv(env);
+
+  const response = await fetch(`${env.SUPABASE_URL.replace(/\/$/, "")}/auth/v1/user`, {
+    headers: {
+      apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  const result = await response.json<Record<string, unknown>>().catch(() => ({}));
+  if (!response.ok || typeof result.id !== "string") {
+    throw new Error("Google 登入已失效，請重新登入。");
+  }
+
+  const appMetadata = readRecord(result.app_metadata);
+  const userMetadata = readRecord(result.user_metadata);
+  const identities = Array.isArray(result.identities) ? result.identities : [];
+  const firstIdentity = readRecord(identities[0]);
+  const firstIdentityData = readRecord(firstIdentity.identity_data);
+  const authProvider = readString(appMetadata.provider) || readString(firstIdentity.provider) || "google";
+  const email = readString(result.email) || readString(firstIdentityData.email);
+  const name = readString(userMetadata.full_name)
+    || readString(userMetadata.name)
+    || readString(firstIdentityData.full_name)
+    || readString(firstIdentityData.name)
+    || email;
+  const pictureUrl = readString(userMetadata.avatar_url)
+    || readString(userMetadata.picture)
+    || readString(firstIdentityData.avatar_url)
+    || readString(firstIdentityData.picture);
+
+  return {
+    provider: "supabase",
+    authUserId: result.id,
+    authProvider,
+    email,
+    name,
+    pictureUrl,
+  };
+}
+
+export async function verifyCareIdentity(env: Env, token: string): Promise<VerifiedCareIdentity> {
+  if (looksLikeSupabaseAccessToken(env, token)) {
+    return verifySupabaseAccessToken(env, token);
+  }
+  const lineIdentity = await verifyLineIdToken(env, token);
+  return { ...lineIdentity, provider: "line" };
+}
+
 export async function getOrCreateDefaultUser(
   env: Env,
   lineUserId?: string,
@@ -530,6 +624,62 @@ export async function getOrCreateDefaultUser(
 
   if (!created || created.length === 0) throw new Error("無法建立使用者");
   return created[0].id;
+}
+
+export async function getOrCreateUserFromIdentity(env: Env, identity: VerifiedCareIdentity): Promise<number> {
+  if (identity.provider === "line") {
+    return getOrCreateDefaultUser(env, identity.lineUserId, identity);
+  }
+
+  const existing = await supabaseFetch<Array<{
+    id: number;
+    auth_provider: string | null;
+    email: string | null;
+    name: string | null;
+    picture_url: string | null;
+  }>>(
+    env,
+    `users?auth_user_id=eq.${encodeURIComponent(identity.authUserId)}&select=id,auth_provider,email,name,picture_url&limit=1`,
+  );
+
+  if (existing[0]?.id) {
+    const updates: Record<string, string> = {};
+    if (identity.authProvider && existing[0].auth_provider !== identity.authProvider) updates.auth_provider = identity.authProvider;
+    if (identity.email && existing[0].email !== identity.email) updates.email = identity.email;
+    if (identity.name && existing[0].name !== identity.name) updates.name = identity.name;
+    if (identity.pictureUrl && existing[0].picture_url !== identity.pictureUrl) updates.picture_url = identity.pictureUrl;
+    if (Object.keys(updates).length) {
+      await supabaseFetch(env, `users?id=eq.${existing[0].id}`, {
+        method: "PATCH",
+        body: JSON.stringify(updates),
+      });
+    }
+    return existing[0].id;
+  }
+
+  const created = await supabaseFetch<Array<{ id: number }>>(env, "users?select=id", {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify({
+      auth_user_id: identity.authUserId,
+      auth_provider: identity.authProvider,
+      email: identity.email || null,
+      name: identity.name || identity.email || "Google 帳號",
+      picture_url: identity.pictureUrl || null,
+      plan: "free",
+    }),
+  });
+
+  if (!created || created.length === 0) throw new Error("無法建立使用者");
+  return created[0].id;
+}
+
+export async function getAuthenticatedUser(env: Env, request: Request): Promise<{ userId: number; identity: VerifiedCareIdentity }> {
+  const token = getBearerToken(request);
+  if (!token) throw new Error("請先登入");
+  const identity = await verifyCareIdentity(env, token);
+  const userId = await getOrCreateUserFromIdentity(env, identity);
+  return { userId, identity };
 }
 
 export async function getUserActiveProfileId(env: Env, userId: number): Promise<number | null> {

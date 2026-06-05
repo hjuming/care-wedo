@@ -1,6 +1,8 @@
 create table if not exists public.users (
   id bigserial primary key,
   line_user_id text unique,
+  auth_user_id uuid,
+  auth_provider text,
   name text,
   picture_url text,
   email text,
@@ -14,9 +16,19 @@ create table if not exists public.users (
 alter table public.users
   add column if not exists plan text not null default 'free',
   add column if not exists plan_expires_at timestamptz,
+  add column if not exists auth_user_id uuid,
+  add column if not exists auth_provider text,
   add column if not exists picture_url text,
   add column if not exists email text,
   add column if not exists active_profile_id bigint;
+
+create unique index if not exists users_auth_user_id_unique
+  on public.users(auth_user_id)
+  where auth_user_id is not null;
+
+create index if not exists users_auth_provider_idx
+  on public.users(auth_provider)
+  where auth_provider is not null;
 
 create table if not exists public.user_feature_flags (
   id          bigserial primary key,

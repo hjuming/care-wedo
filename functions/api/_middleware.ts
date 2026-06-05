@@ -1,4 +1,4 @@
-import { getBearerToken, verifyLineIdToken, Env } from "../_shared/supabase";
+import { getBearerToken, verifyCareIdentity, Env } from "../_shared/supabase";
 import { logError, logEvent } from "../_shared/logger";
 import { sendProductionAlert } from "../_shared/alerts";
 
@@ -48,7 +48,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
 
     try {
-      const identity = await verifyLineIdToken(env, token);
+      const identity = await verifyCareIdentity(env, token);
       (context as any).data = { ...(context as any).data, identity };
     } catch (error) {
       logError("auth.verify_failed", error, { path: url.pathname, method: request.method });

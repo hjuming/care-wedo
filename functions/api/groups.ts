@@ -5,10 +5,10 @@ import {
   checkGroupRecipientLimit,
   createCareProfile,
   createGroup,
-  getBearerToken,
   getAccessibleProfiles,
+  getAuthenticatedUser,
+  getBearerToken,
   getGroupPlan,
-  getOrCreateDefaultUser,
   getUserGroups,
   getUserMemberships,
   joinGroupByCode,
@@ -17,7 +17,6 @@ import {
   serializeCareProfile,
   supabaseFetch,
   updateUserFamilyGroupMembership,
-  verifyLineIdToken,
 } from "../_shared/supabase";
 
 type Env = {
@@ -32,8 +31,7 @@ async function getIdentity(request: Request, env: Env) {
   if (!token) {
     throw new Error("請先登入");
   }
-  const identity = await verifyLineIdToken(env, token);
-  const userId = await getOrCreateDefaultUser(env, identity.lineUserId, identity);
+  const { userId } = await getAuthenticatedUser(env, request);
   return userId;
 }
 

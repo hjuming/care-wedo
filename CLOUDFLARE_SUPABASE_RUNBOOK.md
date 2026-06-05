@@ -68,6 +68,10 @@ LINE_CHANNEL_SECRET=<Messaging API Secret>
 # LINE Login（LIFF 身分驗證）
 LINE_LOGIN_CHANNEL_ID=<Login Channel ID>
 
+# Supabase Auth（Google OAuth 後台登入；VITE_* 是前端 publishable config）
+VITE_SUPABASE_URL=https://你的-project.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=<Publishable / anon key>
+
 # Cron 排程保護
 CRON_SECRET=<自訂密碼，用於保護排程 API>
 
@@ -76,6 +80,12 @@ CARE_WEDO_ALERT_WEBHOOK_URL=<Slack/Make/Zapier/Google Chat 或自有 webhook>
 CARE_WEDO_ALERT_WEBHOOK_SECRET=<接收端驗證用 secret>
 CARE_WEDO_ENV=production
 ```
+
+Google OAuth MVP 啟用前，還需要在 Supabase Dashboard 完成：
+
+1. Authentication → Providers → Google：填入 Google OAuth Client ID / Client Secret 並啟用。
+2. Authentication → URL Configuration：允許 `https://care.wedopr.com/auth/callback`，本機測試可另加 `http://localhost:5173/auth/callback`。
+3. Production SQL Editor 套用 `supabase/migration_phase58_supabase_auth_identity.sql`，讓 `public.users` 可保存 `auth_user_id` 與 `auth_provider`。
 
 > **2026-05-13 smoke test 發現**：正式站 `/api/cron/reminders` 與 `/api/cron/evening` 曾回傳 `CRON_SECRET is not configured.`。此問題已於 **2026-05-29** 修正；目前仍需確保 Cloudflare Pages production 與 GitHub Actions 的 `CRON_SECRET` 維持一致。
 

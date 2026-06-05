@@ -7,6 +7,7 @@ import OcrResult from "./components/OcrResult";
 import { patientData, medicines, timeline as initialTimeline } from "./data/patient";
 import { buildGoogleCalendarEventUrl, confirmOcrDocument, createAppointment, deleteAppointment, deleteCareDocument, downloadAppointmentCalendarFile, downloadLocalAppointmentCalendarFile, fetchDashboard, fetchDocumentDetail, fetchDocumentFileUrl, fetchSessionIdentity, joinGroup, markMedicationSlotStatus, ocrAnalyze, ocrAnalyzeText, patchAppointment, patchMedication, updateActiveProfilePreference, updateFamilyNotes, updateProfile, updateProfileOrder, uploadCareDocument } from "./services/api";
 import { buildExternalAppUrl, buildLiffEntryUrl, buildLineAppLiffFallbackUrl, initLineIdentity, isLineInAppBrowser, loginWithLine, logoutLineIdentity, openDashboardInExternalBrowserAfterLineCallback, openUrlInExternalBrowser, resetCareWedoSessionAndReturnHome, shouldOpenLiffEntryUrl } from "./services/liff";
+import { completeSupabaseOAuthCallback, hasSupabaseAuthConfig, loginWithGoogle } from "./services/supabaseAuth";
 import { trackError, trackEvent } from "./services/telemetry";
 import { buildTodayTasks, formatTaipeiTodayLabel, groupMedicationsBySchedule, hasSameDayTasks } from "./services/todayTasks";
 import { buildSearchSuggestions, matchSearch } from "./services/search";
@@ -697,6 +698,12 @@ function LineIcon() {
   );
 }
 
+function GoogleIcon() {
+  return (
+    <span className="google-login-mark" aria-hidden="true">G</span>
+  );
+}
+
 function CareHelperIcon() {
   return (
     <svg className="care-helper-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -733,6 +740,26 @@ function LineLoginAction({ className = "", loggingIn = false, label = "用 LINE 
         {loggingIn ? loadingLabel : label}
       </a>
     </span>
+  );
+}
+
+function GoogleLoginAction({ loggingIn = false, disabled = false, onLogin }) {
+  function handleClick(event) {
+    event.preventDefault();
+    if (loggingIn || disabled) return;
+    onLogin?.();
+  }
+
+  return (
+    <button
+      type="button"
+      className="google-login-btn"
+      onClick={handleClick}
+      disabled={loggingIn || disabled}
+    >
+      <GoogleIcon />
+      {loggingIn ? "正在開啟 Google..." : "用 Google 登入後台"}
+    </button>
   );
 }
 
@@ -1089,8 +1116,10 @@ function LandingPage({ variant = "home" }) {
 
 function LoginPage() {
   const [loggingIn, setLoggingIn] = useState(false);
+  const [googleLoggingIn, setGoogleLoggingIn] = useState(false);
   const [loginError, setLoginError] = useState(null);
   const inviteCode = new URLSearchParams(window.location.search).get("invite_code");
+  const googleAuthReady = hasSupabaseAuthConfig();
 
   useEffect(() => {
     if (inviteCode) {
@@ -1109,6 +1138,17 @@ function LoginPage() {
     }
   }
 
+  function handleGoogleLogin() {
+    setGoogleLoggingIn(true);
+    setLoginError(null);
+    try {
+      loginWithGoogle({ next: "/app" });
+    } catch (err) {
+      setLoginError(err instanceof Error ? err.message : "Google 登入尚未設定，請稍後再試。");
+      setGoogleLoggingIn(false);
+    }
+  }
+
   return (
     <main className="login-route-shell">
       <nav className="landing-nav login-route-nav" aria-label="Care WEDO 登入導覽">
@@ -1121,7 +1161,7 @@ function LoginPage() {
           <span className="landing-version">Care WEDO</span>
           <h1>幫家人記住看診、檢查、領藥與照護提醒。</h1>
           <p>
-            使用 LINE 登入後，就可以查看今日照護事項。
+            長輩可以用 LINE，家人協作者可以用 Google 登入後台。
           </p>
           {inviteCode && (
             <p className="helper-copy">登入後會自動加入家庭群組，邀請碼：{inviteCode}</p>
@@ -1135,6 +1175,10 @@ function LoginPage() {
 
           <div className="login-route-actions">
             <LineLoginAction loggingIn={loggingIn} onLogin={handleLineLogin} />
+            <GoogleLoginAction loggingIn={googleLoggingIn} disabled={!googleAuthReady} onLogin={handleGoogleLogin} />
+            {!googleAuthReady && (
+              <p className="helper-copy">Google 登入尚未開通，請先用 LINE 或稍後再試。</p>
+            )}
             <a
               className="login-alt-link"
               href="https://lin.ee/xzbyyvf"
@@ -1157,6 +1201,47 @@ function LoginPage() {
         <a href="/features">功能說明</a>
         <a href="/privacy">隱私權政策</a>
       </footer>
+    </main>
+  );
+}
+
+function AuthCallbackPage() {
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    try {
+      completeSupabaseOAuthCallback();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Google 登入失敗，請重新登入。";
+      window.setTimeout(() => {
+        if (active) setError(message);
+      }, 0);
+    }
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  return (
+    <main className="login-route-shell">
+      <section className="external-open-card auth-callback-card" aria-label="Google 登入確認">
+        {error ? (
+          <>
+            <p className="panel-eyebrow">登入未完成</p>
+            <h1>請重新登入</h1>
+            <p>{error}</p>
+            <a className="primary-action" href="/login">回到登入頁</a>
+          </>
+        ) : (
+          <>
+            <div className="auth-loading-spinner" aria-hidden="true" />
+            <p className="panel-eyebrow">Google 登入確認</p>
+            <h1>正在帶你進入照護後台</h1>
+            <p>正在確認登入狀態，完成後會自動回到 Care WEDO。</p>
+          </>
+        )}
+      </section>
     </main>
   );
 }
@@ -1226,6 +1311,7 @@ export default function App() {
 
   if (route === "app") return <DashboardApp />;
   if (route === "external-open") return <ExternalOpenPage />;
+  if (route === "auth-callback") return <AuthCallbackPage />;
   if (route === "login") return <LoginPage />;
   if (route === "features") return <LandingPage variant="details" />;
   if (route === "privacy") return <PrivacyPage />;
@@ -1612,6 +1698,7 @@ function DashboardApp() {
     appointments,
   }), [appointments, todayDate]);
   const collaborators = dashboard?.collaborators || dashboard?.members || [];
+  const linePushAudit = dashboard?.line_push_audit || [];
 
   useEffect(() => {
     setFamilyNotes(dashboard?.family_notes || []);
@@ -2279,6 +2366,7 @@ function DashboardApp() {
               onGroupChange={() => loadDashboard(identity, activeProfileId, activeGroupId)}
               onEditProfile={() => setShowEditProfile(true)}
               onAddReminder={() => setShowManualReminder(true)}
+              linePushAudit={linePushAudit}
               familyNotes={familyNotes}
               onFamilyNotesChange={handleFamilyNotesChange}
               onLogout={logoutLineIdentity}
@@ -4280,6 +4368,71 @@ function DocumentLibraryView({ documents, searchQuery, onUploadDocument, onOpenD
   );
 }
 
+function reminderAuditEventLabel(eventType = "") {
+  if (eventType === "daily_appointment_reminder") return "今日行程提醒";
+  if (eventType === "evening_appointment_reminder") return "明日行程提醒";
+  return "LINE 提醒";
+}
+
+function reminderAuditStatusLabel(status = "") {
+  if (status === "sent") return "已送出";
+  if (status === "failed") return "失敗";
+  if (status === "skipped") return "略過";
+  return "待確認";
+}
+
+function reminderAuditTimeLabel(value) {
+  if (!value) return "時間待確認";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "時間待確認";
+  return new Intl.DateTimeFormat("zh-TW", {
+    timeZone: "Asia/Taipei",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date);
+}
+
+function ReminderAuditPanel({ logs = [] }) {
+  return (
+    <section className="summary-panel wide-panel reminder-audit-panel">
+      <div className="panel-heading-row">
+        <div>
+          <p className="panel-eyebrow">提醒送達確認</p>
+          <h3>最近提醒送達</h3>
+        </div>
+        <span>{logs.length ? `${logs.length} 筆` : "尚無紀錄"}</span>
+      </div>
+      {logs.length ? (
+        <div className="reminder-audit-list">
+          {logs.map((log) => (
+            <article key={log.id} className={`reminder-audit-row is-${log.status || "unknown"}`}>
+              <div>
+                <strong>{reminderAuditEventLabel(log.event_type)}</strong>
+                <span>
+                  {[log.target_date && formatDateLabel(log.target_date), `${Number(log.item_count || 0)} 筆提醒`].filter(Boolean).join(" ｜ ")}
+                </span>
+              </div>
+              <div>
+                <span className="reminder-audit-status">{reminderAuditStatusLabel(log.status)}</span>
+                <small>
+                  {reminderAuditTimeLabel(log.created_at)}
+                  {log.line_user_suffix ? ` ｜ LINE 後四碼 ${log.line_user_suffix}` : ""}
+                  {log.http_status ? ` ｜ HTTP ${log.http_status}` : ""}
+                </small>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <p className="helper-copy">目前還沒有提醒送達紀錄。等 08:00 或 20:00 排程送出後，這裡會顯示去識別化紀錄。</p>
+      )}
+    </section>
+  );
+}
+
 function SettingsView({
   identity,
   isPersonalMode,
@@ -4291,11 +4444,14 @@ function SettingsView({
   onGroupChange,
   onEditProfile,
   onAddReminder,
+  linePushAudit = [],
   familyNotes,
   onFamilyNotesChange,
   onLogout,
 }) {
   const priceEstimate = estimateCareCirclePrice({ careProfiles, collaborators });
+  const accountProviderLabel = identity.provider === "supabase" ? "Google 帳號" : "LINE 帳號";
+  const accountDisplayName = identity.profile?.displayName || identity.profile?.email || accountProviderLabel;
 
   return (
     <div className="settings-grid">
@@ -4334,6 +4490,8 @@ function SettingsView({
       <section className="summary-panel wide-panel">
         <GroupSettings identity={identity} onProfileCreated={onGroupChange} onGroupChange={onGroupChange} />
       </section>
+
+      <ReminderAuditPanel logs={linePushAudit} />
 
       <section className="summary-panel wide-panel">
         <p className="panel-eyebrow">家人要記得的事</p>
@@ -4400,11 +4558,11 @@ function SettingsView({
 
       {isPersonalMode && onLogout && (
         <section className="summary-panel wide-panel">
-          <p className="panel-eyebrow">帳號</p>
+              <p className="panel-eyebrow">帳號</p>
           <div className="account-row">
             <div>
-              <p className="account-name">{identity.profile?.displayName || "LINE 帳號"}</p>
-              <p className="account-sub">目前以 LINE 帳號登入</p>
+              <p className="account-name">{accountDisplayName}</p>
+              <p className="account-sub">目前以 {accountProviderLabel} 登入</p>
             </div>
             <button type="button" className="btn-logout" onClick={onLogout}>
               登出

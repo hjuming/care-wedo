@@ -1413,6 +1413,23 @@ input:focus-visible {
   font-weight: 800;
 }
 
+.auth-callback-card {
+  box-sizing: border-box;
+  width: min(520px, calc(100vw - 24px));
+  margin: min(18vh, 120px) auto 0;
+  text-align: left;
+}
+
+.auth-callback-card .primary-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  text-align: center;
+}
+
 .login-route-actions a {
   text-decoration: none;
 }
@@ -1446,6 +1463,52 @@ input:focus-visible {
 .line-login-btn[aria-disabled="true"] {
   opacity: 0.65;
   cursor: not-allowed;
+}
+
+.google-login-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 56px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  border: 1px solid rgba(49, 95, 104, 0.24);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--primary-dark);
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: 0;
+  padding: 16px 28px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+}
+
+.google-login-btn:hover:not(:disabled) {
+  background: #fff;
+  border-color: rgba(49, 95, 104, 0.44);
+  transform: translateY(-1px);
+}
+
+.google-login-btn:disabled {
+  opacity: 0.62;
+  cursor: not-allowed;
+}
+
+.google-login-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid rgba(49, 95, 104, 0.22);
+  background: #fff;
+  color: #315f68;
+  font-weight: 900;
+  font-size: 15px;
+  line-height: 1;
 }
 
 .nav-login-line-login {
@@ -3728,6 +3791,89 @@ input:focus-visible {
   display: grid;
   grid-template-columns: 1fr;
   gap: 16px;
+}
+
+.reminder-audit-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.panel-heading-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.panel-heading-row h3 {
+  margin: 4px 0 0;
+  color: var(--primary-dark);
+  font-size: 26px;
+  line-height: 1.2;
+}
+
+.panel-heading-row > span {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--surface-strong);
+  color: var(--primary-dark);
+  font-size: 14px;
+  font-weight: 900;
+  padding: 8px 12px;
+}
+
+.reminder-audit-list {
+  display: grid;
+  gap: 10px;
+}
+
+.reminder-audit-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid rgba(94, 143, 154, 0.22);
+  border-radius: 8px;
+  background: white;
+  padding: 14px;
+}
+
+.reminder-audit-row strong,
+.reminder-audit-row span,
+.reminder-audit-row small {
+  display: block;
+}
+
+.reminder-audit-row strong {
+  color: var(--text-primary);
+  font-size: 17px;
+  line-height: 1.25;
+}
+
+.reminder-audit-row span,
+.reminder-audit-row small {
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.5;
+}
+
+.reminder-audit-row > div:last-child {
+  text-align: right;
+}
+
+.reminder-audit-status {
+  color: var(--primary-dark) !important;
+  font-weight: 900 !important;
+}
+
+.reminder-audit-row.is-failed {
+  border-color: rgba(176, 82, 73, 0.34);
+  background: #fff8f5;
+}
+
+.reminder-audit-row.is-skipped {
+  background: var(--surface-strong);
 }
 
 .billing-estimate-panel {

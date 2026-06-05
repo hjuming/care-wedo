@@ -7,11 +7,16 @@ const API_BASE = import.meta.env?.VITE_API_BASE || "/api";
 const CARE_WEDO_URL = "https://care.wedopr.com";
 const TAIPEI_OFFSET_HOURS = 8;
 
+function getIdentityBearerToken(identity = {}) {
+  return identity.accessToken || identity.idToken || null;
+}
+
 export function buildDashboardRequest(apiBase = API_BASE, identity = {}) {
   const init = {};
-  if (identity.idToken) {
+  const token = identity.accessToken || identity.idToken || null;
+  if (token) {
     init.headers = {
-      Authorization: `Bearer ${identity.idToken}`,
+      Authorization: `Bearer ${token}`,
     };
   }
 
@@ -28,9 +33,10 @@ export function buildDashboardRequest(apiBase = API_BASE, identity = {}) {
 
 export function buildAppointmentCalendarRequest(apiBase = API_BASE, appointmentId, identity = {}) {
   const init = {};
-  if (identity.idToken) {
+  const token = getIdentityBearerToken(identity);
+  if (token) {
     init.headers = {
-      Authorization: `Bearer ${identity.idToken}`,
+      Authorization: `Bearer ${token}`,
     };
   }
 
@@ -42,9 +48,10 @@ export function buildAppointmentCalendarRequest(apiBase = API_BASE, appointmentI
 
 export function buildSessionRequest(apiBase = API_BASE, method = "GET", identity = {}) {
   const init = { method, credentials: "same-origin" };
-  if (identity.idToken) {
+  const token = getIdentityBearerToken(identity);
+  if (token) {
     init.headers = {
-      Authorization: `Bearer ${identity.idToken}`,
+      Authorization: `Bearer ${token}`,
     };
   }
   return {

@@ -1,6 +1,6 @@
 # Care WEDO Real Receipt Regression Pack
 
-> 最後更新：2026-05-29  
+> 最後更新：2026-06-05
 > 目標：建立 P0-003 真實台灣醫院單據回歸包，驗證 LINE WebView、OCR、照護對象歸屬、重複上傳與低信心人工確認流程。
 
 ## 1. 安全原則
@@ -58,6 +58,8 @@ tw-prescription-02.jpg
 shasum -a 256 test-fixtures/real-receipt-regression/private-images/*.jpg
 ```
 
+若 manifest 中仍是 `pending-private-image-hash`，smoke runner 會顯示實際 hash 供本機更新；圖片本身仍不可 commit。
+
 ## 4. 驗收指令
 
 先檢查 manifest 結構：
@@ -65,6 +67,22 @@ shasum -a 256 test-fixtures/real-receipt-regression/private-images/*.jpg
 ```bash
 npm run receipt-pack:check
 ```
+
+檢查本機私有圖檔與 hash 狀態：
+
+```bash
+npm run receipt-pack:smoke
+```
+
+需要真的送到 OCR smoke endpoint 時，才明確啟用：
+
+```bash
+CARE_WEDO_REAL_RECEIPT_SMOKE_URL="https://care.wedopr.com/api/ocr/" \
+CARE_WEDO_REAL_RECEIPT_ID_TOKEN="[REDACTED]" \
+node scripts/real-receipt-smoke-runner.mjs --send
+```
+
+注意：`CARE_WEDO_REAL_RECEIPT_ID_TOKEN` 只放本機環境，不寫進文件、不 commit。
 
 再跑完整回歸：
 
@@ -87,6 +105,6 @@ pnpm build
 
 ## 6. 下一步
 
-- 補真實圖片 hash，不把圖片 commit。
 - 建立手動 LINE WebView 測試紀錄表。
-- 下一輪再把 manifest 對接實際 OCR smoke runner，讓圖片檔存在時可半自動跑 10 張測試。
+- 補真實圖片 hash，不把圖片 commit。
+- 私有圖片齊全後，用 `receipt-pack:smoke` 做 dry-run；需要打 OCR endpoint 時才用 `--send`。

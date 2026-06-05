@@ -1,26 +1,32 @@
 import {
   Env,
+  VerifiedCareIdentity,
   createGroup,
   ensureGroupDefaultProfile,
-  getBearerToken,
-  getOrCreateDefaultUser,
+  getAuthenticatedUser,
   getUserGroups,
   getUserMemberships,
   getAccessibleProfiles,
   serializeCareProfile,
   supabaseFetch,
-  verifyLineIdToken,
 } from "../_shared/supabase";
 
 
 async function getIdentity(request: Request, env: Env) {
-  const token = getBearerToken(request);
-  if (!token) {
-    throw new Error("請先登入");
-  }
-  const identity = await verifyLineIdToken(env, token);
-  const userId = await getOrCreateDefaultUser(env, identity.lineUserId, identity);
-  return { userId, identity };
+  return getAuthenticatedUser(env, request);
+}
+
+function serializeAuthenticatedUser(userId: number, identity: VerifiedCareIdentity) {
+  return {
+    id: userId,
+    provider: identity.provider,
+    line_user_id: identity.provider === "line" ? identity.lineUserId : null,
+    auth_user_id: identity.provider === "supabase" ? identity.authUserId : null,
+    auth_provider: identity.provider === "supabase" ? identity.authProvider : null,
+    email: identity.provider === "supabase" ? identity.email || null : null,
+    name: identity.name,
+    picture_url: identity.pictureUrl,
+  };
 }
 
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
@@ -31,12 +37,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     const profiles = await getAccessibleProfiles(env, userId);
 
     return Response.json({
-      user: {
-        id: userId,
-        line_user_id: identity?.lineUserId,
-        name: identity?.name,
-        picture_url: identity?.pictureUrl,
-      },
+      user: serializeAuthenticatedUser(userId, identity),
       groups,
       care_profiles: profiles.map(serializeCareProfile),
       user_memberships: memberships,
@@ -89,13 +90,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
 export const onRequestDelete: PagesFunction<Env> = async ({ request, env }) => {
   try {
-    const token = getBearerToken(request);
-    if (!token) {
-      return Response.json({ error: "請先登入才能刪除帳號" }, { status: 401 });
-    }
-
-    const identity = await verifyLineIdToken(env, token);
-    const userId = await getOrCreateDefaultUser(env, identity.lineUserId, identity);
+    const { userId } = await getAuthenticatedUser(env, request);
 
     // Delete in dependency order: appointments → medications → care_profiles → user_family_groups → users
     await supabaseFetch(env, `appointments?user_id=eq.${userId}`, { method: "DELETE" });

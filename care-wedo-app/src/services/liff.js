@@ -7,6 +7,10 @@ import {
   fetchSessionIdentity,
   issueBrowserHandoffToken,
 } from "./api.js";
+import {
+  clearSupabaseAuthSession,
+  getStoredSupabaseIdentity,
+} from "./supabaseAuth.js";
 import { isLineCallbackSearch } from "../routing.js";
 
 const DEFAULT_LIFF_ID = "2009972224-fQcfBXw5";
@@ -87,6 +91,7 @@ export function clearCareWedoLocalSession() {
 
 export async function resetCareWedoSessionAndReturnHome() {
   await clearServerSession();
+  clearSupabaseAuthSession();
   clearCareWedoLocalSession();
 
   try {
@@ -127,6 +132,8 @@ export async function initLineIdentity() {
   }
 
   const serverSession = await fetchSessionIdentity();
+  const supabaseSession = getStoredSupabaseIdentity();
+  if (supabaseSession) return supabaseSession;
   if (serverSession) return serverSession;
 
   if (!LIFF_ID) {

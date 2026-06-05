@@ -23,7 +23,7 @@ export default function LoginSetup({ identity, onSetupComplete }) {
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          throw new Error(data.error || "LINE 登入狀態確認失敗，請重新整理後再試一次。");
+          throw new Error(data.error || "登入狀態確認失敗，請重新整理後再試一次。");
         }
         
         if (!isMounted) return;
@@ -35,7 +35,7 @@ export default function LoginSetup({ identity, onSetupComplete }) {
         }
       } catch (err) {
         if (!isMounted) return;
-        setError(err.message || "LINE 登入狀態確認失敗，請重新整理後再試一次。");
+        setError(err.message || "登入狀態確認失敗，請重新整理後再試一次。");
         setStep("error");
       }
     }
@@ -98,10 +98,10 @@ export default function LoginSetup({ identity, onSetupComplete }) {
     return (
       <div className="setup-overlay">
         <div className="setup-card">
-          <p className="panel-eyebrow">LINE 狀態確認</p>
+          <p className="panel-eyebrow">登入狀態確認</p>
           <h2>先幫你重新確認登入</h2>
           <p className="helper-copy">
-            系統沒有確認到有效的 LINE 登入狀態，所以先不進入設定流程，避免讓你重複綁定。
+            系統沒有確認到有效的登入狀態，所以先不進入設定流程，避免讓你重複綁定。
           </p>
           {error && <p className="error-msg">{error}</p>}
           <div className="setup-actions">
@@ -117,7 +117,7 @@ export default function LoginSetup({ identity, onSetupComplete }) {
               重新確認
             </button>
             <a className="secondary-action" href="/login">
-              回到 LINE 登入
+              回到登入頁
             </a>
           </div>
         </div>

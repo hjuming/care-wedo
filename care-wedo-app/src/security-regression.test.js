@@ -714,6 +714,29 @@ test("LINE reminder pushes are recorded as de-identified audit logs", () => {
   assert.match(evening, /evening_appointment_reminder/);
 });
 
+test("Dashboard exposes recent LINE push audit summaries without sensitive message content", () => {
+  const dashboard = readProjectFile("functions/api/dashboard.ts");
+  const app = readProjectFile("care-wedo-app/src/App.jsx");
+  const css = readProjectFile("care-wedo-app/src/index.css");
+  const helper = dashboard.slice(dashboard.indexOf("async function fetchLinePushAuditLogs"), dashboard.indexOf("function filterAppointmentsByHistoryAccess"));
+
+  assert.match(dashboard, /type LinePushAuditRow/);
+  assert.match(dashboard, /fetchLinePushAuditLogs/);
+  assert.match(dashboard, /line_push_logs\?group_id=eq\.\$\{groupId\}/);
+  assert.match(dashboard, /select=id,event_type,target_date,item_count,status,http_status,line_user_suffix,created_at/);
+  assert.match(dashboard, /line_push_audit:\s*linePushAuditLogs/);
+  assert.doesNotMatch(helper, /message_text|line_user_id/);
+
+  assert.match(app, /const linePushAudit = dashboard\?\.line_push_audit \|\| \[\]/);
+  assert.match(app, /linePushAudit=\{linePushAudit\}/);
+  assert.match(app, /ReminderAuditPanel/);
+  assert.match(app, /最近提醒送達/);
+  assert.match(app, /LINE 後四碼/);
+  assert.doesNotMatch(app, /line_user_id|message_text/);
+  assert.match(css, /\.reminder-audit-panel/);
+  assert.match(css, /\.reminder-audit-row/);
+});
+
 test("Morning reminders target today while evening reminders tolerate delayed schedule runs", () => {
   const morning = readProjectFile("functions/api/cron/reminders.ts");
   const evening = readProjectFile("functions/api/cron/evening.ts");

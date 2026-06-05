@@ -22,6 +22,11 @@ test("resolveCareWedoRoute sends the login path to the login page", () => {
   assert.equal(resolveCareWedoRoute("/login"), "login");
 });
 
+test("resolveCareWedoRoute sends Supabase Auth callbacks to the callback page", () => {
+  assert.equal(resolveCareWedoRoute("/auth/callback"), "auth-callback");
+  assert.equal(resolveCareWedoRoute("/auth/callback?next=%2Fapp"), "auth-callback");
+});
+
 test("resolveCareWedoRoute keeps product information pages outside the dashboard", () => {
   assert.equal(resolveCareWedoRoute("/about"), "features");
   assert.equal(resolveCareWedoRoute("/features"), "features");

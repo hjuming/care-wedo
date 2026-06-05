@@ -9,6 +9,7 @@ export function resolveCareWedoRoute(pathname = "/") {
   if (normalized === "/") return "landing";
   if (normalized === "/app") return "app";
   if (normalized === "/app/open" || normalized === "/open") return "external-open";
+  if (normalized === "/auth/callback") return "auth-callback";
   if (normalized === "/login") return "login";
   if (normalized === "/about") return "features";
   if (normalized === "/features") return "features";
