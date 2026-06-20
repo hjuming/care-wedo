@@ -233,7 +233,7 @@ EmailJS 需要的環境變數：
 
 剩餘風險與優先級修正：
 
-- 仍需依 `GOOGLE_PROTECTED_WRITE_SMOKE_RUNBOOK.md` 或 `npm run google:protected-write:smoke` 用 staging Google 帳號實測 OCR、新增預約、用藥確認三條寫入路徑。
+- 仍需先跑 `npm run staging:smoke:ready` 確認必要 env 齊全，再依 `GOOGLE_PROTECTED_WRITE_SMOKE_RUNBOOK.md` 或 `npm run google:protected-write:smoke` 用 staging Google 帳號實測 OCR、新增預約、用藥確認三條寫入路徑。
 - Production Cloudflare env 需維持 `REMINDER_TEST_ONLY` 不存在或為 `0`；只有明確測試時才設 `1`。
 - 資料圍堵仍是最高風險：目前 repo 內 `supabase/schema.sql` 已啟用 RLS，且補了 authenticated read-only table / Storage object policies；但 Functions 的 `supabaseFetch()` 與 Storage helper 仍使用 service role 呼叫 Supabase，會 bypass RLS。短期合約仍是 service-role-only + app-layer ownership filters，且隔離測試已覆蓋四個核心 PATCH、dashboard/documents 讀取 scope、foreign document signed URL / storage delete 阻擋與 upload path namespace；下一步是 staging Google E2E、`npm run storage:policy:smoke` live verification 與正式 direct-write RLS 設計。
 
@@ -265,7 +265,7 @@ EmailJS 需要的環境變數：
 
 ### P0：實機穩定性
 
-- 依 `GOOGLE_PROTECTED_WRITE_SMOKE_RUNBOOK.md` 或 `npm run google:protected-write:smoke` 用 staging Google 帳號實測 OCR、新增預約、用藥確認三條 protected write path；確認 Google/Supabase 使用者解析到自己的 `userId`，不落到 LINE-only 或共用測試帳號。
+- 先跑 `npm run staging:smoke:ready`；必要 env 齊全後，依 `GOOGLE_PROTECTED_WRITE_SMOKE_RUNBOOK.md` 或 `npm run google:protected-write:smoke` 用 staging Google 帳號實測 OCR、新增預約、用藥確認三條 protected write path；確認 Google/Supabase 使用者解析到自己的 `userId`，不落到 LINE-only 或共用測試帳號。
 - 補資料圍堵第二層防護：目前已明文採 service-role-only + app-layer ownership filters，且 medications / appointments / profiles / care_documents PATCH、dashboard/documents 讀取 scope、foreign document signed URL、foreign document storage delete、upload path namespace 都有負向或合約測試；DB 層已補 authenticated read-only table / Storage object policies、direct write revoke 與 storage smoke。下一步是 staging Google E2E、Storage policy live verification 與 direct-write RLS 設計。
 - 用至少 10 張真實台灣醫院單據測試 LINE 上傳流程：已建立 `test-fixtures/real-receipt-regression/manifest.json`、`expected-shapes.json`、`REAL_RECEIPT_REGRESSION_RUNBOOK.md`、`npm run receipt-pack:private-check`、`npm run receipt-pack:hashes`、`npm run receipt-pack:shapes` 與 `npm run receipt-pack:smoke`，真實圖檔不進 Git；目前本機 dry-run 顯示 10 張 private images 尚未放入。
 - 測試單張、多張、重複上傳、先選錯人再改人。
@@ -327,7 +327,7 @@ pnpm build
 
 - 2026-06-20 CI：`Deploy to Cloudflare Pages` passed（lint、前端 + regression、functions tenant-isolation、receipt-pack、build、deploy）。
 - 2026-06-20 CI：`Deploy Reminder Scheduler` passed（Cloudflare Cron Worker deploy + secret sync）。
-- `npm test`（`care-wedo-app`）：172/172 passed。
+- `npm test`（`care-wedo-app`）：173/173 passed。
 - `npm run lint`（`care-wedo-app`）：passed。
 - `npm run build`（`care-wedo-app`）：passed。
 - `npm run test:functions`：23/23 passed。

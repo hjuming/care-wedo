@@ -410,7 +410,7 @@ CI/CD gate：
 - `.github/workflows/deploy-reminder-scheduler.yml` 於 reminder scheduler worker 或 workflow 變更時部署 Cloudflare Cron Worker，並同步 `CRON_SECRET`。
 - GitHub Actions runtime 已升級到 Node 24 系列 action：`actions/checkout@v7`、`actions/setup-node@v6`；專案 build/test 的 `node-version` 維持 `22`。
 - 前端與 functions 測試在 CI 設定 `TZ=Asia/Taipei`，避免 GitHub runner 預設 UTC 造成 todayTasks 類日期斷言偏一天。
-- 資料圍堵明文採短期 service-role-only + app-layer ownership filters，細節見 `DATA_CONTAINMENT_CONTRACT.md`；Google protected write staging 驗收見 `GOOGLE_PROTECTED_WRITE_SMOKE_RUNBOOK.md` 與 `npm run google:protected-write:smoke`；Storage policy staging 驗收見 `STORAGE_POLICY_SMOKE_RUNBOOK.md` 與 `npm run storage:policy:smoke`。
+- 資料圍堵明文採短期 service-role-only + app-layer ownership filters，細節見 `DATA_CONTAINMENT_CONTRACT.md`；staging smoke 前先跑 `npm run staging:smoke:ready` 檢查必要 env，Google protected write staging 驗收見 `GOOGLE_PROTECTED_WRITE_SMOKE_RUNBOOK.md` 與 `npm run google:protected-write:smoke`；Storage policy staging 驗收見 `STORAGE_POLICY_SMOKE_RUNBOOK.md` 與 `npm run storage:policy:smoke`。
 
 ---
 
@@ -418,7 +418,7 @@ CI/CD gate：
 
 P0：
 
-- 用 `GOOGLE_PROTECTED_WRITE_SMOKE_RUNBOOK.md` 或 `npm run google:protected-write:smoke` 在 staging 以 Google 帳號實測 OCR、新增預約、用藥確認三條寫入路徑，確認 Supabase/Google 使用者不會落到 LINE-only 或共用測試帳號。
+- 先用 `npm run staging:smoke:ready` 確認 staging smoke 必要 env 齊全；再依 `GOOGLE_PROTECTED_WRITE_SMOKE_RUNBOOK.md` 或 `npm run google:protected-write:smoke` 在 staging 以 Google 帳號實測 OCR、新增預約、用藥確認三條寫入路徑，確認 Supabase/Google 使用者不會落到 LINE-only 或共用測試帳號。
 - 資料圍堵防護網已先明文採 service-role-only + app-layer ownership filters，且 tenant-isolation 已覆蓋 medications / appointments / profiles / care_documents PATCH、dashboard/documents 讀取 scope、foreign document signed URL / storage delete 阻擋與 upload path namespace；DB 層已補 authenticated read-only table / Storage object policies 與 direct write revoke。下一步是 staging Google E2E、`npm run storage:policy:smoke` live verification 與正式 direct-write RLS 設計。
 - 用 10 張真實單據完成 LINE 實機回歸測試；目前已建立去識別化 manifest、expected shape、private image hash 工具與驗證工具；本機 dry-run 顯示 10 張 private images 尚未放入，待補真實 sha256 與實測紀錄。
 - 完成 390px 手機與 LINE WebView 實機檢查，尤其是照護圈、用藥總表、費用確認 modal。

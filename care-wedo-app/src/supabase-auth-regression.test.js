@@ -107,3 +107,26 @@ test("Google protected write staging smoke covers the three P0 write paths witho
   assert.match(runbook, /google:protected-write:smoke:dry/);
   assert.match(packageJson, /google:protected-write:smoke/);
 });
+
+test("staging smoke readiness gate aggregates Google and Storage prerequisites without logging secrets", () => {
+  const script = readProjectFile("scripts/staging-smoke-readiness.mjs");
+  const packageJson = readProjectFile("package.json");
+
+  assert.match(script, /google_protected_write_smoke/);
+  assert.match(script, /storage_policy_smoke/);
+  assert.match(script, /CARE_WEDO_STAGING_BASE_URL/);
+  assert.match(script, /CARE_WEDO_GOOGLE_ACCESS_TOKEN/);
+  assert.match(script, /CARE_WEDO_SMOKE_PROFILE_ID/);
+  assert.match(script, /CARE_WEDO_SMOKE_GROUP_ID/);
+  assert.match(script, /CARE_WEDO_SMOKE_EXPECTED_USER_ID/);
+  assert.match(script, /SUPABASE_PUBLISHABLE_KEY/);
+  assert.match(script, /CARE_WEDO_STORAGE_ACCESS_TOKEN/);
+  assert.match(script, /CARE_WEDO_STORAGE_OWNED_PATH/);
+  assert.match(script, /CARE_WEDO_STORAGE_FOREIGN_PATH/);
+  assert.match(script, /process\.exit\(1\)/);
+  assert.match(script, /report_only/);
+  assert.doesNotMatch(script, /console\.(log|error)\([^)]*(token|accessToken|serviceRole|ownedPath|foreignPath)/i);
+
+  assert.match(packageJson, /staging:smoke:ready/);
+  assert.match(packageJson, /staging:smoke:ready:report/);
+});
