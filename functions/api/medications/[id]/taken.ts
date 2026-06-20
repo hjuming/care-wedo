@@ -1,10 +1,10 @@
 import {
   Env,
-  getAuthenticatedUser,
   getBearerToken,
   getUserMemberships,
   supabaseFetch,
 } from "../../../_shared/supabase";
+import { getRequestUser } from "../../../_shared/auth_context";
 
 type MedicationScopeRow = {
   id: number;
@@ -29,7 +29,8 @@ function inferTimeSlot(medication: MedicationScopeRow, fallback = "") {
   return "unspecified";
 }
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }) => {
+export const onRequestPost: PagesFunction<Env> = async (context) => {
+  const { request, env, params } = context;
   try {
     const id = Number(params.id);
     if (!Number.isFinite(id) || id <= 0) {
@@ -41,7 +42,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
       return Response.json({ error: "請先登入" }, { status: 401 });
     }
 
-    const { userId } = await getAuthenticatedUser(env, request);
+    const { userId } = await getRequestUser(context);
     const memberships = await getUserMemberships(env, userId);
     const groupIds = memberships.map((membership) => membership.group_id);
 
@@ -99,9 +100,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
       status: "taken",
     });
   } catch (error) {
+    const message = error instanceof Error ? error.message : "無法記錄吃藥狀態";
     return Response.json(
-      { error: error instanceof Error ? error.message : "無法記錄吃藥狀態" },
-      { status: 500 },
+      { error: message },
+      { status: message.includes("請先登入") ? 401 : 500 },
     );
   }
 };

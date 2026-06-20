@@ -7,7 +7,6 @@ import {
   MULTIPLE_FAMILY_GROUPS_FEATURE,
   PlanRow,
   getAccessibleProfiles,
-  getAuthenticatedUser,
   getBearerToken,
   getGroupOcrUsage,
   getGroupPlan,
@@ -21,6 +20,7 @@ import {
   supabaseFetch,
   VerifiedCareIdentity,
 } from "../_shared/supabase";
+import { getRequestUser } from "../_shared/auth_context";
 
 type Env = {
   SUPABASE_URL: string;
@@ -301,9 +301,11 @@ async function fetchAppointments(
 
 async function fetchMedications(env: Env, groupId: number | null, profileId: number | null): Promise<MedicationRow[]> {
   if (!profileId && !groupId) return [];
-  const path = profileId
-    ? `medications?profile_id=eq.${profileId}&active=eq.true&select=*&order=created_at.desc`
-    : `medications?group_id=eq.${groupId}&active=eq.true&select=*&order=created_at.desc`;
+  const path = profileId && groupId
+    ? `medications?group_id=eq.${groupId}&profile_id=eq.${profileId}&active=eq.true&select=*&order=created_at.desc`
+    : profileId
+      ? `medications?profile_id=eq.${profileId}&active=eq.true&select=*&order=created_at.desc`
+      : `medications?group_id=eq.${groupId}&active=eq.true&select=*&order=created_at.desc`;
   return supabaseFetch<MedicationRow[]>(env, path);
 }
 
@@ -356,12 +358,14 @@ type MedicationLogRow = {
 async function fetchTodayMedicationLogs(env: Env, medications: MedicationRow[]): Promise<Map<number, MedicationLogRow[]>> {
   const medicationIds = medications.map((medication) => medication.id).filter(Boolean);
   if (medicationIds.length === 0) return new Map();
+  const groupIds = Array.from(new Set(medications.map((medication) => medication.group_id).filter(Boolean)));
+  const groupFilter = groupIds.length ? `&group_id=in.(${groupIds.join(",")})` : "";
 
   let rows: MedicationLogRow[] = [];
   try {
     rows = await supabaseFetch<MedicationLogRow[]>(
       env,
-      `medication_logs?medication_id=in.(${medicationIds.join(",")})&taken_date=eq.${todayInTaipei()}&select=medication_id,status,taken_date,time_slot&order=created_at.desc`,
+      `medication_logs?medication_id=in.(${medicationIds.join(",")})${groupFilter}&taken_date=eq.${todayInTaipei()}&select=medication_id,status,taken_date,time_slot&order=created_at.desc`,
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
@@ -383,7 +387,8 @@ async function fetchTodayMedicationLogs(env: Env, medications: MedicationRow[]):
   }, new Map<number, MedicationLogRow[]>());
 }
 
-export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+export const onRequestGet: PagesFunction<Env> = async (context) => {
+  const { request, env } = context;
   try {
     // ── Unauthenticated: return static demo, zero DB queries ──────────────────
     const token = getBearerToken(request);
@@ -392,7 +397,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     }
 
     // ── Authenticated path ────────────────────────────────────────────────────
-    const { userId, identity } = await getAuthenticatedUser(env, request);
+    const { userId, identity } = await getRequestUser(context);
     const userDisplayName = identityDisplayName(identity);
     const requestedProfileId = parseProfileId(request);
     const requestedGroupId = parseGroupId(request);

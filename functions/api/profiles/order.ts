@@ -1,21 +1,22 @@
 import {
   Env,
   getAccessibleProfiles,
-  getAuthenticatedUser,
   getBearerToken,
   serializeCareProfile,
   setProfileOrderInFlags,
   supabaseFetch,
 } from "../../_shared/supabase";
+import { getRequestUser } from "../../_shared/auth_context";
 
-export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
+export const onRequestPatch: PagesFunction<Env> = async (context) => {
+  const { request, env } = context;
   try {
     const idToken = getBearerToken(request);
     if (!idToken) {
       return Response.json({ error: "請先登入" }, { status: 401 });
     }
 
-    const { userId } = await getAuthenticatedUser(env, request);
+    const { userId } = await getRequestUser(context);
     const body = await request.json<{ profile_ids?: unknown[] }>().catch(() => ({}));
     const profileIds = (body.profile_ids || [])
       .map((id) => Number(id))
@@ -62,9 +63,10 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
   } catch (error) {
     const message = error instanceof Error ? error.message : "無法更新照護對象排序";
     const missingSortOrder = /care_profiles\.sort_order|sort_order.*column|Could not find.*sort_order/i.test(message);
+    const missingAuth = message.includes("請先登入");
     return Response.json(
       { error: missingSortOrder ? "排序欄位尚未啟用，請先套用最新資料庫 migration。" : message },
-      { status: missingSortOrder ? 409 : 500 },
+      { status: missingAuth ? 401 : missingSortOrder ? 409 : 500 },
     );
   }
 };

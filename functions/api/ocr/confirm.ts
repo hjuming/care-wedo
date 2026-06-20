@@ -1,10 +1,10 @@
 import {
   Env,
-  getAuthenticatedUser,
   getBearerToken,
   getUserMemberships,
   supabaseFetch,
 } from "../../_shared/supabase";
+import { getRequestUser } from "../../_shared/auth_context";
 import {
   isMissingMedicationIdentityColumn,
   stripMedicationIdentityPayload,
@@ -38,13 +38,14 @@ type PendingMedicationRow = {
   dosage_text?: string | null;
 };
 
-async function getCurrentUserContext(request: Request, env: Env) {
+async function getCurrentUserContext(context: { request: Request; env: Env; data?: any }) {
+  const { request, env } = context;
   const token = getBearerToken(request);
   if (!token) {
     return { error: Response.json({ error: "請先登入" }, { status: 401 }) };
   }
 
-  const { userId } = await getAuthenticatedUser(env, request);
+  const { userId } = await getRequestUser(context);
   const memberships = await getUserMemberships(env, userId);
   return { userId, groupIds: memberships.map((membership) => membership.group_id) };
 }
@@ -167,7 +168,8 @@ async function confirmMedications(env: Env, documentId: number) {
   return Array.from(new Set([...activatedMedicationIds, ...mergedMedicationIds]));
 }
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+export const onRequestPost: PagesFunction<Env> = async (context) => {
+  const { request, env } = context;
   try {
     const body = await request.json<{ document_id?: number }>().catch(() => ({}));
     const documentId = Number(body.document_id);
@@ -175,15 +177,15 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       return Response.json({ error: "請提供有效的文件 ID" }, { status: 400 });
     }
 
-    const context = await getCurrentUserContext(request, env);
-    if ("error" in context) return context.error;
+    const userContext = await getCurrentUserContext(context);
+    if ("error" in userContext) return userContext.error;
 
     const documents = await supabaseFetch<CareDocumentSummary[]>(
       env,
       `care_documents?id=eq.${documentId}&select=id,group_id,profile_id,status&limit=1`,
     );
     const document = documents[0];
-    if (!document || !context.groupIds.includes(document.group_id)) {
+    if (!document || !userContext.groupIds.includes(document.group_id)) {
       return Response.json({ error: "找不到文件或沒有確認權限" }, { status: 403 });
     }
 

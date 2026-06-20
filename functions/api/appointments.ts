@@ -1,11 +1,11 @@
 import {
   Env,
   getAccessibleProfiles,
-  getAuthenticatedUser,
   getBearerToken,
   serializeAppointment,
   supabaseFetch,
 } from "../_shared/supabase";
+import { getRequestUser } from "../_shared/auth_context";
 
 const ALLOWED_TYPES = new Set([
   "reminder",
@@ -24,14 +24,15 @@ function cleanString(value: unknown, fallback = "") {
   return typeof value === "string" ? value.trim().slice(0, 500) : fallback;
 }
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+export const onRequestPost: PagesFunction<Env> = async (context) => {
+  const { request, env } = context;
   try {
     const idToken = getBearerToken(request);
     if (!idToken) {
       return Response.json({ error: "請先登入" }, { status: 401 });
     }
 
-    const { userId } = await getAuthenticatedUser(env, request);
+    const { userId } = await getRequestUser(context);
     const body = await request.json<any>().catch(() => ({}));
 
     const profileId = Number(body.profile_id);
@@ -104,9 +105,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
     return Response.json({ success: true, appointment: serializeAppointment(rows[0]) });
   } catch (error) {
+    const message = error instanceof Error ? error.message : "新增排程失敗";
     return Response.json(
-      { error: error instanceof Error ? error.message : "新增排程失敗" },
-      { status: 500 },
+      { error: message },
+      { status: message.includes("請先登入") ? 401 : 500 },
     );
   }
 };

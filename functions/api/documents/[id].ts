@@ -18,13 +18,14 @@ function parseDocumentId(params: Record<string, string | string[]>) {
   return Number.isFinite(id) && id > 0 ? id : null;
 }
 
-export const onRequestGet: PagesFunction<Env> = async ({ request, env, params }) => {
+export const onRequestGet: PagesFunction<Env> = async (context) => {
+  const { env, params } = context;
   try {
     const id = parseDocumentId(params);
     if (!id) return Response.json({ error: "無效的文件 ID" }, { status: 400 });
 
-    const context = await getCurrentUserDocumentContext(request, env);
-    const document = await fetchAccessibleDocument(env, id, context.groupIds);
+    const documentContext = await getCurrentUserDocumentContext(context);
+    const document = await fetchAccessibleDocument(env, id, documentContext.groupIds);
     if (!document) return Response.json({ error: "找不到文件或沒有查看權限" }, { status: 404 });
 
     return Response.json({ document: await buildCareDocumentDetail(env, document) });
@@ -35,13 +36,14 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env, params })
   }
 };
 
-export const onRequestPatch: PagesFunction<Env> = async ({ request, env, params }) => {
+export const onRequestPatch: PagesFunction<Env> = async (context) => {
+  const { request, env, params } = context;
   try {
     const id = parseDocumentId(params);
     if (!id) return Response.json({ error: "無效的文件 ID" }, { status: 400 });
 
-    const context = await getCurrentUserDocumentContext(request, env);
-    const document = await fetchAccessibleDocument(env, id, context.groupIds);
+    const documentContext = await getCurrentUserDocumentContext(context);
+    const document = await fetchAccessibleDocument(env, id, documentContext.groupIds);
     if (!document) return Response.json({ error: "找不到文件或沒有修改權限" }, { status: 404 });
 
     const body = await request.json<any>().catch(() => ({}));
@@ -69,13 +71,14 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env, params 
   }
 };
 
-export const onRequestDelete: PagesFunction<Env> = async ({ request, env, params }) => {
+export const onRequestDelete: PagesFunction<Env> = async (context) => {
+  const { env, params } = context;
   try {
     const id = parseDocumentId(params);
     if (!id) return Response.json({ error: "無效的文件 ID" }, { status: 400 });
 
-    const context = await getCurrentUserDocumentContext(request, env);
-    const document = await fetchAccessibleDocument(env, id, context.groupIds);
+    const documentContext = await getCurrentUserDocumentContext(context);
+    const document = await fetchAccessibleDocument(env, id, documentContext.groupIds);
     if (!document) return Response.json({ error: "找不到文件或沒有刪除權限" }, { status: 404 });
 
     if (document.storage_bucket && document.storage_path) {

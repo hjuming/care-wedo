@@ -1,8 +1,6 @@
 import type { AppointmentRow, CareDocumentRow, CareProfileRow, Env, MedicationRow } from "./supabase";
 import {
   getAccessibleProfiles,
-  getAuthenticatedUser,
-  getBearerToken,
   getUserMemberships,
   serializeAppointment,
   serializeCareDocument,
@@ -10,6 +8,7 @@ import {
   supabaseFetch,
 } from "./supabase";
 import type { ParsedMedicalData } from "./medical_ocr";
+import { getRequestUser } from "./auth_context";
 
 export const CARE_DOCUMENTS_BUCKET = "care-documents";
 export const CARE_DOCUMENT_SIGNED_URL_SECONDS = 5 * 60;
@@ -209,11 +208,9 @@ export async function createCareDocumentSignedUrl(env: Env, bucket: string, path
     : `${env.SUPABASE_URL.replace(/\/$/, "")}/storage/v1${signedUrl}`;
 }
 
-export async function getCurrentUserDocumentContext(request: Request, env: Env): Promise<CurrentUserDocumentContext> {
-  const token = getBearerToken(request);
-  if (!token) throw new Error("請先登入");
-
-  const { userId } = await getAuthenticatedUser(env, request);
+export async function getCurrentUserDocumentContext(context: { request: Request; env: Env; data?: any }): Promise<CurrentUserDocumentContext> {
+  const { env } = context;
+  const { userId } = await getRequestUser(context);
   const memberships = await getUserMemberships(env, userId);
   const groupIds = memberships.map((membership) => membership.group_id);
   const profiles = await getAccessibleProfiles(env, userId);
@@ -240,11 +237,11 @@ export async function buildCareDocumentDetail(env: Env, document: CareDocumentRo
   const [appointments, medications] = await Promise.all([
     supabaseFetch<AppointmentRow[]>(
       env,
-      `appointments?source_document_id=eq.${document.id}&status=neq.deleted&select=*&order=date.asc.nullslast,created_at.desc`,
+      `appointments?source_document_id=eq.${document.id}&group_id=eq.${document.group_id}&status=neq.deleted&select=*&order=date.asc.nullslast,created_at.desc`,
     ),
     supabaseFetch<MedicationRow[]>(
       env,
-      `medications?source_document_id=eq.${document.id}&select=*&order=created_at.desc`,
+      `medications?source_document_id=eq.${document.id}&group_id=eq.${document.group_id}&select=*&order=created_at.desc`,
     ),
   ]);
 
@@ -266,4 +263,3 @@ export function documentMatchesQuery(document: ReturnType<typeof serializeCareDo
     JSON.stringify(document.ai_summary || {}),
   ].some((value) => String(value || "").toLowerCase().includes(needle));
 }
-

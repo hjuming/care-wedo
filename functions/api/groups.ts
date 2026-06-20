@@ -6,8 +6,6 @@ import {
   createCareProfile,
   createGroup,
   getAccessibleProfiles,
-  getAuthenticatedUser,
-  getBearerToken,
   getGroupPlan,
   getUserGroups,
   getUserMemberships,
@@ -18,6 +16,7 @@ import {
   supabaseFetch,
   updateUserFamilyGroupMembership,
 } from "../_shared/supabase";
+import { getRequestUser } from "../_shared/auth_context";
 
 type Env = {
   SUPABASE_URL: string;
@@ -25,13 +24,9 @@ type Env = {
   LINE_LOGIN_CHANNEL_ID?: string;
 };
 
-// Helper to get identity from request
-async function getIdentity(request: Request, env: Env) {
-  const token = getBearerToken(request);
-  if (!token) {
-    throw new Error("請先登入");
-  }
-  const { userId } = await getAuthenticatedUser(env, request);
+// Helper to get identity from request-scoped auth context.
+async function getIdentity(context: { request: Request; env: Env; data?: any }) {
+  const { userId } = await getRequestUser(context);
   return userId;
 }
 
@@ -75,9 +70,10 @@ async function getGroupMembers(env: Env, groupId: number): Promise<GroupMember[]
   }));
 }
 
-export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+export const onRequestGet: PagesFunction<Env> = async (context) => {
+  const { env } = context;
   try {
-    const userId = await getIdentity(request, env);
+    const userId = await getIdentity(context);
     const groups = await getUserGroups(env, userId);
     const memberships = await getUserMemberships(env, userId);
     const profiles = await getAccessibleProfiles(env, userId);
@@ -124,9 +120,10 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   }
 };
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+export const onRequestPost: PagesFunction<Env> = async (context) => {
+  const { request, env } = context;
   try {
-    const userId = await getIdentity(request, env);
+    const userId = await getIdentity(context);
     const body = await request.json<{
       action: string;
       name?: string;

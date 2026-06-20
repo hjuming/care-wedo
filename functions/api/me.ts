@@ -3,17 +3,16 @@ import {
   VerifiedCareIdentity,
   createGroup,
   ensureGroupDefaultProfile,
-  getAuthenticatedUser,
   getUserGroups,
   getUserMemberships,
   getAccessibleProfiles,
   serializeCareProfile,
   supabaseFetch,
 } from "../_shared/supabase";
+import { getRequestUser } from "../_shared/auth_context";
 
-
-async function getIdentity(request: Request, env: Env) {
-  return getAuthenticatedUser(env, request);
+async function getIdentity(context: { request: Request; env: Env; data?: any }) {
+  return getRequestUser(context);
 }
 
 function serializeAuthenticatedUser(userId: number, identity: VerifiedCareIdentity) {
@@ -29,9 +28,10 @@ function serializeAuthenticatedUser(userId: number, identity: VerifiedCareIdenti
   };
 }
 
-export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+export const onRequestGet: PagesFunction<Env> = async (context) => {
+  const { env } = context;
   try {
-    const { userId, identity } = await getIdentity(request, env);
+    const { userId, identity } = await getIdentity(context);
     const groups = await getUserGroups(env, userId);
     const memberships = await getUserMemberships(env, userId);
     const profiles = await getAccessibleProfiles(env, userId);
@@ -53,9 +53,10 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   }
 };
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+export const onRequestPost: PagesFunction<Env> = async (context) => {
+  const { request, env } = context;
   try {
-    const { userId } = await getIdentity(request, env);
+    const { userId } = await getIdentity(context);
     const body = await request.json<{
       action?: string;
       family_name?: string;
@@ -88,9 +89,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   }
 };
 
-export const onRequestDelete: PagesFunction<Env> = async ({ request, env }) => {
+export const onRequestDelete: PagesFunction<Env> = async (context) => {
+  const { env } = context;
   try {
-    const { userId } = await getAuthenticatedUser(env, request);
+    const { userId } = await getRequestUser(context);
 
     // Delete in dependency order: appointments → medications → care_profiles → user_family_groups → users
     await supabaseFetch(env, `appointments?user_id=eq.${userId}`, { method: "DELETE" });
@@ -119,9 +121,10 @@ export const onRequestDelete: PagesFunction<Env> = async ({ request, env }) => {
 
     return Response.json({ success: true, message: "帳號與所有相關資料已刪除。" });
   } catch (error) {
+    const message = error instanceof Error ? error.message : "刪除帳號失敗";
     return Response.json(
-      { error: error instanceof Error ? error.message : "刪除帳號失敗" },
-      { status: 500 },
+      { error: message },
+      { status: message.includes("請先登入") ? 401 : 500 },
     );
   }
 };

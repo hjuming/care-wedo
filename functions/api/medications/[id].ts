@@ -1,21 +1,23 @@
 import {
   Env,
   MedicationUpdateFields,
-  getAuthenticatedUser,
   getBearerToken,
   getUserMemberships,
   patchMedication,
   serializeMedication,
 } from "../../_shared/supabase";
+import { getRequestUser } from "../../_shared/auth_context";
 
-async function getIdentityAndGroups(request: Request, env: Env) {
-  const { userId } = await getAuthenticatedUser(env, request);
+async function getIdentityAndGroups(context: { request: Request; env: Env; data?: any }) {
+  const { env } = context;
+  const { userId } = await getRequestUser(context);
   const memberships = await getUserMemberships(env, userId);
   const groupIds = memberships.map((m) => m.group_id);
   return { userId, groupIds };
 }
 
-export const onRequestPatch: PagesFunction<Env> = async ({ request, env, params }) => {
+export const onRequestPatch: PagesFunction<Env> = async (context) => {
+  const { request, env, params } = context;
   try {
     const id = Number(params.id);
     if (!Number.isFinite(id) || id <= 0) {
@@ -27,7 +29,7 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env, params 
       return Response.json({ error: "請先登入" }, { status: 401 });
     }
 
-    const { userId, groupIds } = await getIdentityAndGroups(request, env);
+    const { userId, groupIds } = await getIdentityAndGroups(context);
 
     const body = await request.json<MedicationUpdateFields>().catch(() => ({}));
 
@@ -53,7 +55,7 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env, params 
     return Response.json({ success: true, medication: serializeMedication(updated) });
   } catch (error) {
     const message = error instanceof Error ? error.message : "更新藥物失敗";
-    const status = message.includes("沒有修改權限") ? 403 : 500;
+    const status = message.includes("請先登入") ? 401 : message.includes("沒有修改權限") ? 403 : 500;
     return Response.json({ error: message }, { status });
   }
 };

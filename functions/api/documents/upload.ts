@@ -142,7 +142,8 @@ async function parseCareDocument(env: Env, file: File, bytes: Uint8Array): Promi
   return JSON.parse(jsonStart >= 0 ? text.slice(jsonStart, jsonEnd) : text) as ParsedCareDocumentData;
 }
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+export const onRequestPost: PagesFunction<Env> = async (context) => {
+  const { request, env } = context;
   const startedAt = Date.now();
   let documentId: number | null = null;
 
@@ -152,7 +153,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       return Response.json({ error: "請使用表單上傳文件" }, { status: 400 });
     }
 
-    const context = await getCurrentUserDocumentContext(request, env);
+    const documentContext = await getCurrentUserDocumentContext(context);
     const formData = await request.formData();
     const file = formData.get("file");
     if (!(file instanceof File)) {
@@ -161,7 +162,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
     const requestedProfileId = Number(formData.get("profile_id"));
     const profile = resolveAccessibleProfile(
-      context,
+      documentContext,
       Number.isFinite(requestedProfileId) && requestedProfileId > 0 ? requestedProfileId : null,
     );
     if (!profile?.group_id) {
@@ -188,7 +189,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       body: JSON.stringify({
         group_id: profile.group_id,
         profile_id: profile.id,
-        uploaded_by_user_id: context.userId,
+        uploaded_by_user_id: documentContext.userId,
         document_type: normalizeDocumentType(formData.get("document_type")),
         storage_bucket: storageBucket,
         storage_path: storagePath,

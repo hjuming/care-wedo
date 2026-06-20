@@ -1,19 +1,25 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { onRequestPatch } from "../api/medications/[id]";
+import { onRequestGet as getDashboard } from "../api/dashboard";
+import { onRequestGet as listDocuments } from "../api/documents";
+import { onRequestDelete as deleteDocument, onRequestGet as getDocument, onRequestPatch as patchDocument } from "../api/documents/[id]";
+import { onRequestGet as getDocumentFileUrl } from "../api/documents/[id]/file-url";
+import { onRequestPatch as patchAppointment } from "../api/appointments/[id]";
+import { onRequestPatch as patchMedication } from "../api/medications/[id]";
+import { onRequestPatch as patchProfile } from "../api/profiles/[id]";
+import { buildStoragePath } from "../_shared/care_documents";
 
 /**
  * Behavioral tenant-isolation regression (drives the REAL handler).
  *
- * Unlike source-grep regressions, this test invokes onRequestPatch end to end
- * with a mocked network layer (LINE verify + Supabase REST). It proves that:
- *   1. A user can only PATCH a medication their own user_id / group owns (200).
- *   2. A medication belonging to another tenant's group is rejected (403),
- *      because patchMedication's ownership filter returns no rows.
+ * Unlike source-grep regressions, these tests invoke real Pages handlers end to
+ * end with a mocked network layer (LINE verify + Supabase REST). They prove
+ * app-layer ownership filters still stop cross-tenant writes while Supabase REST
+ * is called with a service role key.
  *
- * If a future change drops the ownership filter or the unified auth path, the
- * cross-tenant case would start returning 200 and this test fails.
+ * If a future change drops an ownership filter or the unified auth path, the
+ * cross-tenant case would start returning success or emit a PATCH and fail here.
  */
 
 const ENV = {
@@ -25,6 +31,7 @@ const ENV = {
 const ATTACKER_LINE_ID = "Uattacker";
 const ATTACKER_USER_ID = 1;
 const ATTACKER_GROUP_ID = 100; // the only group the attacker belongs to
+const NOW = "2026-06-20T00:00:00.000Z";
 
 type FetchHandler = (url: string, init: RequestInit | undefined) => Response;
 
@@ -54,18 +61,160 @@ function baseRoutes(url: string): Response | null {
   if (url.includes(`/rest/v1/user_family_groups?user_id=eq.${ATTACKER_USER_ID}`)) {
     return json([{ id: 10, user_id: ATTACKER_USER_ID, group_id: ATTACKER_GROUP_ID, role: "owner" }]);
   }
+  if (
+    url.includes(`/rest/v1/user_feature_flags?user_id=eq.${ATTACKER_USER_ID}`)
+    && url.includes("feature_key=like.profile_order:")
+  ) {
+    return json([]);
+  }
   return null;
 }
 
-function makeRequest(id: number): Request {
-  return new Request(`https://care.example/api/medications/${id}`, {
+function makePatchRequest(resource: string, id: number, body: Record<string, unknown>): Request {
+  return new Request(`https://care.example/api/${resource}/${id}`, {
     method: "PATCH",
     headers: {
       Authorization: "Bearer line-attacker-id-token",
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ active: false }),
+    body: JSON.stringify(body),
   });
+}
+
+function makeGetRequest(path: string): Request {
+  return new Request(`https://care.example${path}`, {
+    method: "GET",
+    headers: {
+      Authorization: "Bearer line-attacker-id-token",
+    },
+  });
+}
+
+function makeDeleteRequest(path: string): Request {
+  return new Request(`https://care.example${path}`, {
+    method: "DELETE",
+    headers: {
+      Authorization: "Bearer line-attacker-id-token",
+    },
+  });
+}
+
+function groupRow(id = ATTACKER_GROUP_ID) {
+  return {
+    id,
+    name: `Group ${id}`,
+    invite_code: `G${id}`,
+    owner_user_id: ATTACKER_USER_ID,
+    plan_id: "pro",
+    created_at: NOW,
+  };
+}
+
+function planRow() {
+  return {
+    id: "pro",
+    name: "Care Circle",
+    monthly_ocr_limit: 100,
+    max_members: 6,
+    max_recipients: 4,
+    family_group_enabled: true,
+    price_monthly_usd: 0,
+    is_active: true,
+    sort_order: 10,
+  };
+}
+
+function careProfileRow(id: number, groupId = ATTACKER_GROUP_ID) {
+  return {
+    id,
+    group_id: groupId,
+    primary_user_id: ATTACKER_USER_ID,
+    display_name: `Profile ${id}`,
+    relationship: "family",
+    avatar_url: null,
+    birth_year: null,
+    birth_date: null,
+    emergency_phone: null,
+    email: null,
+    main_hospital: null,
+    main_department: null,
+    notes: null,
+    is_default: id === 501,
+    sort_order: 10,
+    created_at: NOW,
+  };
+}
+
+function appointmentRow(id: number, groupId = ATTACKER_GROUP_ID) {
+  return {
+    id,
+    user_id: ATTACKER_USER_ID,
+    group_id: groupId,
+    profile_id: 501,
+    type: "clinic_visit",
+    date: "2026-06-21",
+    time: "09:00",
+    title: "回診",
+    hospital: "台北測試醫院",
+    department: "家醫科",
+    doctor: null,
+    number: null,
+    location: null,
+    fasting_required: false,
+    fasting_hours: null,
+    notes: null,
+    reminder_text: null,
+    status: "upcoming",
+    created_at: NOW,
+  };
+}
+
+function medicationRow(id: number, groupId = ATTACKER_GROUP_ID) {
+  return {
+    id,
+    user_id: ATTACKER_USER_ID,
+    group_id: groupId,
+    profile_id: 501,
+    name: "測試用藥",
+    dosage: "1 顆",
+    frequency: "每日一次",
+    time_slot: "morning",
+    meal_timing: "after_meal",
+    scheduled_time: "08:00",
+    taken_status: null,
+    purpose: null,
+    warnings: null,
+    reminder_text: null,
+    active: false,
+  };
+}
+
+function documentRow(id: number, groupId = ATTACKER_GROUP_ID) {
+  return {
+    id,
+    group_id: groupId,
+    profile_id: 501,
+    uploaded_by_user_id: ATTACKER_USER_ID,
+    document_type: "lab_report",
+    source_file_url: null,
+    storage_bucket: null,
+    storage_path: null,
+    original_file_name: "report.pdf",
+    mime_type: "application/pdf",
+    file_size_bytes: 1024,
+    page_count: 1,
+    document_title: "檢驗報告",
+    source_hospital: "台北測試醫院",
+    document_date: "2026-06-20",
+    summary_status: "confirmed",
+    preserve_original_file: true,
+    ocr_text: null,
+    ai_summary: null,
+    status: "confirmed",
+    captured_at: null,
+    deleted_at: null,
+    created_at: NOW,
+  };
 }
 
 test("rejects PATCH on a medication owned by another tenant's group (403)", async () => {
@@ -88,8 +237,8 @@ test("rejects PATCH on a medication owned by another tenant's group (403)", asyn
     }
     throw new Error(`unexpected fetch: ${url}`);
   }, async () => {
-    const res = await onRequestPatch({
-      request: makeRequest(VICTIM_MED_ID),
+    const res = await patchMedication({
+      request: makePatchRequest("medications", VICTIM_MED_ID, { active: false }),
       env: ENV,
       params: { id: String(VICTIM_MED_ID) },
     } as any);
@@ -112,12 +261,12 @@ test("allows PATCH on a medication the user's group owns (200)", async () => {
     }
     if (url.includes(`/rest/v1/medications?id=eq.${OWNED_MED_ID}`) && init?.method === "PATCH") {
       patched = true;
-      return json([{ id: OWNED_MED_ID, user_id: ATTACKER_USER_ID, group_id: ATTACKER_GROUP_ID, active: false }]);
+      return json([medicationRow(OWNED_MED_ID)]);
     }
     throw new Error(`unexpected fetch: ${url}`);
   }, async () => {
-    const res = await onRequestPatch({
-      request: makeRequest(OWNED_MED_ID),
+    const res = await patchMedication({
+      request: makePatchRequest("medications", OWNED_MED_ID, { active: false }),
       env: ENV,
       params: { id: String(OWNED_MED_ID) },
     } as any);
@@ -125,4 +274,482 @@ test("allows PATCH on a medication the user's group owns (200)", async () => {
     assert.equal(res.status, 200, "owner PATCH must succeed");
     assert.equal(patched, true, "owner PATCH must reach the write");
   });
+});
+
+test("rejects PATCH on an appointment owned by another tenant's group (403)", async () => {
+  const VICTIM_APPOINTMENT_ID = 997;
+  let patchAttempted = false;
+
+  await withMockedFetch((url, init) => {
+    const base = baseRoutes(url);
+    if (base) return base;
+
+    if (url.includes(`/rest/v1/appointments?id=eq.${VICTIM_APPOINTMENT_ID}`) && url.includes("or=(")) {
+      return json([]);
+    }
+    if (url.includes(`/rest/v1/appointments?id=eq.${VICTIM_APPOINTMENT_ID}`) && init?.method === "PATCH") {
+      patchAttempted = true;
+      return json([appointmentRow(VICTIM_APPOINTMENT_ID, 200)]);
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  }, async () => {
+    const res = await patchAppointment({
+      request: makePatchRequest("appointments", VICTIM_APPOINTMENT_ID, { title: "越權修改" }),
+      env: ENV,
+      params: { id: String(VICTIM_APPOINTMENT_ID) },
+    } as any);
+
+    assert.equal(res.status, 403, "cross-tenant appointment PATCH must be forbidden");
+    assert.equal(patchAttempted, false, "must not issue an appointment write for a foreign record");
+  });
+});
+
+test("allows PATCH on an appointment the user's group owns (200)", async () => {
+  const OWNED_APPOINTMENT_ID = 887;
+  let patched = false;
+
+  await withMockedFetch((url, init) => {
+    const base = baseRoutes(url);
+    if (base) return base;
+
+    if (url.includes(`/rest/v1/appointments?id=eq.${OWNED_APPOINTMENT_ID}`) && url.includes("or=(")) {
+      return json([{ id: OWNED_APPOINTMENT_ID }]);
+    }
+    if (url.includes(`/rest/v1/appointments?id=eq.${OWNED_APPOINTMENT_ID}`) && init?.method === "PATCH") {
+      patched = true;
+      return json([appointmentRow(OWNED_APPOINTMENT_ID)]);
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  }, async () => {
+    const res = await patchAppointment({
+      request: makePatchRequest("appointments", OWNED_APPOINTMENT_ID, { title: "更新回診" }),
+      env: ENV,
+      params: { id: String(OWNED_APPOINTMENT_ID) },
+    } as any);
+
+    assert.equal(res.status, 200, "owner appointment PATCH must succeed");
+    assert.equal(patched, true, "owner appointment PATCH must reach the write");
+  });
+});
+
+test("rejects PATCH on a care profile outside the user's groups (403)", async () => {
+  const VICTIM_PROFILE_ID = 996;
+  let patchAttempted = false;
+
+  await withMockedFetch((url, init) => {
+    const base = baseRoutes(url);
+    if (base) return base;
+
+    if (url.includes(`/rest/v1/care_profiles?group_id=in.(${ATTACKER_GROUP_ID})`)) {
+      return json([careProfileRow(501)]);
+    }
+    if (url.includes(`/rest/v1/care_profiles?id=eq.${VICTIM_PROFILE_ID}`) && init?.method === "PATCH") {
+      patchAttempted = true;
+      return json([careProfileRow(VICTIM_PROFILE_ID, 200)]);
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  }, async () => {
+    const res = await patchProfile({
+      request: makePatchRequest("profiles", VICTIM_PROFILE_ID, { display_name: "越權修改" }),
+      env: ENV,
+      params: { id: String(VICTIM_PROFILE_ID) },
+    } as any);
+
+    assert.equal(res.status, 403, "cross-tenant profile PATCH must be forbidden");
+    assert.equal(patchAttempted, false, "must not issue a profile write for a foreign record");
+  });
+});
+
+test("allows PATCH on a care profile in the user's group (200)", async () => {
+  const OWNED_PROFILE_ID = 886;
+  let patched = false;
+
+  await withMockedFetch((url, init) => {
+    const base = baseRoutes(url);
+    if (base) return base;
+
+    if (url.includes(`/rest/v1/care_profiles?group_id=in.(${ATTACKER_GROUP_ID})`)) {
+      return json([careProfileRow(OWNED_PROFILE_ID)]);
+    }
+    if (url.includes(`/rest/v1/care_profiles?id=eq.${OWNED_PROFILE_ID}`) && init?.method === "PATCH") {
+      patched = true;
+      return json([careProfileRow(OWNED_PROFILE_ID)]);
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  }, async () => {
+    const res = await patchProfile({
+      request: makePatchRequest("profiles", OWNED_PROFILE_ID, { display_name: "更新姓名" }),
+      env: ENV,
+      params: { id: String(OWNED_PROFILE_ID) },
+    } as any);
+
+    assert.equal(res.status, 200, "owner profile PATCH must succeed");
+    assert.equal(patched, true, "owner profile PATCH must reach the write");
+  });
+});
+
+test("rejects PATCH on a care document outside the user's groups (404)", async () => {
+  const VICTIM_DOCUMENT_ID = 995;
+  let patchAttempted = false;
+
+  await withMockedFetch((url, init) => {
+    const base = baseRoutes(url);
+    if (base) return base;
+
+    if (url.includes(`/rest/v1/care_profiles?group_id=in.(${ATTACKER_GROUP_ID})`)) {
+      return json([careProfileRow(501)]);
+    }
+    if (
+      url.includes(`/rest/v1/care_documents?id=eq.${VICTIM_DOCUMENT_ID}`)
+      && url.includes(`group_id=in.(${ATTACKER_GROUP_ID})`)
+    ) {
+      return json([]);
+    }
+    if (url.includes(`/rest/v1/care_documents?id=eq.${VICTIM_DOCUMENT_ID}`) && init?.method === "PATCH") {
+      patchAttempted = true;
+      return json([documentRow(VICTIM_DOCUMENT_ID, 200)]);
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  }, async () => {
+    const res = await patchDocument({
+      request: makePatchRequest("documents", VICTIM_DOCUMENT_ID, { document_title: "越權修改" }),
+      env: ENV,
+      params: { id: String(VICTIM_DOCUMENT_ID) },
+    } as any);
+
+    assert.equal(res.status, 404, "cross-tenant document PATCH must not reveal the record");
+    assert.equal(patchAttempted, false, "must not issue a document write for a foreign record");
+  });
+});
+
+test("allows PATCH on a care document in the user's group (200)", async () => {
+  const OWNED_DOCUMENT_ID = 885;
+  let patched = false;
+
+  await withMockedFetch((url, init) => {
+    const base = baseRoutes(url);
+    if (base) return base;
+
+    if (url.includes(`/rest/v1/care_profiles?group_id=in.(${ATTACKER_GROUP_ID})`)) {
+      return json([careProfileRow(501)]);
+    }
+    if (
+      url.includes(`/rest/v1/care_documents?id=eq.${OWNED_DOCUMENT_ID}`)
+      && url.includes(`group_id=in.(${ATTACKER_GROUP_ID})`)
+    ) {
+      return json([documentRow(OWNED_DOCUMENT_ID)]);
+    }
+    if (url.includes(`/rest/v1/care_documents?id=eq.${OWNED_DOCUMENT_ID}`) && init?.method === "PATCH") {
+      patched = true;
+      return json([documentRow(OWNED_DOCUMENT_ID)]);
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  }, async () => {
+    const res = await patchDocument({
+      request: makePatchRequest("documents", OWNED_DOCUMENT_ID, { document_title: "更新文件" }),
+      env: ENV,
+      params: { id: String(OWNED_DOCUMENT_ID) },
+    } as any);
+
+    assert.equal(res.status, 200, "owner document PATCH must succeed");
+    assert.equal(patched, true, "owner document PATCH must reach the write");
+  });
+});
+
+test("dashboard read queries stay scoped to the active group and profile", async () => {
+  let appointmentScoped = false;
+  let medicationScoped = false;
+  let medicationLogScoped = false;
+  let documentScoped = false;
+
+  await withMockedFetch((url, init) => {
+    const base = baseRoutes(url);
+    if (base) return base;
+
+    if (url.includes("/rest/v1/family_groups?id=in.(100)&select=*")) {
+      return json([groupRow()]);
+    }
+    if (url.includes("/rest/v1/users?id=eq.1&select=active_profile_id&limit=1")) {
+      return json([{ active_profile_id: 501 }]);
+    }
+    if (url.includes("/rest/v1/care_profiles?group_id=in.(100)")) {
+      return json([careProfileRow(501)]);
+    }
+    if (url.includes("/rest/v1/family_groups?id=eq.100&select=plan_id&limit=1")) {
+      return json([{ plan_id: "pro" }]);
+    }
+    if (url.includes("/rest/v1/plans?id=eq.pro&select=*&limit=1")) {
+      return json([planRow()]);
+    }
+    if (url.includes("/rest/v1/usage_quotas?group_id=eq.100")) {
+      return json([{ used_count: 0 }]);
+    }
+    if (url.includes("/rest/v1/user_feature_flags?user_id=eq.1&feature_key=eq.multiple_family_groups")) {
+      return json([]);
+    }
+    if (url.includes("/rest/v1/appointments?group_id=eq.100&profile_id=eq.501")) {
+      appointmentScoped = true;
+      return json([appointmentRow(701)]);
+    }
+    if (url.includes("/rest/v1/appointments?group_id=eq.100&profile_id=is.null&type=eq.family_note")) {
+      return json([]);
+    }
+    if (url.includes("/rest/v1/medications?group_id=eq.100&profile_id=eq.501")) {
+      medicationScoped = true;
+      return json([medicationRow(702)]);
+    }
+    if (url.includes("/rest/v1/care_documents?group_id=eq.100&profile_id=eq.501")) {
+      documentScoped = true;
+      return json([documentRow(703)]);
+    }
+    if (url.includes("/rest/v1/user_family_groups?group_id=eq.100&select=user_id,role")) {
+      return json([]);
+    }
+    if (url.includes("/rest/v1/line_push_logs?group_id=eq.100")) {
+      return json([]);
+    }
+    if (
+      url.includes("/rest/v1/medication_logs?medication_id=in.(702)")
+      && url.includes("group_id=in.(100)")
+    ) {
+      medicationLogScoped = true;
+      return json([]);
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  }, async () => {
+    const res = await getDashboard({
+      request: makeGetRequest("/api/dashboard?group_id=100&profile_id=501"),
+      env: ENV,
+    } as any);
+
+    assert.equal(res.status, 200, "dashboard read should succeed for the owned group/profile");
+    const body = await res.json() as any;
+    assert.equal(body.active_group_id, ATTACKER_GROUP_ID);
+    assert.deepEqual(body.appointments.map((item: any) => item.id), [701]);
+    assert.deepEqual(body.medications.map((item: any) => item.id), [702]);
+    assert.deepEqual(body.documents.map((item: any) => item.id), [703]);
+    assert.equal(appointmentScoped, true, "appointments must be queried by active group and profile");
+    assert.equal(medicationScoped, true, "medications must be queried by active group and profile");
+    assert.equal(medicationLogScoped, true, "medication logs must be constrained by owned medication group");
+    assert.equal(documentScoped, true, "documents must be queried by active group and profile");
+  });
+});
+
+test("documents list never queries without the user's group scope", async () => {
+  let documentListScoped = false;
+
+  await withMockedFetch((url) => {
+    const base = baseRoutes(url);
+    if (base) return base;
+
+    if (url.includes("/rest/v1/care_profiles?group_id=in.(100)")) {
+      return json([careProfileRow(501)]);
+    }
+    if (
+      url.includes("/rest/v1/care_documents?")
+      && url.includes("group_id=in.(100)")
+      && url.includes("status=neq.deleted")
+    ) {
+      documentListScoped = true;
+      return json([documentRow(704)]);
+    }
+    if (url.includes("/rest/v1/care_documents?")) {
+      throw new Error(`unscoped document list query: ${url}`);
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  }, async () => {
+    const res = await listDocuments({
+      request: makeGetRequest("/api/documents"),
+      env: ENV,
+    } as any);
+
+    assert.equal(res.status, 200, "documents list should succeed for owned groups");
+    const body = await res.json() as any;
+    assert.deepEqual(body.documents.map((item: any) => item.id), [704]);
+    assert.equal(documentListScoped, true, "documents list must include group_id=in.(accessibleGroupIds)");
+  });
+});
+
+test("document detail keeps linked records scoped to the document group", async () => {
+  const OWNED_DOCUMENT_ID = 705;
+  let linkedAppointmentsScoped = false;
+  let linkedMedicationsScoped = false;
+
+  await withMockedFetch((url) => {
+    const base = baseRoutes(url);
+    if (base) return base;
+
+    if (url.includes("/rest/v1/care_profiles?group_id=in.(100)")) {
+      return json([careProfileRow(501)]);
+    }
+    if (
+      url.includes(`/rest/v1/care_documents?id=eq.${OWNED_DOCUMENT_ID}`)
+      && url.includes("group_id=in.(100)")
+    ) {
+      return json([documentRow(OWNED_DOCUMENT_ID)]);
+    }
+    if (
+      url.includes(`/rest/v1/appointments?source_document_id=eq.${OWNED_DOCUMENT_ID}`)
+      && url.includes("group_id=eq.100")
+    ) {
+      linkedAppointmentsScoped = true;
+      return json([appointmentRow(706)]);
+    }
+    if (
+      url.includes(`/rest/v1/medications?source_document_id=eq.${OWNED_DOCUMENT_ID}`)
+      && url.includes("group_id=eq.100")
+    ) {
+      linkedMedicationsScoped = true;
+      return json([medicationRow(707)]);
+    }
+    if (url.includes(`source_document_id=eq.${OWNED_DOCUMENT_ID}`)) {
+      throw new Error(`unscoped linked record query: ${url}`);
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  }, async () => {
+    const res = await getDocument({
+      request: makeGetRequest(`/api/documents/${OWNED_DOCUMENT_ID}`),
+      env: ENV,
+      params: { id: String(OWNED_DOCUMENT_ID) },
+    } as any);
+
+    assert.equal(res.status, 200, "document detail should succeed for an owned document");
+    const body = await res.json() as any;
+    assert.deepEqual(body.document.linked_appointments.map((item: any) => item.id), [706]);
+    assert.deepEqual(body.document.linked_medications.map((item: any) => item.id), [707]);
+    assert.equal(linkedAppointmentsScoped, true, "linked appointments must be scoped to the document group");
+    assert.equal(linkedMedicationsScoped, true, "linked medications must be scoped to the document group");
+  });
+});
+
+test("rejects signed file URLs for a care document outside the user's groups (404)", async () => {
+  const VICTIM_DOCUMENT_ID = 708;
+  let signedUrlAttempted = false;
+
+  await withMockedFetch((url) => {
+    const base = baseRoutes(url);
+    if (base) return base;
+
+    if (url.includes("/rest/v1/care_profiles?group_id=in.(100)")) {
+      return json([careProfileRow(501)]);
+    }
+    if (
+      url.includes(`/rest/v1/care_documents?id=eq.${VICTIM_DOCUMENT_ID}`)
+      && url.includes("group_id=in.(100)")
+    ) {
+      return json([]);
+    }
+    if (url.includes("/storage/v1/object/sign/")) {
+      signedUrlAttempted = true;
+      return json({ signedURL: "/object/sign/private" });
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  }, async () => {
+    const res = await getDocumentFileUrl({
+      request: makeGetRequest(`/api/documents/${VICTIM_DOCUMENT_ID}/file-url`),
+      env: ENV,
+      params: { id: String(VICTIM_DOCUMENT_ID) },
+    } as any);
+
+    assert.equal(res.status, 404, "foreign document file URL must not reveal the record");
+    assert.equal(signedUrlAttempted, false, "must not ask Supabase Storage for a foreign document signed URL");
+  });
+});
+
+test("rejects DELETE on a care document outside the user's groups without touching storage", async () => {
+  const VICTIM_DOCUMENT_ID = 709;
+  let storageDeleteAttempted = false;
+  let softDeleteAttempted = false;
+
+  await withMockedFetch((url, init) => {
+    const base = baseRoutes(url);
+    if (base) return base;
+
+    if (url.includes("/rest/v1/care_profiles?group_id=in.(100)")) {
+      return json([careProfileRow(501)]);
+    }
+    if (
+      url.includes(`/rest/v1/care_documents?id=eq.${VICTIM_DOCUMENT_ID}`)
+      && url.includes("group_id=in.(100)")
+    ) {
+      return json([]);
+    }
+    if (url.includes("/storage/v1/object/") && init?.method === "DELETE") {
+      storageDeleteAttempted = true;
+      return json({});
+    }
+    if (url.includes(`/rest/v1/care_documents?id=eq.${VICTIM_DOCUMENT_ID}`) && init?.method === "PATCH") {
+      softDeleteAttempted = true;
+      return json([documentRow(VICTIM_DOCUMENT_ID, 200)]);
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  }, async () => {
+    const res = await deleteDocument({
+      request: makeDeleteRequest(`/api/documents/${VICTIM_DOCUMENT_ID}`),
+      env: ENV,
+      params: { id: String(VICTIM_DOCUMENT_ID) },
+    } as any);
+
+    assert.equal(res.status, 404, "foreign document DELETE must not reveal the record");
+    assert.equal(storageDeleteAttempted, false, "must not delete a storage object for a foreign document");
+    assert.equal(softDeleteAttempted, false, "must not soft-delete a foreign document row");
+  });
+});
+
+test("owned care document DELETE removes the scoped storage object before soft delete", async () => {
+  const OWNED_DOCUMENT_ID = 710;
+  const storagePath = "group-100/profile-501/2026-06/report.pdf";
+  let storageDeletePrefix: string | null = null;
+  let softDeleted = false;
+
+  await withMockedFetch((url, init) => {
+    const base = baseRoutes(url);
+    if (base) return base;
+
+    if (url.includes("/rest/v1/care_profiles?group_id=in.(100)")) {
+      return json([careProfileRow(501)]);
+    }
+    if (
+      url.includes(`/rest/v1/care_documents?id=eq.${OWNED_DOCUMENT_ID}`)
+      && url.includes("group_id=in.(100)")
+    ) {
+      return json([{ ...documentRow(OWNED_DOCUMENT_ID), storage_bucket: "care-documents", storage_path: storagePath }]);
+    }
+    if (url.includes("/storage/v1/object/care-documents") && init?.method === "DELETE") {
+      const body = JSON.parse(String(init.body || "{}"));
+      storageDeletePrefix = body.prefixes?.[0] || null;
+      return json({});
+    }
+    if (url.includes(`/rest/v1/care_documents?id=eq.${OWNED_DOCUMENT_ID}`) && init?.method === "PATCH") {
+      softDeleted = true;
+      const body = JSON.parse(String(init.body || "{}"));
+      assert.equal(body.status, "deleted");
+      assert.equal(body.storage_path, null);
+      assert.equal(body.storage_bucket, null);
+      return json([{ ...documentRow(OWNED_DOCUMENT_ID), status: "deleted", storage_bucket: null, storage_path: null }]);
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  }, async () => {
+    const res = await deleteDocument({
+      request: makeDeleteRequest(`/api/documents/${OWNED_DOCUMENT_ID}`),
+      env: ENV,
+      params: { id: String(OWNED_DOCUMENT_ID) },
+    } as any);
+
+    assert.equal(res.status, 200, "owned document DELETE must succeed");
+    assert.equal(storageDeletePrefix, storagePath, "storage delete must target the owned document storage path");
+    assert.equal(softDeleted, true, "owned document DELETE must soft-delete the row");
+  });
+});
+
+test("care document upload storage paths are namespaced by group and profile", () => {
+  const path = buildStoragePath(
+    ATTACKER_GROUP_ID,
+    501,
+    { name: "hospital-report.pdf", type: "application/pdf" } as File,
+  );
+
+  assert.match(path, /^group-100\/profile-501\/\d{4}-\d{2}\/[0-9a-f-]+\.pdf$/i);
+  assert.doesNotMatch(path, /hospital-report/i, "storage path must not retain original medical file names");
+  assert.doesNotMatch(path, /\.\./, "storage path must not allow path traversal segments");
 });

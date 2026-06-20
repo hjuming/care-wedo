@@ -26,24 +26,32 @@ test("Supabase Auth identity columns are added without replacing LINE identity",
 
 test("Backend verifies LINE or Supabase identities through a single fail-closed helper", () => {
   const shared = readProjectFile("functions/_shared/supabase.ts");
+  const authIdentity = readProjectFile("functions/_shared/auth_identity.ts");
   const middleware = readProjectFile("functions/api/_middleware.ts");
+  const authContext = readProjectFile("functions/_shared/auth_context.ts");
   const dashboard = readProjectFile("functions/api/dashboard.ts");
   const me = readProjectFile("functions/api/me.ts");
   const groups = readProjectFile("functions/api/groups.ts");
 
-  assert.match(shared, /type VerifiedCareIdentity/);
+  assert.match(authIdentity, /type VerifiedCareIdentity/);
+  assert.match(authIdentity, /verifySupabaseAccessToken/);
+  assert.match(authIdentity, /\/auth\/v1\/user/);
+  assert.match(authIdentity, /verifyCareIdentity/);
+  assert.match(shared, /from "\.\/auth_identity"/);
   assert.match(shared, /verifySupabaseAccessToken/);
-  assert.match(shared, /\/auth\/v1\/user/);
-  assert.match(shared, /verifyCareIdentity/);
   assert.match(shared, /getOrCreateUserFromIdentity/);
   assert.match(shared, /auth_user_id:\s*identity\.authUserId/);
   assert.match(shared, /auth_provider:\s*identity\.authProvider/);
 
   assert.match(middleware, /verifyCareIdentity/);
   assert.doesNotMatch(middleware, /verifyLineIdToken\(env,\s*token\)/);
+  assert.match(authContext, /getRequestUser/);
+  assert.match(authContext, /context\.data\?\.identity/);
+  assert.match(authContext, /verifyCareIdentity/);
+  assert.match(authContext, /getOrCreateUserFromIdentity/);
 
   for (const source of [dashboard, me, groups]) {
-    assert.match(source, /getAuthenticatedUser/);
+    assert.match(source, /getRequestUser/);
     assert.doesNotMatch(source, /getOrCreateDefaultUser\(env,\s*identity\.lineUserId/);
   }
 });
@@ -73,4 +81,29 @@ test("Frontend exposes Google OAuth login and callback without storing service-r
   assert.match(routing, /normalized === "\/auth\/callback"/);
   assert.match(envExample, /VITE_SUPABASE_URL=/);
   assert.match(envExample, /VITE_SUPABASE_PUBLISHABLE_KEY=/);
+});
+
+test("Google protected write staging smoke covers the three P0 write paths without logging tokens", () => {
+  const script = readProjectFile("scripts/google-protected-write-smoke.mjs");
+  const runbook = readProjectFile("GOOGLE_PROTECTED_WRITE_SMOKE_RUNBOOK.md");
+  const packageJson = readProjectFile("package.json");
+
+  assert.match(script, /CARE_WEDO_STAGING_BASE_URL/);
+  assert.match(script, /CARE_WEDO_GOOGLE_ACCESS_TOKEN/);
+  assert.match(script, /CARE_WEDO_SMOKE_PROFILE_ID/);
+  assert.match(script, /CARE_WEDO_SMOKE_GROUP_ID/);
+  assert.match(script, /CARE_WEDO_SMOKE_EXPECTED_USER_ID/);
+  assert.match(script, /SUPABASE_SERVICE_ROLE_KEY/);
+  assert.match(script, /\/ocr\//);
+  assert.match(script, /\/ocr\/confirm/);
+  assert.match(script, /\/appointments/);
+  assert.match(script, /\/medications\/taken/);
+  assert.match(script, /db_appointment_scope/);
+  assert.match(script, /db_medication_log_scope/);
+  assert.match(script, /missing_env/);
+  assert.doesNotMatch(script, /console\.(log|error)\([^)]*token/i);
+
+  assert.match(runbook, /google:protected-write:smoke/);
+  assert.match(runbook, /google:protected-write:smoke:dry/);
+  assert.match(packageJson, /google:protected-write:smoke/);
 });

@@ -21,10 +21,11 @@ function dateDaysAgo(days: number) {
   return date.toISOString();
 }
 
-export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+export const onRequestGet: PagesFunction<Env> = async (context) => {
+  const { request, env } = context;
   try {
-    const context = await getCurrentUserDocumentContext(request, env);
-    if (context.groupIds.length === 0) {
+    const documentContext = await getCurrentUserDocumentContext(context);
+    if (documentContext.groupIds.length === 0) {
       return Response.json({ documents: [] });
     }
 
@@ -34,13 +35,13 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     const query = url.searchParams.get("q") || "";
     const canViewHistory = url.searchParams.get("history") !== "future";
     const filters = [
-      `group_id=in.(${context.groupIds.join(",")})`,
+      `group_id=in.(${documentContext.groupIds.join(",")})`,
       "status=neq.deleted",
       "deleted_at=is.null",
     ];
 
     if (profileId) {
-      const profile = context.profiles.find((item) => item.id === profileId);
+      const profile = documentContext.profiles.find((item) => item.id === profileId);
       if (!profile) return Response.json({ error: "沒有此照護對象的查看權限" }, { status: 403 });
       filters.push(`profile_id=eq.${profile.id}`);
     }

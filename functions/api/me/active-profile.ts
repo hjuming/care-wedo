@@ -1,19 +1,20 @@
 import {
   Env,
   getAccessibleProfiles,
-  getAuthenticatedUser,
   getBearerToken,
   setUserActiveProfileId,
 } from "../../_shared/supabase";
+import { getRequestUser } from "../../_shared/auth_context";
 
-export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
+export const onRequestPatch: PagesFunction<Env> = async (context) => {
+  const { request, env } = context;
   try {
     const idToken = getBearerToken(request);
     if (!idToken) {
       return Response.json({ error: "請先登入" }, { status: 401 });
     }
 
-    const { userId } = await getAuthenticatedUser(env, request);
+    const { userId } = await getRequestUser(context);
     const body = await request.json<{ profile_id?: unknown }>().catch(() => ({}));
     const profileId = Number(body.profile_id);
 
@@ -33,9 +34,10 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
 
     return Response.json({ success: true, active_profile_id: profileId });
   } catch (error) {
+    const message = error instanceof Error ? error.message : "無法更新目前照護對象";
     return Response.json(
-      { error: error instanceof Error ? error.message : "無法更新目前照護對象" },
-      { status: 500 },
+      { error: message },
+      { status: message.includes("請先登入") ? 401 : 500 },
     );
   }
 };

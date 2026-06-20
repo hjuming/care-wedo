@@ -1,10 +1,10 @@
 import {
   Env,
-  getAuthenticatedUser,
   getBearerToken,
   getUserMemberships,
   supabaseFetch,
 } from "../../_shared/supabase";
+import { getRequestUser } from "../../_shared/auth_context";
 
 type MedicationScopeRow = {
   id: number;
@@ -29,14 +29,15 @@ function inferTimeSlot(medication: MedicationScopeRow, fallback = "") {
   return "unspecified";
 }
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+export const onRequestPost: PagesFunction<Env> = async (context) => {
+  const { request, env } = context;
   try {
     const token = getBearerToken(request);
     if (!token) {
       return Response.json({ error: "請先登入" }, { status: 401 });
     }
 
-    const { userId } = await getAuthenticatedUser(env, request);
+    const { userId } = await getRequestUser(context);
     const memberships = await getUserMemberships(env, userId);
     const groupIds = memberships.map((membership) => membership.group_id);
 

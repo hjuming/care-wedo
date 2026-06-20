@@ -1,12 +1,12 @@
 import {
   checkGroupOcrQuota,
   getAccessibleProfiles,
-  getAuthenticatedUser,
   getBearerToken,
   incrementGroupOcrQuota,
   resolveDefaultCareContext,
   supabaseFetch,
 } from "../../_shared/supabase";
+import { getRequestUser } from "../../_shared/auth_context";
 import { logError, logEvent } from "../../_shared/logger";
 import { sendProductionAlert } from "../../_shared/alerts";
 import {
@@ -321,7 +321,8 @@ async function saveParsedData(
   return saved;
 }
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+export const onRequestPost: PagesFunction<Env> = async (context) => {
+  const { request, env } = context;
   const requestStartedAt = Date.now();
   try {
     const contentType = request.headers.get("content-type") || "";
@@ -375,7 +376,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       return Response.json({ error: "請先登入後再使用 OCR。" }, { status: 401 });
     }
 
-    const { userId, identity: authIdentity } = await getAuthenticatedUser(env, request);
+    const { userId, identity: authIdentity } = await getRequestUser(context);
     const authUserSuffix = (authIdentity.provider === "line" ? authIdentity.lineUserId : authIdentity.authUserId).slice(-4);
 
     // Resolve group + profile context before quota check

@@ -1,4 +1,5 @@
-import { Env, getAccessibleProfiles, getAuthenticatedUser, getBearerToken, supabaseFetch } from "../../_shared/supabase";
+import { getRequestUser } from "../../_shared/auth_context";
+import { Env, getAccessibleProfiles, getBearerToken, supabaseFetch } from "../../_shared/supabase";
 
 export const onRequestPatch: PagesFunction<Env> = async (context) => {
   const { env, request, params } = context;
@@ -13,7 +14,7 @@ export const onRequestPatch: PagesFunction<Env> = async (context) => {
     if (!idToken) {
       return Response.json({ error: "請先登入" }, { status: 401 });
     }
-    const { userId } = await getAuthenticatedUser(env, request);
+    const { userId } = await getRequestUser(context);
 
     const accessibleProfiles = await getAccessibleProfiles(env, userId);
     const canManageProfile = accessibleProfiles.some((profile) => String(profile.id) === String(profileId));
@@ -61,8 +62,9 @@ export const onRequestPatch: PagesFunction<Env> = async (context) => {
       headers: { "Content-Type": "application/json" },
     });
   } catch (err: any) {
+    const status = String(err?.message || "").includes("請先登入") ? 401 : 500;
     return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
+      status,
       headers: { "Content-Type": "application/json" },
     });
   }
