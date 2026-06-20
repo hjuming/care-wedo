@@ -1,9 +1,9 @@
 # Care WEDO 醫療照護小管家
 
-> **當前版本：V1.0 Beta（2026-06-05）**
+> **當前版本：V1.0 Beta（2026-06-20）**
 > **正式站**：https://care.wedopr.com
-> **狀態**：LINE 實機流程已進入測試期；照護圈後台已可查看去識別化提醒送達紀錄；Google OAuth 後台登入 MVP 已完成程式與 Phase 58 migration。
-> **Production 上線紀錄**：2026-06-05（Asia/Taipei）Phase 57（LINE Push Audit Logs）production migration 已套用；後台 dashboard 已回傳最近提醒送達摘要，不含完整 LINE id 或推播全文。Phase 58 需套用 `supabase/migration_phase58_supabase_auth_identity.sql` 並設定 Supabase Google provider / redirect URL 後啟用。
+> **狀態**：LINE 實機流程已進入測試期；照護圈後台已可查看去識別化提醒送達紀錄；Google OAuth 後台登入 MVP 已完成程式與 Phase 58 migration；protected data API 已統一身分解析並補跨戶隔離測試。
+> **Production 上線紀錄**：2026-06-20（Asia/Taipei）已上線 auth 統一、reminder 正式模式預設、deploy 前 CI gate、GitHub Actions Node 24 runtime 升級。2026-06-05 Phase 57（LINE Push Audit Logs）production migration 已套用；後台 dashboard 已回傳最近提醒送達摘要，不含完整 LINE id 或推播全文。Phase 58 需套用 `supabase/migration_phase58_supabase_auth_identity.sql` 並設定 Supabase Google provider / redirect URL 後啟用。
 
 Care WEDO 是給長輩與家人使用的照護小幫手。長輩可以在 LINE 上傳藥袋、掛號單、處方箋或預約單照片，也可以直接貼上看診、用藥或提醒文字；系統會用 AI 解析，完整存進資料庫，再用短句提醒長輩重點。
 
@@ -132,6 +132,7 @@ https://care.wedopr.com
 - 2026-06-04 已固定 production 排程規則：08:00 只送「今日行程提醒」，不主動推播完整用藥清單；用藥仍保存在後台與「給醫生看」總表。
 - 2026-06-05 已完成 `line_push_logs` 去識別化推播稽核與後台可視化：只存事件類型、送達狀態、HTTP 狀態、收件者內部 user id、LINE 後四碼、訊息長度與來源 appointment ids，不存完整 LINE id、不存推播全文、不存醫療內容；照護圈可看到最近提醒是否送出。
 - 2026-06-05 已完成 Google OAuth 後台登入 MVP：前端使用 Supabase Auth publishable key 啟動 Google social login，後端以 `/auth/v1/user` 驗證 Supabase access token，映射到 `users.auth_user_id` / `auth_provider`；不取代既有 LINE 身分、不自動合併 LINE/Google 帳號。
+- 2026-06-20 reminder 測試模式已改成明確 opt-in：只有 `REMINDER_TEST_ONLY=1` 才限制發送給測試帳號；未設定或 `0` 皆為正式模式，避免 production 因漏設環境變數而只送測試收件者。
 - 2026-05-29 production 檢查發現：GitHub Actions 排程打 custom domain 時會被 Cloudflare bot challenge 擋下；提醒 workflow 已改為打 `care-wedo.pages.dev/api/cron/*`，並在非 2xx 時直接 fail，避免表面成功但實際沒送出。
 - LINE 對話窗中的登入 callback（含 `code` / `liff.state`）會先導向 `/app/open`，再以外部瀏覽器重新開啟同一個 callback URL，完成身分驗證後可直接進入後台，降低留在 LINE 視窗操作困擾。
 
@@ -139,6 +140,8 @@ https://care.wedopr.com
 
 - `/app` 未登入會導向 `/login`。
 - LINE idToken 驗證與 API fail-closed 已完成。
+- 2026-06-20 已將 OCR、新增/編輯預約、用藥確認、文件與 profile 排序等 protected data API 統一改走 `getAuthenticatedUser()`，同時支援 LINE 與 Supabase/Google 身分；另以 source guard 鎖住 protected route 不得再直接呼叫 LINE-only `verifyLineIdToken()`。
+- 2026-06-20 已補 functions 跨戶隔離負向測試：跨群組更新藥物回 403 且不發出寫入；同群組更新回 200。
 - Dashboard 支援今日照護、未來行程、查詢紀錄、吃藥紀錄、家人協作。
 - 支援家庭群組、邀請碼、多位照護對象、照護對象排序。
 - 支援手動新增提醒、OCR 校正、確認後正式入庫。
@@ -400,12 +403,20 @@ npx wrangler pages deploy care-wedo-app/dist --project-name=care-wedo --branch=m
 https://care.wedopr.com/callback
 ```
 
+CI/CD gate：
+
+- `.github/workflows/deploy.yml` 於 `main` push 後先跑 lint、前端與 regression 測試、functions tenant-isolation 測試、real-receipt regression pack、build，全部通過才部署 Cloudflare Pages。
+- `.github/workflows/deploy-reminder-scheduler.yml` 於 reminder scheduler worker 或 workflow 變更時部署 Cloudflare Cron Worker，並同步 `CRON_SECRET`。
+- GitHub Actions runtime 已升級到 Node 24 系列 action：`actions/checkout@v7`、`actions/setup-node@v6`；專案 build/test 的 `node-version` 維持 `22`。
+- 前端與 functions 測試在 CI 設定 `TZ=Asia/Taipei`，避免 GitHub runner 預設 UTC 造成 todayTasks 類日期斷言偏一天。
+
 ---
 
 ## 後續開發重點
 
 P0：
 
+- 用 staging Google 帳號實測 OCR、新增預約、用藥確認三條寫入路徑，確認 Supabase/Google 使用者不會落到 LINE-only 或共用測試帳號。
 - 用 10 張真實單據完成 LINE 實機回歸測試；目前已建立去識別化 manifest 與驗證工具，待放入本機私有圖片與實測紀錄。
 - 完成 390px 手機與 LINE WebView 實機檢查，尤其是照護圈、用藥總表、費用確認 modal。
 - 強化藥品去重：已補藥名正規化、商品名/學名/藥碼欄位、疑似重複候選標記、家人端提示與高信心 exact duplicate 合併；下一步補正式藥碼資料源與完整合併管理。
