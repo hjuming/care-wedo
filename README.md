@@ -2,7 +2,7 @@
 
 > **當前版本：V1.0 Beta（2026-06-20）**
 > **正式站**：https://care.wedopr.com
-> **狀態**：LINE 實機流程已進入測試期；照護圈後台已可查看去識別化提醒送達紀錄；Google OAuth 後台登入 MVP 已完成程式與 Phase 58 migration；protected data API 已統一身分解析，並以 tenant-isolation 測試覆蓋四個核心寫入資源、dashboard/documents 讀取 scope、文件 Storage 操作阻擋與 upload path namespace。
+> **狀態**：LINE 實機流程已進入測試期；照護圈後台已可查看去識別化提醒送達紀錄；Google OAuth 後台登入 MVP 已完成程式與 Phase 58 migration；protected data API 已統一身分解析，並以 tenant-isolation 測試覆蓋四個核心 PATCH 寫入資源、appointment create、medication taken、dashboard/documents 讀取 scope、文件 Storage 操作阻擋與 upload path namespace。
 > **Production 上線紀錄**：2026-06-20（Asia/Taipei）已上線 auth 統一、reminder 正式模式預設、deploy 前 CI gate、GitHub Actions Node 24 runtime 升級。2026-06-05 Phase 57（LINE Push Audit Logs）production migration 已套用；後台 dashboard 已回傳最近提醒送達摘要，不含完整 LINE id 或推播全文。Phase 58 需套用 `supabase/migration_phase58_supabase_auth_identity.sql` 並設定 Supabase Google provider / redirect URL 後啟用。
 
 Care WEDO 是給長輩與家人使用的照護小幫手。長輩可以在 LINE 上傳藥袋、掛號單、處方箋或預約單照片，也可以直接貼上看診、用藥或提醒文字；系統會用 AI 解析，完整存進資料庫，再用短句提醒長輩重點。
@@ -419,7 +419,7 @@ CI/CD gate：
 P0：
 
 - 先用 `npm run staging:smoke:ready` 確認 staging smoke 必要 env 齊全；再依 `GOOGLE_PROTECTED_WRITE_SMOKE_RUNBOOK.md` 或 `npm run google:protected-write:smoke` 在 staging 以 Google 帳號實測 OCR、新增預約、用藥確認三條寫入路徑，確認 Supabase/Google 使用者不會落到 LINE-only 或共用測試帳號。
-- 資料圍堵防護網已先明文採 service-role-only + app-layer ownership filters，且 tenant-isolation 已覆蓋 medications / appointments / profiles / care_documents PATCH、dashboard/documents 讀取 scope、foreign document signed URL / storage delete 阻擋與 upload path namespace；DB 層已補 authenticated read-only table / Storage object policies 與 direct write revoke。下一步是 staging Google E2E、`npm run storage:policy:smoke` live verification 與正式 direct-write RLS 設計。
+- 資料圍堵防護網已先明文採 service-role-only + app-layer ownership filters，且 tenant-isolation 已覆蓋 medications / appointments / profiles / care_documents PATCH、appointment create、medication taken、dashboard/documents 讀取 scope、foreign document signed URL / storage delete 阻擋與 upload path namespace；DB 層已補 authenticated read-only table / Storage object policies 與 direct write revoke。下一步是 staging Google E2E、`npm run storage:policy:smoke` live verification 與正式 direct-write RLS 設計。
 - 用 10 張真實單據完成 LINE 實機回歸測試；目前已建立去識別化 manifest、expected shape、private image hash 工具與驗證工具；本機 dry-run 顯示 10 張 private images 尚未放入，待補真實 sha256 與實測紀錄。
 - 完成 390px 手機與 LINE WebView 實機檢查，尤其是照護圈、用藥總表、費用確認 modal。
 - 強化藥品去重：已補藥名正規化、商品名/學名/藥碼欄位、疑似重複候選標記、家人端提示與高信心 exact duplicate 合併；下一步補正式藥碼資料源與完整合併管理。

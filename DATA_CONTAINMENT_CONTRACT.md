@@ -14,7 +14,7 @@
 | Functions REST helper 使用 service role | `functions/_shared/supabase.ts` 的 `supabaseFetch()` 將 `SUPABASE_SERVICE_ROLE_KEY` 放進 `apikey` 與 `Authorization` |
 | service role 會繞過 RLS | Supabase service role key 具備 bypass RLS 語意；因此 authenticated read policy 不能視為目前 Functions 寫入 API 的主要資料隔離保護 |
 | protected handlers 已統一 request auth entry | `functions/_shared/auth_context.ts` 提供 `getRequestUser(context)`，handler 可重用 middleware 的 `context.data.identity` 與 request cache |
-| CI 目前有行為型與 source guard 隔離測試 | `functions/_tests/tenant-isolation.test.ts` 真實驅動 medications、appointments、profiles、care_documents handlers，驗證跨戶 PATCH 不寫入、同群組 PATCH 可成功；另覆蓋 dashboard/documents 讀取 scope、foreign document 不得產生 signed URL、foreign document 不得觸發 Storage delete、upload storage path 必須用 group/profile namespace。`care-wedo-app/src/data-containment-regression.test.js` 鎖定核心表與 Storage object read-only policies，且不得 grant anon/authenticated writes |
+| CI 目前有行為型與 source guard 隔離測試 | `functions/_tests/tenant-isolation.test.ts` 真實驅動 medications、appointments、profiles、care_documents handlers，驗證跨戶 PATCH 不寫入、同群組 PATCH 可成功；另覆蓋 appointment create 只能寫 owned profile/group、medication taken 只能為 owned medication 寫 log、dashboard/documents 讀取 scope、foreign document 不得產生 signed URL、foreign document 不得觸發 Storage delete、upload storage path 必須用 group/profile namespace。`care-wedo-app/src/data-containment-regression.test.js` 鎖定核心表與 Storage object read-only policies，且不得 grant anon/authenticated writes |
 
 ## 2. 明確決策
 
@@ -47,8 +47,9 @@ Schema 已啟用 RLS 並有 authenticated read-only table / Storage object polic
 | Resource | Handler | Cross-tenant expected | Same-tenant expected |
 |---|---|---|---|
 | medications | `functions/api/medications/[id].ts` PATCH | 403，不發 PATCH write | 200，發 PATCH write |
-| medication_logs | `functions/api/medications/[id]/taken.ts` / `functions/api/medications/taken.ts` | 需依 medication group scope 寫入 | 只允許 owned medication 產生 log |
+| medication_logs | `functions/api/medications/[id]/taken.ts` / `functions/api/medications/taken.ts` | mixed / foreign medication ids 回 403，不發 log write | 只允許 owned medication 產生 log，且 log 帶 owned `group_id` / `confirmed_by_user_id` |
 | appointments | `functions/api/appointments/[id].ts` PATCH | 403，不發 PATCH write | 200，發 PATCH write |
+| appointments | `functions/api/appointments.ts` POST | foreign profile 回 403，不發 appointment insert | owned profile 才可新增，insert payload 使用 owned `group_id` / `profile_id` / `created_by_user_id` |
 | care_profiles | `functions/api/profiles/[id].ts` PATCH | 403，不發 PATCH write | 200，發 PATCH write |
 | care_documents | `functions/api/documents/[id].ts` PATCH | 404，不發 PATCH write | 200，發 PATCH write |
 | dashboard read | `functions/api/dashboard.ts` GET | 查詢必須帶 active group/profile scope | 只回 active group/profile records |
@@ -66,7 +67,7 @@ Schema 已啟用 RLS 並有 authenticated read-only table / Storage object polic
 TZ=Asia/Taipei npm run test:functions
 ```
 
-目前預期結果：`23/23 pass`（同一套 functions 測試包含 auth-context、tenant-isolation 與 subscription-state；不要把它誤讀成 staging live smoke）。
+目前預期結果：`27/27 pass`（同一套 functions 測試包含 auth-context、tenant-isolation 與 subscription-state；不要把它誤讀成 staging live smoke）。
 
 ## 5. 未覆蓋但不得忽略
 

@@ -5,8 +5,10 @@ import { onRequestGet as getDashboard } from "../api/dashboard";
 import { onRequestGet as listDocuments } from "../api/documents";
 import { onRequestDelete as deleteDocument, onRequestGet as getDocument, onRequestPatch as patchDocument } from "../api/documents/[id]";
 import { onRequestGet as getDocumentFileUrl } from "../api/documents/[id]/file-url";
+import { onRequestPost as createAppointment } from "../api/appointments";
 import { onRequestPatch as patchAppointment } from "../api/appointments/[id]";
 import { onRequestPatch as patchMedication } from "../api/medications/[id]";
+import { onRequestPost as markMedicationsTaken } from "../api/medications/taken";
 import { onRequestPatch as patchProfile } from "../api/profiles/[id]";
 import { buildStoragePath } from "../_shared/care_documents";
 
@@ -87,6 +89,17 @@ function makeGetRequest(path: string): Request {
     headers: {
       Authorization: "Bearer line-attacker-id-token",
     },
+  });
+}
+
+function makePostRequest(path: string, body: Record<string, unknown>): Request {
+  return new Request(`https://care.example${path}`, {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer line-attacker-id-token",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
   });
 }
 
@@ -332,6 +345,73 @@ test("allows PATCH on an appointment the user's group owns (200)", async () => {
   });
 });
 
+test("rejects POST appointment for a profile outside the user's groups (403)", async () => {
+  const VICTIM_PROFILE_ID = 986;
+  let insertAttempted = false;
+
+  await withMockedFetch((url, init) => {
+    const base = baseRoutes(url);
+    if (base) return base;
+
+    if (url.includes(`/rest/v1/care_profiles?group_id=in.(${ATTACKER_GROUP_ID})`)) {
+      return json([careProfileRow(501)]);
+    }
+    if (url.includes("/rest/v1/appointments?select=*") && init?.method === "POST") {
+      insertAttempted = true;
+      return json([appointmentRow(985, 200)]);
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  }, async () => {
+    const res = await createAppointment({
+      request: makePostRequest("/api/appointments", {
+        profile_id: VICTIM_PROFILE_ID,
+        type: "clinic_visit",
+        date: "2026-06-22",
+        title: "越權新增",
+      }),
+      env: ENV,
+    } as any);
+
+    assert.equal(res.status, 403, "cross-tenant appointment POST must be forbidden");
+    assert.equal(insertAttempted, false, "must not insert an appointment for a foreign profile");
+  });
+});
+
+test("allows POST appointment for an owned profile and writes the owned group scope", async () => {
+  const OWNED_PROFILE_ID = 501;
+  let insertedPayload: any = null;
+
+  await withMockedFetch((url, init) => {
+    const base = baseRoutes(url);
+    if (base) return base;
+
+    if (url.includes(`/rest/v1/care_profiles?group_id=in.(${ATTACKER_GROUP_ID})`)) {
+      return json([careProfileRow(OWNED_PROFILE_ID)]);
+    }
+    if (url.includes("/rest/v1/appointments?select=*") && init?.method === "POST") {
+      insertedPayload = JSON.parse(String(init.body || "{}"));
+      return json([appointmentRow(984)]);
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  }, async () => {
+    const res = await createAppointment({
+      request: makePostRequest("/api/appointments", {
+        profile_id: OWNED_PROFILE_ID,
+        type: "clinic_visit",
+        date: "2026-06-22",
+        title: "新增回診",
+      }),
+      env: ENV,
+    } as any);
+
+    assert.equal(res.status, 200, "owned appointment POST must succeed");
+    assert.equal(insertedPayload.user_id, ATTACKER_USER_ID);
+    assert.equal(insertedPayload.created_by_user_id, ATTACKER_USER_ID);
+    assert.equal(insertedPayload.group_id, ATTACKER_GROUP_ID);
+    assert.equal(insertedPayload.profile_id, OWNED_PROFILE_ID);
+  });
+});
+
 test("rejects PATCH on a care profile outside the user's groups (403)", async () => {
   const VICTIM_PROFILE_ID = 996;
   let patchAttempted = false;
@@ -453,6 +533,79 @@ test("allows PATCH on a care document in the user's group (200)", async () => {
 
     assert.equal(res.status, 200, "owner document PATCH must succeed");
     assert.equal(patched, true, "owner document PATCH must reach the write");
+  });
+});
+
+test("rejects medication taken POST when any medication is outside the user's groups (403)", async () => {
+  const OWNED_MED_ID = 982;
+  const VICTIM_MED_ID = 983;
+  let logInsertAttempted = false;
+
+  await withMockedFetch((url, init) => {
+    const base = baseRoutes(url);
+    if (base) return base;
+
+    if (
+      url.includes(`/rest/v1/medications?id=in.(${OWNED_MED_ID},${VICTIM_MED_ID})`)
+      && url.includes("select=id,user_id,group_id,profile_id,time_slot,scheduled_time,frequency")
+    ) {
+      return json([
+        medicationRow(OWNED_MED_ID, ATTACKER_GROUP_ID),
+        { ...medicationRow(VICTIM_MED_ID, 200), user_id: 2 },
+      ]);
+    }
+    if (url.includes("/rest/v1/medication_logs?select=id") && init?.method === "POST") {
+      logInsertAttempted = true;
+      return json([{ id: 1 }]);
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  }, async () => {
+    const res = await markMedicationsTaken({
+      request: makePostRequest("/api/medications/taken", {
+        medication_ids: [OWNED_MED_ID, VICTIM_MED_ID],
+        taken_date: "2026-06-20",
+      }),
+      env: ENV,
+    } as any);
+
+    assert.equal(res.status, 403, "mixed owned/foreign medication taken POST must be forbidden");
+    assert.equal(logInsertAttempted, false, "must not insert medication logs when any medication is foreign");
+  });
+});
+
+test("allows medication taken POST for owned medications and writes owned group logs", async () => {
+  const OWNED_MED_IDS = [980, 981];
+  let logPayload: any = null;
+
+  await withMockedFetch((url, init) => {
+    const base = baseRoutes(url);
+    if (base) return base;
+
+    if (
+      url.includes(`/rest/v1/medications?id=in.(${OWNED_MED_IDS.join(",")})`)
+      && url.includes("select=id,user_id,group_id,profile_id,time_slot,scheduled_time,frequency")
+    ) {
+      return json(OWNED_MED_IDS.map((id) => medicationRow(id, ATTACKER_GROUP_ID)));
+    }
+    if (url.includes("/rest/v1/medication_logs?select=id") && init?.method === "POST") {
+      logPayload = JSON.parse(String(init.body || "[]"));
+      return json([{ id: 1 }, { id: 2 }]);
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  }, async () => {
+    const res = await markMedicationsTaken({
+      request: makePostRequest("/api/medications/taken", {
+        medication_ids: OWNED_MED_IDS,
+        taken_date: "2026-06-20",
+      }),
+      env: ENV,
+    } as any);
+
+    assert.equal(res.status, 200, "owned medication taken POST must succeed");
+    assert.equal(Array.isArray(logPayload), true, "batch medication taken must write an array of logs");
+    assert.deepEqual(logPayload.map((row: any) => row.medication_id), OWNED_MED_IDS);
+    assert.equal(logPayload.every((row: any) => row.group_id === ATTACKER_GROUP_ID), true);
+    assert.equal(logPayload.every((row: any) => row.confirmed_by_user_id === ATTACKER_USER_ID), true);
   });
 });
 
