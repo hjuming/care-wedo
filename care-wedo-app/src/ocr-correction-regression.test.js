@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 
 const appSource = readFileSync(resolve(import.meta.dirname, "App.jsx"), "utf8");
 const ocrResultSource = readFileSync(resolve(import.meta.dirname, "components/OcrResult.jsx"), "utf8");
+const ocrWorkflowSource = readFileSync(resolve(import.meta.dirname, "features/ocr/OcrWorkflow.jsx"), "utf8");
 const ocrApiSource = readFileSync(resolve(import.meta.dirname, "../../functions/api/ocr/[[path]].ts"), "utf8");
 
 function readProjectFile(path) {
@@ -23,7 +24,7 @@ test("Dashboard supports text upload through the same OCR review flow", () => {
   assert.match(appSource, /ocrAnalyzeText/);
   assert.match(appSource, /handleTextUpload/);
   assert.match(appSource, /onTextSubmit=\{handleTextUpload\}/);
-  assert.match(appSource, /整理文字/);
+  assert.match(ocrWorkflowSource, /整理文字/);
   assert.match(ocrApiSource, /medical_text/);
   assert.match(ocrApiSource, /parseMedicalText/);
 });

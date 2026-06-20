@@ -34,8 +34,10 @@ test("OCR API requires a valid authenticated LINE identity", () => {
 
 test("Groups API requires a bearer token before resolving a user", () => {
   const source = readProjectFile("functions/api/groups.ts");
-  assert.match(source, /if \(!token\) \{/);
-  assert.match(source, /請先登入/);
+  const authContext = readProjectFile("functions/_shared/auth_context.ts");
+  assert.match(source, /getRequestUser\(context\)/);
+  assert.match(authContext, /const token = getBearerToken\(context\.request\)/);
+  assert.match(authContext, /if \(!token\) throw new Error\("請先登入"\)/);
 });
 
 test("Groups API keeps invite join idempotent for existing members before plan limits", () => {
@@ -126,19 +128,21 @@ test("Mobile LINE login uses a real LIFF link instead of a script-only redirect"
 
 test("Care WEDO session cookie keeps returning users signed in", () => {
   const shared = readProjectFile("functions/_shared/supabase.ts");
+  const authIdentity = readProjectFile("functions/_shared/auth_identity.ts");
   const sessionApi = readProjectFile("functions/api/session.ts");
   const middleware = readProjectFile("functions/api/_middleware.ts");
   const liff = readProjectFile("care-wedo-app/src/services/liff.js");
   const app = readProjectFile("care-wedo-app/src/App.jsx");
   const loginSetup = readProjectFile("care-wedo-app/src/components/LoginSetup.jsx");
 
-  assert.match(shared, /CARE_WEDO_SESSION_COOKIE = "care_wedo_session"/);
-  assert.match(shared, /HttpOnly/);
-  assert.match(shared, /Secure/);
-  assert.match(shared, /SameSite=Lax/);
-  assert.match(shared, /crypto\.subtle\.sign\("HMAC"/);
+  assert.match(authIdentity, /CARE_WEDO_SESSION_COOKIE = "care_wedo_session"/);
+  assert.match(authIdentity, /HttpOnly/);
+  assert.match(authIdentity, /Secure/);
+  assert.match(authIdentity, /SameSite=Lax/);
+  assert.match(authIdentity, /crypto\.subtle\.sign\("HMAC"/);
+  assert.match(authIdentity, /verifyCareWedoSessionToken/);
+  assert.match(authIdentity, /getCookieValue\(request, CARE_WEDO_SESSION_COOKIE\)/);
   assert.match(shared, /verifyCareWedoSessionToken/);
-  assert.match(shared, /getCookieValue\(request, CARE_WEDO_SESSION_COOKIE\)/);
   assert.match(sessionApi, /onRequestPost/);
   assert.match(sessionApi, /Set-Cookie/);
   assert.match(sessionApi, /onRequestDelete/);
@@ -186,8 +190,8 @@ test("LINE links use an external browser handoff page", () => {
 });
 
 test("Medication view groups medicines by time and keeps one calm taken action", () => {
-  const source = readProjectFile("care-wedo-app/src/App.jsx");
-  const medicationView = source.slice(source.indexOf("function MedicationView"));
+  const app = readProjectFile("care-wedo-app/src/App.jsx");
+  const medicationView = readProjectFile("care-wedo-app/src/features/medications/MedicationView.jsx");
   assert.match(medicationView, /groupMedicationsBySchedule/);
   assert.match(medicationView, /medicine-time-group/);
   assert.match(medicationView, /medicine-slot-actions/);
@@ -203,15 +207,15 @@ test("Medication view groups medicines by time and keeps one calm taken action",
   assert.match(medicationView, /totalMedicationCount/);
   assert.doesNotMatch(medicationView, />\s*忘了\s*</);
   assert.doesNotMatch(medicationView, /我忘記有沒有吃/);
-  assert.match(source, /markMedicationSlotStatus/);
-  assert.match(source, /taken_slots/);
+  assert.match(app, /markMedicationSlotStatus/);
+  assert.match(app, /taken_slots/);
   assert.doesNotMatch(medicationView, /尚未記錄/);
 });
 
 test("Medication view exposes an A4-friendly doctor summary", () => {
-  const source = readProjectFile("care-wedo-app/src/App.jsx");
+  const source = readProjectFile("care-wedo-app/src/features/medications/MedicationView.jsx");
   const css = readProjectFile("care-wedo-app/src/index.css");
-  const medicationArea = source.slice(source.indexOf("function MedicationSummarySheet"), source.indexOf("function appointmentTimeValue"));
+  const medicationArea = source.slice(source.indexOf("function MedicationSummarySheet"));
 
   assert.match(medicationArea, /給醫生看/);
   assert.match(medicationArea, /用藥總表/);
@@ -286,12 +290,13 @@ test("Family assistance controls do not appear outside centralized settings", ()
 
 test("Manual reminders derive title from type while preserving department", () => {
   const app = readProjectFile("care-wedo-app/src/App.jsx");
+  const appointmentView = readProjectFile("care-wedo-app/src/features/appointments/AppointmentView.jsx");
   const schema = readProjectFile("supabase/schema.sql");
   const migration = readProjectFile("supabase/migration_phase48_appointment_title.sql");
   const createApi = readProjectFile("functions/api/appointments.ts");
   const updateApi = readProjectFile("functions/api/appointments/[id].ts");
   const shared = readProjectFile("functions/_shared/supabase.ts");
-  const manualModal = app.slice(app.indexOf("function buildReminderFormData"), app.indexOf("function OverviewView"));
+  const manualModal = appointmentView.slice(appointmentView.indexOf("function buildReminderFormData"), appointmentView.indexOf("export function CalendarView"));
   const saveHandler = app.slice(app.indexOf("async function handleManualReminderSave"), app.indexOf("function handleAddAppointmentToCalendar"));
 
   assert.match(schema, /title text/);
@@ -315,15 +320,16 @@ test("Manual reminders derive title from type while preserving department", () =
 
 test("Appointment cards expose edit and soft-delete controls with scoped APIs", () => {
   const app = readProjectFile("care-wedo-app/src/App.jsx");
+  const appointmentView = readProjectFile("care-wedo-app/src/features/appointments/AppointmentView.jsx");
   const api = readProjectFile("care-wedo-app/src/services/api.js");
   const updateApi = readProjectFile("functions/api/appointments/[id].ts");
-  const calendarView = app.slice(app.indexOf("function CalendarView"), app.indexOf("const MEDICATION_SLOT_OPTIONS"));
+  const calendarView = appointmentView.slice(appointmentView.indexOf("export function CalendarView"));
   const recordsView = app.slice(app.indexOf("function RecordsView"), app.indexOf("function SettingsView"));
   const editSaveHandler = app.slice(app.indexOf("async function handleAppointmentUpdateSave"), app.indexOf("async function handleAppointmentDelete"));
   const deleteHandler = app.slice(app.indexOf("async function handleAppointmentDelete"), app.indexOf("async function handleAppointmentCopySave"));
   const copySaveHandler = app.slice(app.indexOf("async function handleAppointmentCopySave"), app.indexOf("async function handleAddAppointmentToCalendar"));
   const editModalMount = app.slice(app.indexOf("{editingAppointment && ("), app.indexOf("{showFamilyNotesEditor && ("));
-  const editModal = app.slice(app.indexOf("function ManualReminderModal"), app.indexOf("function OverviewView"));
+  const editModal = appointmentView.slice(appointmentView.indexOf("export function ManualReminderModal"), appointmentView.indexOf("export function CalendarView"));
 
   assert.match(app, /deleteAppointment/);
   assert.match(app, /editingAppointment/);
@@ -353,7 +359,7 @@ test("Care reminder detail text is highlighted on cards", () => {
 
 test("Today task cards keep only the primary elder action", () => {
   const app = readProjectFile("care-wedo-app/src/App.jsx");
-  const overviewView = app.slice(app.indexOf("function OverviewView"), app.indexOf("function CalendarView"));
+  const overviewView = app.slice(app.indexOf("function OverviewView"), app.indexOf("function appointmentTimeValue"));
   const todayTaskCard = overviewView.slice(
     overviewView.indexOf('<article key={task.id}'),
     overviewView.indexOf("</article>"),
@@ -367,8 +373,9 @@ test("Today task cards keep only the primary elder action", () => {
 
 test("Today page makes photo-first care upload the primary action", () => {
   const app = readProjectFile("care-wedo-app/src/App.jsx");
-  const overviewView = app.slice(app.indexOf("function OverviewView"), app.indexOf("function CalendarView"));
-  const uploadGuide = app.slice(app.indexOf("function UploadGuide"), app.indexOf("function EmptyGuide"));
+  const ocrWorkflow = readProjectFile("care-wedo-app/src/features/ocr/OcrWorkflow.jsx");
+  const overviewView = app.slice(app.indexOf("function OverviewView"), app.indexOf("function appointmentTimeValue"));
+  const uploadGuide = ocrWorkflow.slice(ocrWorkflow.indexOf("export function UploadGuide"), ocrWorkflow.indexOf("export function CareDocumentUploadModal"));
 
   assert.match(overviewView, /今天要照顧的事/);
   assert.match(overviewView, /拍照新增照護資料/);
@@ -767,10 +774,11 @@ test("Appointment calendar export is an authenticated ICS endpoint", () => {
 
 test("Future appointment cards expose a calendar file export action", () => {
   const source = readProjectFile("care-wedo-app/src/App.jsx");
-  const calendarView = source.slice(source.indexOf("function CalendarView"), source.indexOf("const MEDICATION_SLOT_OPTIONS"));
+  const appointmentView = readProjectFile("care-wedo-app/src/features/appointments/AppointmentView.jsx");
+  const calendarView = appointmentView.slice(appointmentView.indexOf("export function CalendarView"));
   assert.match(source, /downloadAppointmentCalendarFile/);
   assert.match(source, /downloadLocalAppointmentCalendarFile/);
-  assert.match(source, /buildGoogleCalendarEventUrl/);
+  assert.match(appointmentView, /buildGoogleCalendarEventUrl/);
   assert.match(calendarView, /onAddToCalendar/);
   assert.match(calendarView, />\s*加入行事曆\s*</);
   assert.match(calendarView, />\s*加入 Google 行事曆\s*</);

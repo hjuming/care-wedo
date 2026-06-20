@@ -66,6 +66,7 @@ test("dashboard returns document summaries without leaking signed file URLs", ()
 
 test("frontend exposes document library upload and doctor display mode", () => {
   const app = readProjectFile("care-wedo-app/src/App.jsx");
+  const ocrWorkflow = readProjectFile("care-wedo-app/src/features/ocr/OcrWorkflow.jsx");
   const api = readProjectFile("care-wedo-app/src/services/api.js");
   const css = readProjectFile("care-wedo-app/src/index.css");
 
@@ -74,6 +75,8 @@ test("frontend exposes document library upload and doctor display mode", () => {
   assert.match(api, /fetchDocumentFileUrl/);
   assert.match(api, /deleteCareDocument/);
   assert.match(app, /CareDocumentUploadModal/);
+  assert.match(ocrWorkflow, /export function CareDocumentUploadModal/);
+  assert.match(ocrWorkflow, /上傳病歷或用藥紀錄/);
   assert.match(app, /CareDocumentDetailModal/);
   assert.match(app, /function hasDisplayableCareDocument/);
   assert.match(app, /\.filter\(hasDisplayableCareDocument\)/);
