@@ -45,6 +45,9 @@ jobs:
         env:
           TZ: Asia/Taipei
 
+      - name: Validate Phase 59 RLS policy sync
+        run: npm run rls:policy-sync
+
       - name: Validate real-receipt regression pack
         run: node scripts/validate-real-receipt-pack.mjs
 

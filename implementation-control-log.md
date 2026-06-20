@@ -16,7 +16,7 @@
 | 欄位 | 值 |
 |---|---|
 | 任務開始時間 | 2026-06-20 18:09:26 CST |
-| 最後更新時間 | 2026-06-20 19:14:29 CST |
+| 最後更新時間 | 2026-06-20 19:25:00 CST |
 
 ### 目標
 
@@ -44,6 +44,7 @@
 - [x] 補 functions unit tests 覆蓋合法 transition、非法 transition、idempotent webhook replay 合約。
 - [x] 補記 shared formatter extraction 與文件進度，避免 README / DEVELOPMENT_PLAN / data contract 和目前 worktree 不一致。
 - [x] 補 auth/public-boundary guard，鎖住 middleware public allowlist 不得包含 protected data APIs，且 cron endpoints 必須以 `CRON_SECRET` fail closed。
+- [x] 將 Phase 59 migration ↔ `schema.sql` 一致性檢查從人工比對升級成 `npm run rls:policy-sync` 與 deploy gate。
 
 ## 2. 使用者明確要求
 
@@ -121,6 +122,11 @@
 | `DATA_CONTAINMENT_CONTRACT.md` | 將 functions 本機測試預期從 `17/17` 更新為 `23/23`，並標註不等於 live smoke | 文件與目前測試範圍對齊 | 是 | 避免把過期數字或本機測試誤讀成 staging 驗證 |
 | `README.md` / `DEVELOPMENT_PLAN.md` | 補記 `features/shared/careFormatters.js` 與 shared formatter 拆分進度；同步 functions 測試數字 | 開發優化進度紀錄 | 是 | 不宣稱 Phase 2 完成 |
 | `care-wedo-app/src/auth-unification-regression.test.js` | 新增 middleware public allowlist guard 與 cron `CRON_SECRET` guard | Phase 1：資料圍堵邊界防回歸 | 是 | 防止 protected data APIs 被加入 public allowlist；cron 仍可在 middleware 公開但 handler 必須驗 secret |
+| `scripts/validate-phase59-policy-sync.mjs` | 新增 Phase 59 migration 與 `schema.sql` policy/helper/revoke drift validator | Phase 1：安全規則 fresh-install / incremental 兩條路一致 | 是 | 不連線資料庫，只做 repo 內 source-of-truth 一致性檢查 |
+| `package.json` | 新增 `rls:policy-sync` script | 讓 policy sync 可手動與 CI 重跑 | 是 | Root npm tooling 已由 deploy workflow 安裝 |
+| `.github/workflows/deploy.yml` | 在 receipt-pack/build 前新增 Phase 59 RLS policy sync gate | 防止安全 policy drift 仍部署 | 是 | 任一 drift 會阻擋 deploy |
+| `care-wedo-app/src/data-containment-regression.test.js` | 新增 validator / package script / deploy workflow wiring guard | 防止 policy sync gate 被移除 | 是 | 靜態 guard，不等於 staging DB live verification |
+| `README.md` / `DEVELOPMENT_PLAN.md` | 更新 CI gate 與驗證紀錄，加入 Phase 59 RLS policy sync | 開發優化進度紀錄 | 是 | 不宣稱 staging policy 已套用 |
 
 ## 7. 取捨
 
@@ -162,7 +168,7 @@
 | 檢查 | 指令 / 方法 | 結果 |
 |---|---|---|
 | smoke env key 掃描 | 只列 `.env` key 名 | 只看到 `SUPABASE_URL`、`SUPABASE_SERVICE_ROLE_KEY`；缺 Google smoke token 與測試 id |
-| 前端 regression | `TZ=Asia/Taipei npm test`（`care-wedo-app`） | 171/171 pass |
+| 前端 regression | `TZ=Asia/Taipei npm test`（`care-wedo-app`） | 172/172 pass |
 | auth/public-boundary regression | `node --test care-wedo-app/src/auth-unification-regression.test.js` | 7/7 pass；包含 protected data API auth entry、middleware public allowlist、cron secret guard |
 | data containment source guard | `node --test care-wedo-app/src/data-containment-regression.test.js` | 3/3 pass，涵蓋 table / Storage object read-only policies 與 Storage smoke wiring |
 | Storage policy smoke dry-run | `set -a; source .env; set +a; node scripts/storage-policy-smoke.mjs --dry-run` | pass；Supabase URL 可載入，但缺 publishable key、user access token、owned/foreign object path |
@@ -176,6 +182,7 @@
 | shared auth import smoke | `node --import tsx -e 'await import("./functions/_shared/supabase.ts"); await import("./functions/_shared/auth_identity.ts"); console.log("shared imports ok")'` | pass |
 | doc sync guard | `rg -n "17/17\|careFormatters\|23/23\|features/shared/careFormatters" DATA_CONTAINMENT_CONTRACT.md README.md DEVELOPMENT_PLAN.md implementation-control-log.md` | 無舊 `17/17` 殘留；shared formatter 與 `23/23` 已寫入相關文件 |
 | duplicate formatter guard | `rg -n "function (todayInTaipei\|isDateTodayOrFuture\|typeLabel\|typeIcon\|normalizeDateInput\|formatDateLabel)" care-wedo-app/src/App.jsx care-wedo-app/src/features/appointments/AppointmentView.jsx care-wedo-app/src/features/shared/careFormatters.js` | 只剩 `careFormatters.js` 有 helper 定義 |
+| Phase 59 policy sync | `npm run rls:policy-sync` | pass；15 個 policy、3 個 helper function、15 個 direct-write revoke 一致 |
 | control log schema | `python3 /Users/hjuming/網站專案/skills-wedo/skills/ai-development-control-log/scripts/validate-control-log.py implementation-control-log.md` | pass |
 
 ### 未驗證

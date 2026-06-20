@@ -16,6 +16,7 @@
     "google:protected-write:smoke:dry": "node scripts/google-protected-write-smoke.mjs --dry-run",
     "storage:policy:smoke": "node scripts/storage-policy-smoke.mjs",
     "storage:policy:smoke:dry": "node scripts/storage-policy-smoke.mjs --dry-run",
+    "rls:policy-sync": "node scripts/validate-phase59-policy-sync.mjs",
     "manual:reminder": "tsx scripts/manual-reminder.ts",
     "test:functions": "tsx --test functions/_tests/*.test.ts"
   },

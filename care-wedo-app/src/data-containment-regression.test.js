@@ -130,3 +130,19 @@ test("care document storage policy smoke uses authenticated user access without 
   assert.match(packageJson, /storage:policy:smoke/);
   assert.match(packageJson, /storage:policy:smoke:dry/);
 });
+
+test("Phase 59 RLS policy sync validator is wired into deploy gate", () => {
+  const script = readProjectFile("scripts/validate-phase59-policy-sync.mjs");
+  const packageJson = readProjectFile("package.json");
+  const deployWorkflow = readProjectFile(".github/workflows/deploy.yml");
+
+  assert.match(script, /migration_phase59_rls_read_policies\.sql/);
+  assert.match(script, /schema\.sql/);
+  assert.match(script, /extractPolicies/);
+  assert.match(script, /extractCareWedoFunctions/);
+  assert.match(script, /extractDirectWriteRevokes/);
+  assert.match(script, /rollback drop/);
+  assert.match(packageJson, /rls:policy-sync/);
+  assert.match(deployWorkflow, /Validate Phase 59 RLS policy sync/);
+  assert.match(deployWorkflow, /npm run rls:policy-sync/);
+});

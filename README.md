@@ -406,7 +406,7 @@ https://care.wedopr.com/callback
 
 CI/CD gate：
 
-- `.github/workflows/deploy.yml` 於 `main` push 後先跑 lint、前端與 regression 測試、functions tenant-isolation 測試、real-receipt regression pack、build，全部通過才部署 Cloudflare Pages。
+- `.github/workflows/deploy.yml` 於 `main` push 後先跑 lint、前端與 regression 測試、functions tenant-isolation 測試、Phase 59 RLS policy sync、real-receipt regression pack、build，全部通過才部署 Cloudflare Pages。
 - `.github/workflows/deploy-reminder-scheduler.yml` 於 reminder scheduler worker 或 workflow 變更時部署 Cloudflare Cron Worker，並同步 `CRON_SECRET`。
 - GitHub Actions runtime 已升級到 Node 24 系列 action：`actions/checkout@v7`、`actions/setup-node@v6`；專案 build/test 的 `node-version` 維持 `22`。
 - 前端與 functions 測試在 CI 設定 `TZ=Asia/Taipei`，避免 GitHub runner 預設 UTC 造成 todayTasks 類日期斷言偏一天。
