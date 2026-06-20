@@ -88,3 +88,48 @@ test("billing events are recorded for paid care actions without blocking beta fl
   assert.match(joinAction, /eventType:\s*"collaborator_joined"/);
   assert.match(joinAction, /subjectUserId:\s*userId/);
 });
+
+test("subscription payments are gated by an explicit state machine before checkout UI", () => {
+  const stateMachine = readProjectFile("SUBSCRIPTION_STATE_MACHINE.md");
+  const helper = readProjectFile("functions/_shared/subscription_state.ts");
+  const helperTest = readProjectFile("functions/_tests/subscription-state.test.ts");
+  const app = readProjectFile("care-wedo-app/src/App.jsx");
+
+  for (const state of [
+    "beta",
+    "checkout_pending",
+    "active",
+    "past_due",
+    "grace_period",
+    "suspended",
+    "cancel_at_period_end",
+    "canceled",
+  ]) {
+    assert.match(stateMachine, new RegExp(`\\\`${state}\\\``));
+  }
+
+  for (const event of [
+    "checkout_created",
+    "payment_succeeded",
+    "payment_failed",
+    "grace_period_expired",
+    "cancel_requested",
+    "subscription_canceled",
+  ]) {
+    assert.match(stateMachine, new RegExp(`\\\`${event}\\\``));
+    assert.match(helper, new RegExp(`"${event}"`));
+  }
+
+  assert.match(helper, /export function transitionSubscriptionState/);
+  assert.match(helper, /requiresProviderEventId/);
+  assert.match(helper, /provider_event_id_required/);
+  assert.match(helper, /transition_not_allowed/);
+  assert.match(helperTest, /subscription state machine accepts documented payment lifecycle transitions/);
+  assert.match(helperTest, /checkout pending never grants paid entitlements before payment succeeds/);
+  assert.match(helperTest, /subscription webhook events require idempotency keys/);
+  assert.match(stateMachine, /provider_event_id/);
+  assert.match(stateMachine, /idempotent/i);
+  assert.match(stateMachine, /checkout_created` 不等於付款成功/);
+  assert.match(stateMachine, /醫療資料不能因付款失敗或取消被硬刪/);
+  assert.doesNotMatch(app, /checkout|paymentIntent|信用卡付款/);
+});
