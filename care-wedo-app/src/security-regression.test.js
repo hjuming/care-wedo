@@ -538,12 +538,12 @@ test("Collaborator contact action uses reliable contact methods instead of raw L
 
 test("Family group creation uses a user feature flag, not group plans", () => {
   const groupsApi = readProjectFile("functions/api/groups.ts");
-  const supabase = readProjectFile("functions/_shared/supabase.ts");
+  const billing = readProjectFile("functions/_shared/billing.ts");
   const migration = readProjectFile("supabase/migration_phase46_user_feature_flags.sql");
   const createAction = groupsApi.slice(groupsApi.indexOf('if (body.action === "create")'));
-  const canCreateStart = supabase.indexOf("export async function canCreateFamilyGroup");
-  const canCreateEnd = supabase.indexOf("/**\n * Check whether a new member", canCreateStart);
-  const canCreate = supabase.slice(canCreateStart, canCreateEnd);
+  const canCreateStart = billing.indexOf("export async function canCreateFamilyGroup");
+  const canCreateEnd = billing.indexOf("/**\n * Check whether a new member", canCreateStart);
+  const canCreate = billing.slice(canCreateStart, canCreateEnd);
 
   assert.match(migration, /create table if not exists public\.user_feature_flags/i);
   assert.match(migration, /multiple_family_groups/);

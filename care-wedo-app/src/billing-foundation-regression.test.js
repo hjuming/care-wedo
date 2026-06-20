@@ -39,18 +39,20 @@ test("billing foundation keeps public tables protected by RLS and service-role-o
 });
 
 test("backend entitlement helper is the source of truth for Care WEDO billing math", () => {
+  const billing = readProjectFile("functions/_shared/billing.ts");
   const supabase = readProjectFile("functions/_shared/supabase.ts");
 
-  assert.match(supabase, /export const CARE_WEDO_CARE_PROFILE_MONTHLY_PRICE = 30/);
-  assert.match(supabase, /export const CARE_WEDO_PAID_COLLABORATOR_MONTHLY_PRICE = 10/);
-  assert.match(supabase, /export const CARE_WEDO_GROUP_MONTHLY_PRICE_MAX = 250/);
-  assert.match(supabase, /export async function resolveGroupBillingEntitlement/);
-  assert.match(supabase, /owner_user_id/);
-  assert.match(supabase, /paidCollaboratorCount/);
-  assert.match(supabase, /member\.user_id !== ownerUserId/);
-  assert.match(supabase, /estimatedMonthlyAmount/);
-  assert.match(supabase, /canAddCareProfile/);
-  assert.match(supabase, /canInviteCollaborator/);
+  assert.match(billing, /export const CARE_WEDO_CARE_PROFILE_MONTHLY_PRICE = 30/);
+  assert.match(billing, /export const CARE_WEDO_PAID_COLLABORATOR_MONTHLY_PRICE = 10/);
+  assert.match(billing, /export const CARE_WEDO_GROUP_MONTHLY_PRICE_MAX = 250/);
+  assert.match(billing, /export async function resolveGroupBillingEntitlement/);
+  assert.match(billing, /owner_user_id/);
+  assert.match(billing, /paidCollaboratorCount/);
+  assert.match(billing, /member\.user_id !== ownerUserId/);
+  assert.match(billing, /estimatedMonthlyAmount/);
+  assert.match(billing, /canAddCareProfile/);
+  assert.match(billing, /canInviteCollaborator/);
+  assert.doesNotMatch(supabase, /export async function resolveGroupBillingEntitlement/);
 });
 
 test("groups GET API returns backend billing entitlement on each group", () => {
@@ -63,7 +65,7 @@ test("groups GET API returns backend billing entitlement on each group", () => {
 });
 
 test("billing events are recorded for paid care actions without blocking beta flows", () => {
-  const supabase = readProjectFile("functions/_shared/supabase.ts");
+  const billing = readProjectFile("functions/_shared/billing.ts");
   const groupsApi = readProjectFile("functions/api/groups.ts");
   const createProfileAction = groupsApi.slice(groupsApi.indexOf('if (body.action === "create_profile")'));
   const joinAction = groupsApi.slice(
@@ -71,14 +73,14 @@ test("billing events are recorded for paid care actions without blocking beta fl
     groupsApi.indexOf('if (body.action === "create_profile")'),
   );
 
-  assert.match(supabase, /export async function recordBillingGroupEvent/);
-  assert.match(supabase, /billing_subscriptions/);
-  assert.match(supabase, /billing_events/);
-  assert.match(supabase, /invoices/);
-  assert.match(supabase, /isBillingFoundationMissingError/);
-  assert.match(supabase, /amount_delta/);
-  assert.match(supabase, /line_items/);
-  assert.match(supabase, /return false/);
+  assert.match(billing, /export async function recordBillingGroupEvent/);
+  assert.match(billing, /billing_subscriptions/);
+  assert.match(billing, /billing_events/);
+  assert.match(billing, /invoices/);
+  assert.match(billing, /isBillingFoundationMissingError/);
+  assert.match(billing, /amount_delta/);
+  assert.match(billing, /line_items/);
+  assert.match(billing, /return false/);
 
   assert.match(groupsApi, /recordBillingGroupEvent/);
   assert.match(createProfileAction, /resolveGroupBillingEntitlement\(env,\s*body\.group_id\)/);

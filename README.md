@@ -435,7 +435,7 @@ P1：
 
 P2：
 
-- App 結構債已開始拆分：`care-wedo-app/src/features/medications/MedicationView.jsx` 已承接用藥管理 view / 用藥總表 helper；`care-wedo-app/src/features/appointments/AppointmentView.jsx` 已承接手動提醒 modal 與月曆排程 view；`care-wedo-app/src/features/ocr/OcrWorkflow.jsx` 已承接掃描進度、拍照/文字上傳導引與醫療文件上傳 modal；`care-wedo-app/src/features/shared/careFormatters.js` 已承接日期與類型顯示 helper，避免 App 與 appointments module 各自複製。Shared helper 也已先把 auth/session/token 驗證抽到 `functions/_shared/auth_identity.ts`，`functions/_shared/supabase.ts` 保留 re-export 相容；下一步再逐塊拆 records / document detail、`index.css` 與剩餘 Supabase data/billing helper。
+- App 結構債已開始拆分：`care-wedo-app/src/features/medications/MedicationView.jsx` 已承接用藥管理 view / 用藥總表 helper；`care-wedo-app/src/features/appointments/AppointmentView.jsx` 已承接手動提醒 modal 與月曆排程 view；`care-wedo-app/src/features/ocr/OcrWorkflow.jsx` 已承接掃描進度、拍照/文字上傳導引與醫療文件上傳 modal；`care-wedo-app/src/features/shared/careFormatters.js` 已承接日期與類型顯示 helper，避免 App 與 appointments module 各自複製。Shared helper 已把 auth/session/token 驗證抽到 `functions/_shared/auth_identity.ts`，billing / quota / plan limit helper 抽到 `functions/_shared/billing.ts`，`functions/_shared/supabase.ts` 目前 783 行；下一步再逐塊拆 records / document detail、`index.css` 與剩餘 Supabase data helper。
 - 正式付費方案與金流：已先補 `SUBSCRIPTION_STATE_MACHINE.md`、pure transition helper 與 unit tests；下一步才補 migration 欄位、webhook fixture test、checkout API 與 provider adapter。
 - Billing Data Foundation 已上線：已補後端 entitlement helper、paid action event 與 draft invoice snapshot；下一步依狀態機把升級、降級、取消、付款失敗寬限期與金流 webhook 接入 `billing_events` / `invoices`。
 - 持續補 AIO 內容：把 Beta 訪談、真實使用教學與資料安全聲明整理進 `/faq`、`/guide`、`/pricing`、`/llms.txt`。

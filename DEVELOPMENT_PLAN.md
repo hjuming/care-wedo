@@ -229,7 +229,7 @@ EmailJS 需要的環境變數：
 | Data containment contract | 基礎完成 | `DATA_CONTAINMENT_CONTRACT.md` 明文記錄短期採 service-role-only + app-layer ownership filters；已補 `supabase/migration_phase59_rls_read_policies.sql` 的 authenticated read-only table / Storage object policies、direct write revoke、`scripts/storage-policy-smoke.mjs`、staging smoke readiness gate 與 runbook，但 Functions 寫入仍以 handler ownership filters / tenant tests 為主 |
 | Google protected write smoke | 待 staging 驗收 | `GOOGLE_PROTECTED_WRITE_SMOKE_RUNBOOK.md` 已補 OCR、新增預約、用藥確認三條 Google/Supabase 寫入路徑的實測步驟；`scripts/google-protected-write-smoke.mjs` 可執行 API + DB scope smoke，待 staging Google token 實跑 |
 | Frontend feature split | 進行中 | 用藥管理已移到 `care-wedo-app/src/features/medications/MedicationView.jsx`；手動提醒 modal 與月曆排程 view 已移到 `care-wedo-app/src/features/appointments/AppointmentView.jsx`；掃描進度、拍照/文字上傳導引與醫療文件上傳 modal 已移到 `care-wedo-app/src/features/ocr/OcrWorkflow.jsx`；日期與類型顯示 helper 已移到 `care-wedo-app/src/features/shared/careFormatters.js`，避免 App 與 appointments module 重複；`App.jsx` 降到約 3.7k 行，下一步再拆 records / document detail 與 `index.css` |
-| Shared auth helper split | 進行中 | 已把 LINE / Supabase / Care session token 驗證抽到 `functions/_shared/auth_identity.ts`；`functions/_shared/supabase.ts` 保留既有 export / re-export 相容，從約 1.6k 行降到約 1.3k 行；下一步再拆剩餘 Supabase data query、group/profile、billing helper |
+| Shared helper split | 進行中 | 已把 LINE / Supabase / Care session token 驗證抽到 `functions/_shared/auth_identity.ts`；billing / quota / plan limit helper 已移到 `functions/_shared/billing.ts`；`functions/_shared/supabase.ts` 從約 1.6k 行降到 783 行；下一步再拆剩餘 Supabase data query 與 group/profile helper |
 
 剩餘風險與優先級修正：
 
@@ -295,7 +295,7 @@ EmailJS 需要的環境變數：
 ### P2：Beta 回饋與營運
 
 - 前端結構債已開始拆分：用藥管理 view / 用藥總表 helper 已移到 `care-wedo-app/src/features/medications/MedicationView.jsx`；手動提醒 modal 與月曆排程 view 已移到 `care-wedo-app/src/features/appointments/AppointmentView.jsx`；掃描進度、拍照/文字上傳導引與醫療文件上傳 modal 已移到 `care-wedo-app/src/features/ocr/OcrWorkflow.jsx`；日期與類型顯示 helper 已移到 `care-wedo-app/src/features/shared/careFormatters.js`；下一步逐塊拆 records / document detail 與 `index.css`，避免一次大重構。
-- Shared helper 結構債已開始拆分：LINE / Supabase / Care session token 驗證已移到 `functions/_shared/auth_identity.ts`，`functions/_shared/supabase.ts` 保留 re-export 相容；下一步拆剩餘資料查詢與 billing helper。
+- Shared helper 結構債已開始拆分：LINE / Supabase / Care session token 驗證已移到 `functions/_shared/auth_identity.ts`；billing / quota / plan limit helper 已移到 `functions/_shared/billing.ts`；`functions/_shared/supabase.ts` 目前 783 行。下一步拆剩餘資料查詢與 group/profile helper。
 - EmailJS 回饋內容匯整成分類表。
 - 建立 Beta 使用者訪談紀錄模板。
 - 建立 FAQ 與 LINE 使用教學。

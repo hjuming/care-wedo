@@ -13,12 +13,14 @@ import {
   getCurrentUserDocumentContext,
 } from "../../_shared/care_documents";
 import {
-  checkGroupOcrQuota,
   Env as SupabaseEnv,
-  incrementGroupOcrQuota,
   serializeCareDocument,
   supabaseFetch,
 } from "../../_shared/supabase";
+import {
+  checkGroupOcrQuota,
+  incrementGroupOcrQuota,
+} from "../../_shared/billing";
 import { saveParsedDataToProfile } from "../../_shared/medical_ocr";
 import { logError, logEvent } from "../../_shared/logger";
 import { sendProductionAlert } from "../../_shared/alerts";

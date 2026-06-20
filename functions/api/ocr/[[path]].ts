@@ -1,11 +1,13 @@
 import {
-  checkGroupOcrQuota,
   getAccessibleProfiles,
   getBearerToken,
-  incrementGroupOcrQuota,
   resolveDefaultCareContext,
   supabaseFetch,
 } from "../../_shared/supabase";
+import {
+  checkGroupOcrQuota,
+  incrementGroupOcrQuota,
+} from "../../_shared/billing";
 import { getRequestUser } from "../../_shared/auth_context";
 import { logError, logEvent } from "../../_shared/logger";
 import { sendProductionAlert } from "../../_shared/alerts";

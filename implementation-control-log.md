@@ -16,7 +16,7 @@
 | 欄位 | 值 |
 |---|---|
 | 任務開始時間 | 2026-06-20 18:09:26 CST |
-| 最後更新時間 | 2026-06-20 19:40:00 CST |
+| 最後更新時間 | 2026-06-20 19:50:00 CST |
 
 ### 目標
 
@@ -48,6 +48,7 @@
 - [x] 新增 staging smoke readiness gate，聚合 Google protected-write 與 Storage policy smoke 必要 env，避免 live smoke 開始後才發現缺 token / path。
 - [x] 將 staging readiness gate 寫回資料圍堵合約與兩份 smoke runbook，避免只在 README / 開發計畫提到。
 - [x] 追加 appointment create 與 medication taken 的行為型 tenant-isolation 測試，補上 staging protected-write smoke 對應的本機負向證據。
+- [x] 將 billing / quota / plan limit helper 從 `supabase.ts` 抽到 `functions/_shared/billing.ts`，讓 shared helper 結構債再降一段。
 
 ## 2. 使用者明確要求
 
@@ -81,6 +82,7 @@
 | 本輪只補文件與控制日誌，不再擴大應用程式拆分 | 最新問題是「還有哪些未施作優化」，目前最需要的是把已做/未做/已驗證/未驗證對齊 | 繼續拆 records / document detail | 會延後結構債實作，但降低交付文件錯誤 |
 | 採用使用者補充的 6 批 commit 分組，但先修正本機新增 guard 帶來的測試數字 | 分批 commit 才能 review / bisect；我剛新增兩個 regression guard，文件若仍寫 169/169 會失真 | 直接照附件 commit，不更新數字 | 需要更仔細 staging，避免檔案被放錯批 |
 | 先補 protected-write 對應的本機 tenant tests，而不是新增不存在的 list endpoint 測試 | repo 目前沒有 appointments / medications 獨立 list endpoint；dashboard 已覆蓋列表 scope。appointment create 與 medication taken 剛好是 staging smoke 要驗的兩條寫入路徑 | 硬寫 source guard 或測不存在 endpoint | 仍不能取代 staging Google E2E，但能防止 app-layer ownership filter 回歸 |
+| 將 billing/quota helper 直接拆到 `functions/_shared/billing.ts`，不透過 `supabase.ts` re-export | 避免 `supabase.ts` 和 `billing.ts` 形成循環依賴；呼叫端明確依賴 billing 模組也更清楚 | 保留 re-export 相容 | 需要更新所有 import 與 source guard；用 import smoke / tests 驗證 |
 
 ## 5. 規格偏離
 
@@ -139,6 +141,11 @@
 | `care-wedo-app/src/data-containment-regression.test.js` | 新增合約 / runbook 必須提到 `staging:smoke:ready` 的 source guard | 防止 runbook 與資料圍堵合約漂移 | 是 | 靜態 guard |
 | `functions/_tests/tenant-isolation.test.ts` | 新增 appointment create foreign profile 不 insert / owned profile insert 帶 scope；新增 medication taken mixed/foreign ids 不寫 log / owned meds 寫 owned group logs | Phase 1：補強 staging protected-write smoke 對應的本機隔離證據 | 是 | mock fetch 驅動真 handler，不等於 live staging smoke |
 | `DATA_CONTAINMENT_CONTRACT.md` / `README.md` / `DEVELOPMENT_PLAN.md` | 更新資料圍堵覆蓋範圍與 functions 測試數字 | 文件與測試現況對齊 | 是 | 不宣稱 production DB 或 staging live 已驗證 |
+| `functions/_shared/billing.ts` | 新增 billing / quota / plan limit helper module，承接原 `supabase.ts` 後段 helper | Phase 2：拆 `supabase.ts` 大檔與責任範圍 | 是 | 只搬函式，不改商業規則 |
+| `functions/_shared/supabase.ts` | 移除 billing / quota / plan limit helper，保留 Supabase REST、user/group/profile、care data helper | Phase 2：降低 shared helper 混雜 | 是 | 從 1,364 行降到 783 行 |
+| `functions/api/groups.ts` / `functions/api/dashboard.ts` / `functions/api/ocr/[[path]].ts` / `functions/api/documents/upload.ts` | billing/quota import 改從 `_shared/billing` 取得 | 對齊新 helper 邊界 | 是 | handler 行為不變 |
+| `care-wedo-app/src/billing-foundation-regression.test.js` / `care-wedo-app/src/security-regression.test.js` | source guard 改讀 `functions/_shared/billing.ts`，並確認 billing entitlement 不再定義於 `supabase.ts` | 防止 billing helper 又長回 `supabase.ts` | 是 | 靜態 guard |
+| `README.md` / `DEVELOPMENT_PLAN.md` | 更新 shared helper split 現況與剩餘工作 | 開發優化進度紀錄 | 是 | 不宣稱 Phase 2 完成 |
 
 ## 7. 取捨
 
@@ -191,7 +198,9 @@
 | Google protected write smoke dry-run | `set -a; source .env; set +a; node scripts/google-protected-write-smoke.mjs --dry-run` | pass；Supabase env 可載入，但缺 staging base URL、Google token、profile/group/expected user id，live steps 未執行 |
 | whitespace check | `git diff --check` | pass |
 | functions auth / tenant isolation / subscription state | `env TZ=Asia/Taipei npm run test:functions` | 27/27 pass |
-| shared auth import smoke | `node --import tsx -e 'await import("./functions/_shared/supabase.ts"); await import("./functions/_shared/auth_identity.ts"); console.log("shared imports ok")'` | pass |
+| shared helper import smoke | `node --import tsx -e 'await import("./functions/_shared/supabase.ts"); await import("./functions/_shared/billing.ts"); await import("./functions/api/groups.ts"); await import("./functions/api/dashboard.ts"); await import("./functions/api/ocr/[[path]].ts"); await import("./functions/api/documents/upload.ts"); console.log("billing split imports ok")'` | pass |
+| billing regression | `node --test care-wedo-app/src/billing-foundation-regression.test.js` | 6/6 pass |
+| security regression | `node --test care-wedo-app/src/security-regression.test.js` | 48/48 pass |
 | doc sync guard | `rg -n "1[7]/1[7]\|2[3]/2[3]" DATA_CONTAINMENT_CONTRACT.md README.md DEVELOPMENT_PLAN.md implementation-control-log.md` | pass；無舊 functions 測試數字殘留 |
 | duplicate formatter guard | `rg -n "function (todayInTaipei\|isDateTodayOrFuture\|typeLabel\|typeIcon\|normalizeDateInput\|formatDateLabel)" care-wedo-app/src/App.jsx care-wedo-app/src/features/appointments/AppointmentView.jsx care-wedo-app/src/features/shared/careFormatters.js` | 只剩 `careFormatters.js` 有 helper 定義 |
 | Phase 59 policy sync | `npm run rls:policy-sync` | pass；15 個 policy、3 個 helper function、15 個 direct-write revoke 一致 |
@@ -219,10 +228,10 @@
 
 | 項目 | 摘要 |
 |---|---|
-| 改了什麼 | Auth context / tenant isolation / receipt / subscription 文件化之外，本輪再拆 appointments / OCR workflow feature、shared frontend formatter、shared auth identity helper，補 authenticated read-only table / Storage object RLS policy migration/schema、Storage policy smoke 腳本、receipt private-image hash 工具，並追加 appointment create / medication taken 行為隔離測試 |
+| 改了什麼 | Auth context / tenant isolation / receipt / subscription 文件化之外，本輪再拆 appointments / OCR workflow feature、shared frontend formatter、shared auth identity helper、shared billing/quota helper，補 authenticated read-only table / Storage object RLS policy migration/schema、Storage policy smoke 腳本、receipt private-image hash 工具，並追加 appointment create / medication taken 行為隔離測試 |
 | 沒改什麼 | 不手動部署、不改 production schema/secrets；不改 tenant isolation handler 行為 |
 | AI 自行決定 | 先做可本機驗證的 appointments / OCR workflow feature split 與 auth identity helper split，live E2E 保持未驗證 |
 | 規格偏離 | staging Google E2E 尚未實跑 |
-| 已驗證 | 前端 test/lint/build、functions test 27/27、Phase 59 policy sync、data-containment source guard、receipt-pack、staging readiness report、google/storage smoke dry-run、diff whitespace |
+| 已驗證 | 前端 test/lint/build、functions test 27/27、Phase 59 policy sync、data-containment source guard、billing/security regression、receipt-pack、staging readiness report、google/storage smoke dry-run、diff whitespace |
 | 未驗證 | staging live smoke、staging Storage policy、real receipt private hashes / LINE WebView、production |
 | 回滾方式 | 還原本輪檔案變更 |
