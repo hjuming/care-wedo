@@ -1,18 +1,19 @@
 # Care WEDO Real Receipt Regression Pack
 
-> 最後更新：2026-06-05
+> 最後更新：2026-06-20
 > 目標：建立 P0-003 真實台灣醫院單據回歸包，驗證 LINE WebView、OCR、照護對象歸屬、重複上傳與低信心人工確認流程。
 
 ## 1. 安全原則
 
 - 不把真實醫療單據圖片 commit 到 Git。
 - 真實圖檔只放在 `test-fixtures/real-receipt-regression/private-images/`，此目錄已加入 `.gitignore`。
-- commit 只允許去識別化 manifest：單據類型、場景標籤、預期欄位、私有檔案相對路徑、hash placeholder。
+- commit 只允許去識別化 manifest 與 expected shape：單據類型、場景標籤、預期欄位、私有檔案相對路徑、hash 或 hash placeholder。
 - Manifest 不可放完整姓名、身分證、生日、完整病歷、完整藥名清單、醫療全文。
+- `expected-shapes.json` 不可含 OCR 原文、圖片、病患識別資訊或完整醫療內容；只保存 record kind / type / required fields 與安全預期。
 
 ## 2. 目前資料包狀態
 
-`test-fixtures/real-receipt-regression/manifest.json` 已定義 10 張測試單據位置與預期結果：
+`test-fixtures/real-receipt-regression/manifest.json` 已定義 10 張測試單據位置與預期結果；`test-fixtures/real-receipt-regression/expected-shapes.json` 保存同一批案例的去識別化 expected shape：
 
 | 類型 | 覆蓋 |
 |---|---|
@@ -52,13 +53,21 @@ tw-prescription-01.jpg
 tw-prescription-02.jpg
 ```
 
-3. 產生 hash 後填回 manifest：
+3. 先做 private-image dry-run：
 
 ```bash
-shasum -a 256 test-fixtures/real-receipt-regression/private-images/*.jpg
+npm run receipt-pack:private-check -- --dry-run
 ```
 
-若 manifest 中仍是 `pending-private-image-hash`，smoke runner 會顯示實際 hash 供本機更新；圖片本身仍不可 commit。
+這只回報缺圖 / hash 狀態，不印出完整私有路徑或 sha256 值。
+
+4. 私有圖片齊全後，寫入 manifest hash：
+
+```bash
+npm run receipt-pack:hashes
+```
+
+這會把每張私有圖的 `fixture.sha256` 寫回 `manifest.json`。圖片本身仍不可 commit。沒有私有圖片時，CI 仍只檢查 manifest / expected-shapes 結構，不假裝已完成實機 OCR。
 
 ## 4. 驗收指令
 
@@ -71,8 +80,28 @@ npm run receipt-pack:check
 檢查本機私有圖檔與 hash 狀態：
 
 ```bash
+npm run receipt-pack:private-check
+```
+
+沒有私有圖片時這個嚴格檢查會失敗；只要看缺口請用：
+
+```bash
+npm run receipt-pack:private-check -- --dry-run
+```
+
+私有圖片與 hash 都到位後，再跑 OCR smoke dry-run：
+
+```bash
 npm run receipt-pack:smoke
 ```
+
+重新產生去識別化 expected shape：
+
+```bash
+npm run receipt-pack:shapes
+```
+
+這會更新 `test-fixtures/real-receipt-regression/expected-shapes.json`。檔案只應出現 case id、文件類型、場景、預期 record kind/type/required_fields 與安全預期。
 
 需要真的送到 OCR smoke endpoint 時，才明確啟用：
 
@@ -106,5 +135,5 @@ pnpm build
 ## 6. 下一步
 
 - 建立手動 LINE WebView 測試紀錄表。
-- 補真實圖片 hash，不把圖片 commit。
-- 私有圖片齊全後，用 `receipt-pack:smoke` 做 dry-run；需要打 OCR endpoint 時才用 `--send`。
+- 補真實圖片 hash，不把圖片 commit；目前沒有本機私有圖片時，hash 仍會保留 `pending-private-image-hash`。
+- 私有圖片齊全後，先跑 `receipt-pack:hashes` 寫入 hash，再跑 `receipt-pack:private-check` 與 `receipt-pack:smoke`；需要打 OCR endpoint 時才用 `--send`。

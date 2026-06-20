@@ -1,0 +1,246 @@
+{
+  "schema_version": "care-wedo-real-receipt-expected-shapes-v1",
+  "source_manifest_schema_version": "care-wedo-real-receipt-regression-v1",
+  "source_manifest_sha256": "79195136c37b0808360127098dd96a90e9bdb44a98e2b35f74e25929f28a36d2",
+  "generated_at": "2026-05-29",
+  "privacy": {
+    "contains_raw_medical_text": false,
+    "contains_original_images": false,
+    "contains_patient_identifiers": false
+  },
+  "cases": [
+    {
+      "case_id": "tw-clinic-visit-01",
+      "country": "TW",
+      "document_type": "clinic_visit",
+      "scenarios": [
+        "single_upload"
+      ],
+      "expected_records": [
+        {
+          "kind": "appointment",
+          "type": "clinic_visit",
+          "required_fields": [
+            "date",
+            "time",
+            "hospital",
+            "department"
+          ]
+        }
+      ],
+      "safety_expectation": {
+        "elder_duplicate_warning_visible": false,
+        "raw_medical_full_text_visible": false
+      }
+    },
+    {
+      "case_id": "tw-clinic-visit-02",
+      "country": "TW",
+      "document_type": "clinic_visit",
+      "scenarios": [
+        "wrong_profile_then_reassign"
+      ],
+      "expected_records": [
+        {
+          "kind": "appointment",
+          "type": "clinic_visit",
+          "required_fields": [
+            "date",
+            "hospital",
+            "department"
+          ]
+        }
+      ],
+      "safety_expectation": {
+        "elder_duplicate_warning_visible": false,
+        "raw_medical_full_text_visible": false
+      }
+    },
+    {
+      "case_id": "tw-inspection-01",
+      "country": "TW",
+      "document_type": "inspection",
+      "scenarios": [
+        "single_upload"
+      ],
+      "expected_records": [
+        {
+          "kind": "appointment",
+          "type": "inspection",
+          "required_fields": [
+            "date",
+            "time",
+            "hospital",
+            "department"
+          ]
+        }
+      ],
+      "safety_expectation": {
+        "elder_duplicate_warning_visible": false,
+        "raw_medical_full_text_visible": false
+      }
+    },
+    {
+      "case_id": "tw-inspection-02",
+      "country": "TW",
+      "document_type": "inspection",
+      "scenarios": [
+        "low_confidence_review"
+      ],
+      "expected_records": [
+        {
+          "kind": "appointment",
+          "type": "inspection",
+          "required_fields": [
+            "date",
+            "hospital"
+          ]
+        }
+      ],
+      "safety_expectation": {
+        "elder_duplicate_warning_visible": false,
+        "raw_medical_full_text_visible": false
+      }
+    },
+    {
+      "case_id": "tw-refill-01",
+      "country": "TW",
+      "document_type": "refill_reminder",
+      "scenarios": [
+        "single_upload"
+      ],
+      "expected_records": [
+        {
+          "kind": "appointment",
+          "type": "refill_reminder",
+          "required_fields": [
+            "date",
+            "hospital"
+          ]
+        }
+      ],
+      "safety_expectation": {
+        "elder_duplicate_warning_visible": false,
+        "raw_medical_full_text_visible": false
+      }
+    },
+    {
+      "case_id": "tw-refill-02",
+      "country": "TW",
+      "document_type": "refill_reminder",
+      "scenarios": [
+        "duplicate_upload"
+      ],
+      "expected_records": [
+        {
+          "kind": "appointment",
+          "type": "refill_reminder",
+          "required_fields": [
+            "date",
+            "hospital"
+          ]
+        }
+      ],
+      "safety_expectation": {
+        "elder_duplicate_warning_visible": false,
+        "raw_medical_full_text_visible": false
+      }
+    },
+    {
+      "case_id": "tw-medication-bag-01",
+      "country": "TW",
+      "document_type": "medication_bag",
+      "scenarios": [
+        "single_upload"
+      ],
+      "expected_records": [
+        {
+          "kind": "medication",
+          "type": "medication",
+          "required_fields": [
+            "name",
+            "dosage",
+            "frequency"
+          ]
+        }
+      ],
+      "safety_expectation": {
+        "elder_duplicate_warning_visible": false,
+        "raw_medical_full_text_visible": false
+      }
+    },
+    {
+      "case_id": "tw-medication-bag-02",
+      "country": "TW",
+      "document_type": "medication_bag",
+      "scenarios": [
+        "multi_upload"
+      ],
+      "expected_records": [
+        {
+          "kind": "medication",
+          "type": "medication",
+          "required_fields": [
+            "name",
+            "dosage"
+          ]
+        }
+      ],
+      "safety_expectation": {
+        "elder_duplicate_warning_visible": false,
+        "raw_medical_full_text_visible": false
+      }
+    },
+    {
+      "case_id": "tw-prescription-01",
+      "country": "TW",
+      "document_type": "prescription",
+      "scenarios": [
+        "multi_upload"
+      ],
+      "expected_records": [
+        {
+          "kind": "medication",
+          "type": "medication",
+          "required_fields": [
+            "name",
+            "frequency"
+          ]
+        },
+        {
+          "kind": "appointment",
+          "type": "refill_reminder",
+          "required_fields": [
+            "date"
+          ]
+        }
+      ],
+      "safety_expectation": {
+        "elder_duplicate_warning_visible": false,
+        "raw_medical_full_text_visible": false
+      }
+    },
+    {
+      "case_id": "tw-prescription-02",
+      "country": "TW",
+      "document_type": "prescription",
+      "scenarios": [
+        "low_confidence_review",
+        "duplicate_upload"
+      ],
+      "expected_records": [
+        {
+          "kind": "medication",
+          "type": "medication",
+          "required_fields": [
+            "name"
+          ]
+        }
+      ],
+      "safety_expectation": {
+        "elder_duplicate_warning_visible": false,
+        "raw_medical_full_text_visible": false
+      }
+    }
+  ]
+}
