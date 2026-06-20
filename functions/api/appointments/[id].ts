@@ -1,18 +1,15 @@
 import {
   AppointmentUpdateFields,
   Env,
+  getAuthenticatedUser,
   getBearerToken,
-  getOrCreateDefaultUser,
   getUserMemberships,
   patchAppointment,
   serializeAppointment,
-  verifyLineIdToken,
 } from "../../_shared/supabase";
 
 async function getIdentityAndGroups(request: Request, env: Env) {
-  const token = getBearerToken(request);
-  const identity = token ? await verifyLineIdToken(env, token) : null;
-  const userId = await getOrCreateDefaultUser(env, identity?.lineUserId);
+  const { userId } = await getAuthenticatedUser(env, request);
   const memberships = await getUserMemberships(env, userId);
   const groupIds = memberships.map((m) => m.group_id);
   return { userId, groupIds };

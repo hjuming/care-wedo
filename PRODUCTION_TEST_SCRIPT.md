@@ -34,6 +34,7 @@
 | LINE LIFF Endpoint URL | `https://care.wedopr.com/app` | [ ] |
 | LINE Messaging API Webhook | `https://care.wedopr.com/callback` 且 Verify 成功 | [ ] |
 | Cloudflare Secrets | `GOOGLE_API_KEY`、`SUPABASE_URL`、`SUPABASE_SERVICE_ROLE_KEY`、`LINE_CHANNEL_ACCESS_TOKEN`、`LINE_CHANNEL_SECRET`、`LINE_LOGIN_CHANNEL_ID`、`CRON_SECRET` 已存在 | [ ] |
+| 提醒發送模式 | `REMINDER_TEST_ONLY` **不存在或為 `0`**（否則提醒只會送測試帳號）；可查 `cron.reminders_mode` / `cron.evening_mode` log 的 `test_only=false` | [ ] |
 | GitHub Actions Secrets | `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`、`CRON_SECRET` 已存在 | [ ] |
 
 ## 1. 公開頁與路由

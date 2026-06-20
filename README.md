@@ -360,6 +360,11 @@ git tag phase55_release_pre
 - `VITE_EMAILJS_TEMPLATE_ID`
 - `VITE_EMAILJS_PUBLIC_KEY`
 
+選用環境變數：
+
+- `REMINDER_TEST_ONLY` — 提醒發送模式。**預設（未設定或 `0`）為正式模式，發送給所有真實收件者。** 僅在設為 `1` 時進入測試模式，只發送給 `REMINDER_TEST_TARGET_NAME`（預設為單一測試帳號）。**Production 部署務必確認此變數不存在或為 `0`。**
+- `REMINDER_TEST_TARGET_NAME` — 測試模式下的指定收件者名稱（僅 `REMINDER_TEST_ONLY=1` 時生效）。
+
 ---
 
 ## 本機開發

@@ -2,11 +2,10 @@ import {
   AppointmentRow,
   CareProfileRow,
   Env,
+  getAuthenticatedUser,
   getBearerToken,
-  getOrCreateDefaultUser,
   getUserMemberships,
   supabaseFetch,
-  verifyLineIdToken,
 } from "../../../_shared/supabase";
 
 const CARE_WEDO_URL = "https://care.wedopr.com";
@@ -187,8 +186,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env, params })
       return Response.json({ error: "請先登入" }, { status: 401 });
     }
 
-    const identity = await verifyLineIdToken(env, token);
-    const userId = await getOrCreateDefaultUser(env, identity.lineUserId);
+    const { userId } = await getAuthenticatedUser(env, request);
     const memberships = await getUserMemberships(env, userId);
     const groupIds = memberships.map((membership) => membership.group_id);
     const filters = [`user_id.eq.${userId}`];

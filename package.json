@@ -9,7 +9,8 @@
     "cleanup:legacy:apply": "tsx scripts/cleanup-legacy-demo.ts --apply",
     "receipt-pack:check": "node scripts/validate-real-receipt-pack.mjs",
     "receipt-pack:smoke": "node scripts/real-receipt-smoke-runner.mjs --dry-run",
-    "manual:reminder": "tsx scripts/manual-reminder.ts"
+    "manual:reminder": "tsx scripts/manual-reminder.ts",
+    "test:functions": "tsx --test functions/_tests/*.test.ts"
   },
   "devDependencies": {
     "tsx": "^4.19.4"

@@ -1,4 +1,4 @@
-import { Env, getAccessibleProfiles, getBearerToken, getOrCreateDefaultUser, supabaseFetch, verifyLineIdToken } from "../../_shared/supabase";
+import { Env, getAccessibleProfiles, getAuthenticatedUser, getBearerToken, supabaseFetch } from "../../_shared/supabase";
 
 export const onRequestPatch: PagesFunction<Env> = async (context) => {
   const { env, request, params } = context;
@@ -13,8 +13,7 @@ export const onRequestPatch: PagesFunction<Env> = async (context) => {
     if (!idToken) {
       return Response.json({ error: "請先登入" }, { status: 401 });
     }
-    const identity = await verifyLineIdToken(env, idToken);
-    const userId = await getOrCreateDefaultUser(env, identity.lineUserId);
+    const { userId } = await getAuthenticatedUser(env, request);
 
     const accessibleProfiles = await getAccessibleProfiles(env, userId);
     const canManageProfile = accessibleProfiles.some((profile) => String(profile.id) === String(profileId));

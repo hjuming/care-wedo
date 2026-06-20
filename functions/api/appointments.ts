@@ -1,11 +1,10 @@
 import {
   Env,
   getAccessibleProfiles,
+  getAuthenticatedUser,
   getBearerToken,
-  getOrCreateDefaultUser,
   serializeAppointment,
   supabaseFetch,
-  verifyLineIdToken,
 } from "../_shared/supabase";
 
 const ALLOWED_TYPES = new Set([
@@ -32,8 +31,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       return Response.json({ error: "請先登入" }, { status: 401 });
     }
 
-    const identity = await verifyLineIdToken(env, idToken);
-    const userId = await getOrCreateDefaultUser(env, identity.lineUserId);
+    const { userId } = await getAuthenticatedUser(env, request);
     const body = await request.json<any>().catch(() => ({}));
 
     const profileId = Number(body.profile_id);

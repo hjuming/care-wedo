@@ -1,12 +1,11 @@
 import {
   Env,
   getAccessibleProfiles,
+  getAuthenticatedUser,
   getBearerToken,
-  getOrCreateDefaultUser,
   serializeCareProfile,
   setProfileOrderInFlags,
   supabaseFetch,
-  verifyLineIdToken,
 } from "../../_shared/supabase";
 
 export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
@@ -16,8 +15,7 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
       return Response.json({ error: "請先登入" }, { status: 401 });
     }
 
-    const identity = await verifyLineIdToken(env, idToken);
-    const userId = await getOrCreateDefaultUser(env, identity.lineUserId);
+    const { userId } = await getAuthenticatedUser(env, request);
     const body = await request.json<{ profile_ids?: unknown[] }>().catch(() => ({}));
     const profileIds = (body.profile_ids || [])
       .map((id) => Number(id))

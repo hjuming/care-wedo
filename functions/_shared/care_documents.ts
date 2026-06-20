@@ -1,14 +1,13 @@
 import type { AppointmentRow, CareDocumentRow, CareProfileRow, Env, MedicationRow } from "./supabase";
 import {
   getAccessibleProfiles,
+  getAuthenticatedUser,
   getBearerToken,
-  getOrCreateDefaultUser,
   getUserMemberships,
   serializeAppointment,
   serializeCareDocument,
   serializeMedication,
   supabaseFetch,
-  verifyLineIdToken,
 } from "./supabase";
 import type { ParsedMedicalData } from "./medical_ocr";
 
@@ -214,8 +213,7 @@ export async function getCurrentUserDocumentContext(request: Request, env: Env):
   const token = getBearerToken(request);
   if (!token) throw new Error("請先登入");
 
-  const identity = await verifyLineIdToken(env, token);
-  const userId = await getOrCreateDefaultUser(env, identity.lineUserId, identity);
+  const { userId } = await getAuthenticatedUser(env, request);
   const memberships = await getUserMemberships(env, userId);
   const groupIds = memberships.map((membership) => membership.group_id);
   const profiles = await getAccessibleProfiles(env, userId);

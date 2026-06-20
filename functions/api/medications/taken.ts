@@ -1,10 +1,9 @@
 import {
   Env,
+  getAuthenticatedUser,
   getBearerToken,
-  getOrCreateDefaultUser,
   getUserMemberships,
   supabaseFetch,
-  verifyLineIdToken,
 } from "../../_shared/supabase";
 
 type MedicationScopeRow = {
@@ -37,8 +36,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       return Response.json({ error: "請先登入" }, { status: 401 });
     }
 
-    const identity = await verifyLineIdToken(env, token);
-    const userId = await getOrCreateDefaultUser(env, identity.lineUserId);
+    const { userId } = await getAuthenticatedUser(env, request);
     const memberships = await getUserMemberships(env, userId);
     const groupIds = memberships.map((membership) => membership.group_id);
 

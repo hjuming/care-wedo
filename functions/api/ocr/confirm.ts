@@ -1,10 +1,9 @@
 import {
   Env,
+  getAuthenticatedUser,
   getBearerToken,
-  getOrCreateDefaultUser,
   getUserMemberships,
   supabaseFetch,
-  verifyLineIdToken,
 } from "../../_shared/supabase";
 import {
   isMissingMedicationIdentityColumn,
@@ -45,8 +44,7 @@ async function getCurrentUserContext(request: Request, env: Env) {
     return { error: Response.json({ error: "請先登入" }, { status: 401 }) };
   }
 
-  const identity = await verifyLineIdToken(env, token);
-  const userId = await getOrCreateDefaultUser(env, identity.lineUserId);
+  const { userId } = await getAuthenticatedUser(env, request);
   const memberships = await getUserMemberships(env, userId);
   return { userId, groupIds: memberships.map((membership) => membership.group_id) };
 }

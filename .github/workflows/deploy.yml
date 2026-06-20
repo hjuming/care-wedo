@@ -24,6 +24,30 @@ jobs:
         run: npm ci
         working-directory: care-wedo-app
 
+      - name: Install root tooling (tsx for functions tests)
+        run: npm ci
+
+      # --- Quality gates: a failure here blocks the deploy below ---
+      - name: Lint
+        run: npm run lint
+        working-directory: care-wedo-app
+
+      - name: Test (frontend + regression)
+        run: npm test
+        working-directory: care-wedo-app
+        env:
+          # App logic and its date assertions operate in Asia/Taipei.
+          # GitHub runners default to UTC, which shifts day boundaries.
+          TZ: Asia/Taipei
+
+      - name: Test (functions tenant-isolation)
+        run: npm run test:functions
+        env:
+          TZ: Asia/Taipei
+
+      - name: Validate real-receipt regression pack
+        run: node scripts/validate-real-receipt-pack.mjs
+
       - name: Build
         run: npm run build
         working-directory: care-wedo-app

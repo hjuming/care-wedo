@@ -1,12 +1,11 @@
 import {
   checkGroupOcrQuota,
   getAccessibleProfiles,
+  getAuthenticatedUser,
   getBearerToken,
-  getOrCreateDefaultUser,
   incrementGroupOcrQuota,
   resolveDefaultCareContext,
   supabaseFetch,
-  verifyLineIdToken,
 } from "../../_shared/supabase";
 import { logError, logEvent } from "../../_shared/logger";
 import { sendProductionAlert } from "../../_shared/alerts";
@@ -376,8 +375,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       return Response.json({ error: "請先登入後再使用 OCR。" }, { status: 401 });
     }
 
-    const identity = await verifyLineIdToken(env, token);
-    const userId = await getOrCreateDefaultUser(env, identity.lineUserId);
+    const { userId, identity: authIdentity } = await getAuthenticatedUser(env, request);
+    const authUserSuffix = (authIdentity.provider === "line" ? authIdentity.lineUserId : authIdentity.authUserId).slice(-4);
 
     // Resolve group + profile context before quota check
     const careContext = await resolveCareContext(env, userId, requestedProfileId);
@@ -395,7 +394,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       file_count: images.length,
       input_type: medicalText ? "text" : "image",
       text_length: medicalText.length || undefined,
-      line_user_suffix: identity.lineUserId.slice(-4),
+      line_user_suffix: authUserSuffix,
     });
 
     // Check OCR quota per family group (one OCR job = 1 deduction)

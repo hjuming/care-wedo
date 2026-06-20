@@ -289,7 +289,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     logEvent("cron.reminders_started", { target_date: targetDate });
 
     const reminders = await fetchReminderAppointments(env, targetDate);
-    const testOnly = env.REMINDER_TEST_ONLY !== "0";
+    // Opt-in test mode: only restrict recipients when explicitly set to "1".
+    // Default (unset / "0") delivers to all real recipients in production.
+    const testOnly = env.REMINDER_TEST_ONLY === "1";
+    logEvent("cron.reminders_mode", { test_only: testOnly });
     const testTargetName = env.REMINDER_TEST_TARGET_NAME?.trim() || "日月MING";
     const allowedLineIds = testOnly ? await fetchLineIdsByUserName(env, testTargetName) : null;
     if (testOnly && allowedLineIds && allowedLineIds.size === 0) {
