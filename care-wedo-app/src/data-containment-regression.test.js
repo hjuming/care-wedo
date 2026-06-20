@@ -146,3 +146,18 @@ test("Phase 59 RLS policy sync validator is wired into deploy gate", () => {
   assert.match(deployWorkflow, /Validate Phase 59 RLS policy sync/);
   assert.match(deployWorkflow, /npm run rls:policy-sync/);
 });
+
+test("data containment contract requires readiness before staging live smoke", () => {
+  const contract = readProjectFile("DATA_CONTAINMENT_CONTRACT.md");
+  const googleRunbook = readProjectFile("GOOGLE_PROTECTED_WRITE_SMOKE_RUNBOOK.md");
+  const storageRunbook = readProjectFile("STORAGE_POLICY_SMOKE_RUNBOOK.md");
+
+  for (const source of [contract, googleRunbook, storageRunbook]) {
+    assert.match(source, /npm run staging:smoke:ready/);
+    assert.match(source, /npm run staging:smoke:ready:report/);
+  }
+
+  assert.match(contract, /google:protected-write:smoke/);
+  assert.match(contract, /storage:policy:smoke/);
+  assert.match(contract, /只跑單支 dry-run 不算 Phase 1 完成/);
+});

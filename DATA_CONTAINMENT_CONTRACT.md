@@ -39,7 +39,8 @@ Schema 已啟用 RLS 並有 authenticated read-only table / Storage object polic
 | 新增 protected read/write endpoint 必須補 tenant-isolation test | 測試需真實呼叫 handler，mock Supabase REST，驗證 foreign record 不可讀、不可寫、不可產生 signed URL |
 | 不得對 anon / authenticated 開 direct write | 核心表只能保留 read policy；insert/update/delete 仍由 service-role Functions 控制，除非另開設計審查與測試 |
 | care-documents Storage object path 必須維持 namespace | object name 必須符合 `group-{id}/profile-{id}/YYYY-MM/uuid.ext`；Storage read policy 依 group prefix 判斷權限 |
-| CI 失敗不得部署 | `deploy.yml` 必須在部署前跑 functions 隔離測試 |
+| CI 失敗不得部署 | `deploy.yml` 必須在部署前跑 functions 隔離測試與 Phase 59 RLS policy sync |
+| staging live smoke 前必須先跑 readiness gate | 用 `npm run staging:smoke:ready` 確認 Google protected-write 與 Storage policy smoke 必要 env 齊全；若只要缺口報告用 `npm run staging:smoke:ready:report`；只跑單支 dry-run 不算 Phase 1 完成 |
 
 ## 4. 已覆蓋的隔離測試
 
@@ -74,7 +75,8 @@ TZ=Asia/Taipei npm run test:functions
 | 項目 | 風險 | 下一步 |
 |---|---|---|
 | List / GET endpoints 的完整跨戶測試 | 已覆蓋 dashboard 與 documents 主要讀取面；其他新增 read endpoint 若未補測仍可能回歸 | 新增 appointments / medications 獨立 list endpoint 時同步補 foreign group 不出現測試 |
-| Storage provider-level live verification | repo 已補 Storage object read policy source guard 與 `scripts/storage-policy-smoke.mjs`；但尚未在 staging Supabase 實際查 `storage.objects` policy 行為 | 用 `npm run storage:policy:smoke` 驗 accessible object 可讀、foreign group object 不可讀；再決定是否開 direct upload policy |
+| Google protected-write live verification | repo 已補 `scripts/google-protected-write-smoke.mjs` 與 readiness gate；但尚未在 staging 以 Google/Supabase Auth token 實際跑 OCR、appointment、medication taken | 先跑 `npm run staging:smoke:ready`，再跑 `npm run google:protected-write:smoke`，確認寫入 row scope 屬於 expected user/group/profile |
+| Storage provider-level live verification | repo 已補 Storage object read policy source guard、`scripts/storage-policy-smoke.mjs` 與 readiness gate；但尚未在 staging Supabase 實際查 `storage.objects` policy 行為 | 先跑 `npm run staging:smoke:ready`，再跑 `npm run storage:policy:smoke` 驗 accessible object 可讀、foreign group object 不可讀；再決定是否開 direct upload policy |
 | RLS policy 終局 | 目前只補 authenticated read-only policies；Functions 寫入仍由 service_role bypass RLS | 若要開 direct writes，必須補 insert/update/delete policies、column/privilege 設計、staging 資料回歸 |
 | Account merge | Google 與 LINE 同一人暫不自動合併，資料分裂是產品風險 | 做「綁定 LINE 帳號」前不可自動 merge 醫療資料 |
 
@@ -132,3 +134,4 @@ with check (
 4. Cross-tenant case 是否不發 write？
 5. 有沒有新增或更新 `functions/_tests/tenant-isolation.test.ts`？
 6. Error response 是否避免洩漏不該知道的資料？
+7. 若宣稱 staging 已驗證，有沒有 `npm run staging:smoke:ready`、`npm run google:protected-write:smoke`、`npm run storage:policy:smoke` 三項證據？

@@ -38,6 +38,20 @@ group-{id}/profile-{id}/YYYY-MM/{uuid}.{pdf|jpg|png|webp}
 
 ## Dry Run
 
+先跑合併 readiness gate，確認 Google protected-write 與 Storage policy smoke 的必要 env 都已備齊：
+
+```bash
+npm run staging:smoke:ready
+```
+
+若只想產出缺口報告、不讓指令失敗：
+
+```bash
+npm run staging:smoke:ready:report
+```
+
+只檢查 Storage policy 設定，不打 staging：
+
 ```bash
 npm run storage:policy:smoke:dry
 ```

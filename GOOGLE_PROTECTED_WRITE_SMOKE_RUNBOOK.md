@@ -26,7 +26,19 @@
 
 本 runbook 可手動執行，也可以用 repo 內腳本跑同一組 P0 寫入驗收。腳本不會輸出 token；report 只包含 staging URL、測試 row id 與 redacted 狀態。
 
-先檢查設定，不打 staging：
+先跑合併 readiness gate，確認 Google protected-write 與 Storage policy smoke 的必要 env 都已備齊：
+
+```bash
+npm run staging:smoke:ready
+```
+
+若只想產出缺口報告、不讓指令失敗：
+
+```bash
+npm run staging:smoke:ready:report
+```
+
+只檢查 Google protected-write 設定、不打 staging：
 
 ```bash
 npm run google:protected-write:smoke:dry

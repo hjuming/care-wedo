@@ -226,7 +226,7 @@ EmailJS 需要的環境變數：
 | Reminder 模式 | 已上線 | `REMINDER_TEST_ONLY=1` 才是測試模式；production 未設定或 `0` 會發送給真實收件者 |
 | Deploy gate | 已上線 | `main` push 後，Cloudflare Pages deploy 前必跑 lint、前端測試、functions tenant-isolation、Phase 59 RLS policy sync、receipt-pack、build |
 | GitHub Actions runtime | 已上線 | `actions/checkout@v7`、`actions/setup-node@v6`；專案 Node 版本維持 22 |
-| Data containment contract | 基礎完成 | `DATA_CONTAINMENT_CONTRACT.md` 明文記錄短期採 service-role-only + app-layer ownership filters；已補 `supabase/migration_phase59_rls_read_policies.sql` 的 authenticated read-only table / Storage object policies、direct write revoke、`scripts/storage-policy-smoke.mjs` 與 runbook，但 Functions 寫入仍以 handler ownership filters / tenant tests 為主 |
+| Data containment contract | 基礎完成 | `DATA_CONTAINMENT_CONTRACT.md` 明文記錄短期採 service-role-only + app-layer ownership filters；已補 `supabase/migration_phase59_rls_read_policies.sql` 的 authenticated read-only table / Storage object policies、direct write revoke、`scripts/storage-policy-smoke.mjs`、staging smoke readiness gate 與 runbook，但 Functions 寫入仍以 handler ownership filters / tenant tests 為主 |
 | Google protected write smoke | 待 staging 驗收 | `GOOGLE_PROTECTED_WRITE_SMOKE_RUNBOOK.md` 已補 OCR、新增預約、用藥確認三條 Google/Supabase 寫入路徑的實測步驟；`scripts/google-protected-write-smoke.mjs` 可執行 API + DB scope smoke，待 staging Google token 實跑 |
 | Frontend feature split | 進行中 | 用藥管理已移到 `care-wedo-app/src/features/medications/MedicationView.jsx`；手動提醒 modal 與月曆排程 view 已移到 `care-wedo-app/src/features/appointments/AppointmentView.jsx`；掃描進度、拍照/文字上傳導引與醫療文件上傳 modal 已移到 `care-wedo-app/src/features/ocr/OcrWorkflow.jsx`；日期與類型顯示 helper 已移到 `care-wedo-app/src/features/shared/careFormatters.js`，避免 App 與 appointments module 重複；`App.jsx` 降到約 3.7k 行，下一步再拆 records / document detail 與 `index.css` |
 | Shared auth helper split | 進行中 | 已把 LINE / Supabase / Care session token 驗證抽到 `functions/_shared/auth_identity.ts`；`functions/_shared/supabase.ts` 保留既有 export / re-export 相容，從約 1.6k 行降到約 1.3k 行；下一步再拆剩餘 Supabase data query、group/profile、billing helper |
@@ -325,14 +325,15 @@ pnpm build
 
 目前最後一次驗證狀態：
 
-- 2026-06-20 CI：`Deploy to Cloudflare Pages` passed（lint、前端 + regression、functions tenant-isolation、receipt-pack、build、deploy）。
+- 2026-06-20 CI：`Deploy to Cloudflare Pages` passed（lint、前端 + regression、functions tenant-isolation、Phase 59 RLS policy sync、receipt-pack、build、deploy）。
 - 2026-06-20 CI：`Deploy Reminder Scheduler` passed（Cloudflare Cron Worker deploy + secret sync）。
-- `npm test`（`care-wedo-app`）：173/173 passed。
+- `npm test`（`care-wedo-app`）：174/174 passed。
 - `npm run lint`（`care-wedo-app`）：passed。
 - `npm run build`（`care-wedo-app`）：passed。
 - `npm run test:functions`：23/23 passed。
 - `npm run receipt-pack:check`：OK，含 10 個 expected shapes。
 - `npm run rls:policy-sync`：OK，Phase 59 migration 與 `schema.sql` 的 15 個 policy、3 個 helper function、15 個 direct-write revoke 一致。
+- `npm run staging:smoke:ready:report`：OK，report-only 模式輸出 redacted missing env；目前 `ready:false`，未打 live endpoint。
 - Functions import smoke：33 個 `functions/api` / `functions/_shared` TypeScript module 可成功匯入。
 - P0-002 費用確認 modal：已用 Chrome DevTools Protocol 模擬 390px 手機寬度檢查，`overflowX = false`
 - P0-001 observability 基礎：已補 `/api/telemetry`、事件分類、Cloudflare tail runbook、webhook 自動告警與回歸測試

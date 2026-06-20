@@ -16,7 +16,7 @@
 | 欄位 | 值 |
 |---|---|
 | 任務開始時間 | 2026-06-20 18:09:26 CST |
-| 最後更新時間 | 2026-06-20 19:33:00 CST |
+| 最後更新時間 | 2026-06-20 19:35:00 CST |
 
 ### 目標
 
@@ -27,8 +27,8 @@
 
 ### 不做什麼 / 範圍外
 
-- 不部署 production。
-- 不 commit / push，除非使用者在最新訊息明確要求。
+- 不手動部署 production、不手動套 production DB migration。
+- 完成本機驗收後可依使用者要求 commit / push；push 只走既有 CI/CD gate，不手動跳過 gate。
 - 不輸出任何 token、service role key、醫療個資或測試帳號敏感值。
 - 不修改 production config、Cloudflare secrets、Supabase production schema。
 - 不把 mock / unit 測試當成 live E2E 或 production 驗證。
@@ -46,6 +46,7 @@
 - [x] 補 auth/public-boundary guard，鎖住 middleware public allowlist 不得包含 protected data APIs，且 cron endpoints 必須以 `CRON_SECRET` fail closed。
 - [x] 將 Phase 59 migration ↔ `schema.sql` 一致性檢查從人工比對升級成 `npm run rls:policy-sync` 與 deploy gate。
 - [x] 新增 staging smoke readiness gate，聚合 Google protected-write 與 Storage policy smoke 必要 env，避免 live smoke 開始後才發現缺 token / path。
+- [x] 將 staging readiness gate 寫回資料圍堵合約與兩份 smoke runbook，避免只在 README / 開發計畫提到。
 
 ## 2. 使用者明確要求
 
@@ -59,7 +60,7 @@
 
 | 問題 / 模糊處 | 目前假設 | 如果假設錯了，修改成本 | 是否需要使用者確認 |
 |---|---|---:|---|
-| 最新訊息是 goal continuation，不是新的「commit/push」命令 | 本輪不做 git commit / push / deploy | 低 | 否 |
+| 最新訊息要求驗收後 Git 推上線 | 本輪完成本機 gate 後允許 commit / push；但不手動改 production DB / secrets / config | 低 | 否 |
 | 本機 `.env` 是否有 staging Google token 與測試資料 | 目前只看到 `SUPABASE_URL`、`SUPABASE_SERVICE_ROLE_KEY`，沒有 smoke 所需 Google token/profile/group/user id | 低 | 否，先標未驗證 |
 | 是否現在實作 RLS policy | 本輪只新增 repo 內 authenticated read-only table / Storage object policy migration/schema，不套 production、不開 direct write grant | 中 | Direct-write RLS / Storage direct upload/delete policy 需另行設計與 staging 驗證 |
 
@@ -74,7 +75,7 @@
 | 補 care-documents Storage object read policy，不開 direct upload/delete | 原始醫療文件在 private bucket；只靠 handler signed URL 仍缺 provider-level 防呆 | 等 staging 再補 Storage policy | source guard 可先鎖住 path namespace 與 direct write revoke，但仍需 staging live verification |
 | 補 Storage policy smoke 腳本，但不在缺 env 時硬跑 live | staging policy 行為需要 user token + owned/foreign object 才能證明；dry-run 可先鎖住驗收步驟 | 等 env 到位再寫腳本 | 本輪仍不能宣稱 staging Storage policy 已驗證 |
 | 補 receipt private-image hash 工具，但不偽造 hash | 本機缺 10 張 private images；不能把 placeholder 說成完成 | 手動 shasum 後人工填 manifest | 腳本可降低填錯風險，但實際 hash 仍待 private images 到位 |
-| 不做 production deployment / git push | 最新可執行指令是 goal continuation，不是明確 push 命令；已有大量未提交變更需審慎 | 沿用前文「Git 推上線」 | 可能不符合使用者先前期待，但可避免未授權外部副作用 |
+| 驗證通過後才 git push，不手動跳過 CI | 使用者要求推上線；但資料圍堵仍缺 live staging smoke，因此只能推 repo/CI，不能宣稱 staging/prod DB 已驗收 | 直接手動部署或套 production migration | CI 可能自動部署前端/functions；DB migration、secrets、live smoke 仍需人工憑證與 staging 證據 |
 | Phase 3 只補 pure helper，不接 provider/webhook/checkout | 使用者要求「金流先寫狀態機，別先接付款按鈕」；pure helper 可用本機單元測試驗證，且沒有外部副作用 | 直接做 checkout API 或 provider adapter | 仍不能宣稱正式金流可用；只把狀態轉移規則從文件變成可測合約 |
 | 本輪只補文件與控制日誌，不再擴大應用程式拆分 | 最新問題是「還有哪些未施作優化」，目前最需要的是把已做/未做/已驗證/未驗證對齊 | 繼續拆 records / document detail | 會延後結構債實作，但降低交付文件錯誤 |
 | 採用使用者補充的 6 批 commit 分組，但先修正本機新增 guard 帶來的測試數字 | 分批 commit 才能 review / bisect；我剛新增兩個 regression guard，文件若仍寫 169/169 會失真 | 直接照附件 commit，不更新數字 | 需要更仔細 staging，避免檔案被放錯批 |
@@ -131,6 +132,9 @@
 | `scripts/staging-smoke-readiness.mjs` | 新增 Google protected-write + Storage policy smoke readiness gate | Phase 1：staging E2E 前置檢查可執行化 | 是 | 不打 live endpoint；缺 env 時 strict mode exit 1 |
 | `package.json` | 新增 `staging:smoke:ready` / `staging:smoke:ready:report` | 讓 staging smoke readiness 可一鍵檢查 | 是 | report mode 不會失敗，strict mode 缺 env 會 fail closed |
 | `care-wedo-app/src/supabase-auth-regression.test.js` | 新增 staging readiness script source guard | 防止 readiness gate 被移除或輸出 token/path | 是 | 靜態 guard，不等於 live smoke |
+| `DATA_CONTAINMENT_CONTRACT.md` | 新增 staging live smoke 前必跑 readiness 的合約規則，並明列 Google / Storage live verification 仍待補 | Phase 1：資料圍堵 SSOT 對齊實際 gate | 是 | 不宣稱 staging 已驗證 |
+| `GOOGLE_PROTECTED_WRITE_SMOKE_RUNBOOK.md` / `STORAGE_POLICY_SMOKE_RUNBOOK.md` | 在各自 dry-run 前補合併 readiness gate | Phase 1：避免只檢查單支 smoke env | 是 | readiness 不打 live endpoint |
+| `care-wedo-app/src/data-containment-regression.test.js` | 新增合約 / runbook 必須提到 `staging:smoke:ready` 的 source guard | 防止 runbook 與資料圍堵合約漂移 | 是 | 靜態 guard |
 
 ## 7. 取捨
 
@@ -172,9 +176,9 @@
 | 檢查 | 指令 / 方法 | 結果 |
 |---|---|---|
 | smoke env key 掃描 | 只列 `.env` key 名 | 只看到 `SUPABASE_URL`、`SUPABASE_SERVICE_ROLE_KEY`；缺 Google smoke token 與測試 id |
-| 前端 regression | `TZ=Asia/Taipei npm test`（`care-wedo-app`） | 173/173 pass |
+| 前端 regression | `TZ=Asia/Taipei npm test`（`care-wedo-app`） | 174/174 pass |
 | auth/public-boundary regression | `node --test care-wedo-app/src/auth-unification-regression.test.js` | 7/7 pass；包含 protected data API auth entry、middleware public allowlist、cron secret guard |
-| data containment source guard | `node --test care-wedo-app/src/data-containment-regression.test.js` | 3/3 pass，涵蓋 table / Storage object read-only policies 與 Storage smoke wiring |
+| data containment source guard | `node --test care-wedo-app/src/data-containment-regression.test.js` | 5/5 pass，涵蓋 table / Storage object read-only policies、Storage smoke wiring、Phase 59 sync deploy gate、staging readiness contract/runbook guard |
 | Storage policy smoke dry-run | `set -a; source .env; set +a; node scripts/storage-policy-smoke.mjs --dry-run` | pass；Supabase URL 可載入，但缺 publishable key、user access token、owned/foreign object path |
 | 前端 lint | `npm run lint`（`care-wedo-app`） | pass |
 | 前端 build | `npm run build`（`care-wedo-app`） | pass，Vite 產出 `dist/` |
@@ -187,7 +191,8 @@
 | doc sync guard | `rg -n "17/17\|careFormatters\|23/23\|features/shared/careFormatters" DATA_CONTAINMENT_CONTRACT.md README.md DEVELOPMENT_PLAN.md implementation-control-log.md` | 無舊 `17/17` 殘留；shared formatter 與 `23/23` 已寫入相關文件 |
 | duplicate formatter guard | `rg -n "function (todayInTaipei\|isDateTodayOrFuture\|typeLabel\|typeIcon\|normalizeDateInput\|formatDateLabel)" care-wedo-app/src/App.jsx care-wedo-app/src/features/appointments/AppointmentView.jsx care-wedo-app/src/features/shared/careFormatters.js` | 只剩 `careFormatters.js` 有 helper 定義 |
 | Phase 59 policy sync | `npm run rls:policy-sync` | pass；15 個 policy、3 個 helper function、15 個 direct-write revoke 一致 |
-| staging smoke readiness report | `set -a; source .env; set +a; npm run staging:smoke:ready:report` | partial；輸出 redacted missing env，不打 live endpoint |
+| staging smoke readiness report | `set -a; source .env; set +a; npm run staging:smoke:ready:report` | partial；輸出 redacted missing env，不打 live endpoint；目前 `ready:false` |
+| data containment contract guard | `node --test care-wedo-app/src/data-containment-regression.test.js` | pass；合約與兩份 smoke runbook 都要求先跑 readiness gate |
 | control log schema | `python3 /Users/hjuming/網站專案/skills-wedo/skills/ai-development-control-log/scripts/validate-control-log.py implementation-control-log.md` | pass |
 
 ### 未驗證
@@ -197,11 +202,11 @@
 | staging Google protected write E2E | 缺 `CARE_WEDO_GOOGLE_ACCESS_TOKEN` / profile / group / expected user id | 仍不能證明 Google/Supabase provider/token audience/redirect 在 staging 全通 |
 | staging Storage policy live verification | 尚未把 phase 59 套到 staging，也缺 publishable key、authenticated token、owned/foreign test object path | 只能證明 repo migration/source guard/dry-run，不代表 staging Storage policy 已生效 |
 | real receipt private hashes / LINE WebView | 本機缺 10 張 private images；尚未跑實機 LINE WebView | 只能證明 manifest/expected-shapes/hash 工具，不代表真實 OCR 回歸完成 |
-| production deployment | 本輪未部署 | 只能保證本機驗證，不代表線上已生效 |
+| production DB / secrets / live smoke | 本輪未手動套 migration、未改 secrets、未跑 live smoke | 只能保證 repo / CI gate 可驗證，不代表 staging/prod DB policy 或 Google/Storage live path 已生效 |
 
 ## 10. 回滾計畫
 
-- Commit / branch：目前未 commit。
+- Commit / branch：本輪 follow-up 驗證通過後 commit / push；若需回滾，用 `git revert <follow-up commit>`。
 - 要還原的檔案：回滾本輪新增 / 修改檔案即可。
 - 資料恢復步驟：本輪不改外部資料。
 - 設定回滾步驟：本輪不改 production config / secrets。
@@ -211,9 +216,9 @@
 | 項目 | 摘要 |
 |---|---|
 | 改了什麼 | Auth context / tenant isolation / receipt / subscription 文件化之外，本輪再拆 appointments / OCR workflow feature、shared frontend formatter、shared auth identity helper，補 authenticated read-only table / Storage object RLS policy migration/schema、Storage policy smoke 腳本與 receipt private-image hash 工具 |
-| 沒改什麼 | 不部署、不 push、不改 production schema/secrets；不改 tenant isolation handler 行為 |
+| 沒改什麼 | 不手動部署、不改 production schema/secrets；不改 tenant isolation handler 行為 |
 | AI 自行決定 | 先做可本機驗證的 appointments / OCR workflow feature split 與 auth identity helper split，live E2E 保持未驗證 |
 | 規格偏離 | staging Google E2E 尚未實跑 |
-| 已驗證 | 前端 test/lint/build、functions test、data-containment source guard、receipt-pack、google smoke dry-run、diff whitespace |
+| 已驗證 | 前端 test/lint/build、functions test、Phase 59 policy sync、data-containment source guard、receipt-pack、staging readiness report、google/storage smoke dry-run、diff whitespace |
 | 未驗證 | staging live smoke、staging Storage policy、real receipt private hashes / LINE WebView、production |
 | 回滾方式 | 還原本輪檔案變更 |
