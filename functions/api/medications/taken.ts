@@ -1,3 +1,4 @@
+import { readJsonBody } from "../../_shared/request_body";
 import {
   Env,
   getBearerToken,
@@ -41,12 +42,12 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     const memberships = await getUserMemberships(env, userId);
     const groupIds = memberships.map((membership) => membership.group_id);
 
-    const body = await request.json<{
+    const body = await readJsonBody<{
       medication_ids?: unknown;
       status?: string;
       taken_date?: string;
       time_slot?: string;
-    }>().catch(() => ({}));
+    }>(request);
     const medicationIds = Array.from(new Set(
       Array.isArray(body.medication_ids)
         ? body.medication_ids.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0)

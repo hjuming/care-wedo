@@ -896,6 +896,7 @@ async function handleEvent(env: Env, event: LineEvent, waitUntil: (promise: Prom
     }
 
     if (params.get("action") === "reassign") {
+      if (!event.replyToken) return;
       const targetProfileId = Number(params.get("p"));
       const appointmentIds = parseIdList(params.get("a"));
       const medicationIds = parseIdList(params.get("m"));

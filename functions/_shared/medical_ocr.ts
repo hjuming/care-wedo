@@ -6,6 +6,9 @@ export type Env = {
   GEMINI_MODEL_NAME?: string;
   SUPABASE_URL: string;
   SUPABASE_SERVICE_ROLE_KEY: string;
+  CARE_WEDO_ALERT_WEBHOOK_URL?: string;
+  CARE_WEDO_ALERT_WEBHOOK_SECRET?: string;
+  CARE_WEDO_ENV?: string;
 };
 
 export type ParsedMedicalData = {

@@ -1,3 +1,4 @@
+import { readJsonBody } from "../../_shared/request_body";
 import {
   AppointmentUpdateFields,
   Env,
@@ -31,7 +32,7 @@ export const onRequestPatch: PagesFunction<Env> = async (context) => {
 
     const { userId, groupIds } = await getIdentityAndGroups(context);
 
-    const body = await request.json<AppointmentUpdateFields>().catch(() => ({}));
+    const body = await readJsonBody<AppointmentUpdateFields>(request);
 
     // Only allow safe update fields
     const allowed: AppointmentUpdateFields = {};

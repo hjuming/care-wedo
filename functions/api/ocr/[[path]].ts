@@ -25,6 +25,9 @@ type Env = {
   SUPABASE_URL: string;
   SUPABASE_SERVICE_ROLE_KEY: string;
   LINE_LOGIN_CHANNEL_ID?: string;
+  CARE_WEDO_ALERT_WEBHOOK_URL?: string;
+  CARE_WEDO_ALERT_WEBHOOK_SECRET?: string;
+  CARE_WEDO_ENV?: string;
 };
 
 type ParsedMedicalData = {

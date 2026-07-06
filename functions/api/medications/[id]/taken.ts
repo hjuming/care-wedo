@@ -1,3 +1,4 @@
+import { readJsonBody } from "../../../_shared/request_body";
 import {
   Env,
   getBearerToken,
@@ -55,7 +56,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       return Response.json({ error: "找不到藥物或沒有確認權限" }, { status: 403 });
     }
 
-    const body = await request.json<{ taken_date?: string; time_slot?: string }>().catch(() => ({}));
+    const body = await readJsonBody<{ taken_date?: string; time_slot?: string }>(request);
     const takenDate = /^\d{4}-\d{2}-\d{2}$/.test(String(body.taken_date || ""))
       ? String(body.taken_date)
       : todayInTaipei();

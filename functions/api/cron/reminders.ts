@@ -260,14 +260,14 @@ function resolveLineRecipients(
 
   const lineId = item.users?.line_user_id;
   if (lineId && lineId !== "web-mvp") {
-    return [{ lineId, userId: item.user_id, groupId }];
+    return [{ lineId, userId: item.user_id, groupId: groupId ?? null }];
   }
 
   return [];
 }
 
 function uniqueNumbers(values: Array<number | null | undefined>) {
-  return Array.from(new Set(values.filter((value): value is number => Number.isInteger(value) && value > 0)));
+  return Array.from(new Set(values.filter((value): value is number => typeof value === "number" && Number.isInteger(value) && value > 0)));
 }
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {

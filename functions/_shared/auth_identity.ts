@@ -3,6 +3,9 @@ export type Env = {
   SUPABASE_SERVICE_ROLE_KEY: string;
   LINE_LOGIN_CHANNEL_ID?: string;
   CARE_WEDO_SESSION_SECRET?: string;
+  CARE_WEDO_ALERT_WEBHOOK_URL?: string;
+  CARE_WEDO_ALERT_WEBHOOK_SECRET?: string;
+  CARE_WEDO_ENV?: string;
 };
 
 export type VerifiedLineIdentity = {
@@ -276,7 +279,7 @@ export async function verifyLineIdToken(env: Env, token: string): Promise<Verifi
     body,
   });
 
-  const result = await response.json<Record<string, unknown>>().catch(() => ({}));
+  const result = await response.json<Record<string, unknown>>().catch(() => ({} as Record<string, unknown>));
   if (!response.ok || typeof result.sub !== "string") {
     const detail = typeof result.error_description === "string" ? result.error_description : "LINE token verify failed.";
     throw new Error(detail);
@@ -298,7 +301,7 @@ export async function verifySupabaseAccessToken(env: Env, token: string): Promis
       Authorization: `Bearer ${token}`,
     },
   });
-  const result = await response.json<Record<string, unknown>>().catch(() => ({}));
+  const result = await response.json<Record<string, unknown>>().catch(() => ({} as Record<string, unknown>));
   if (!response.ok || typeof result.id !== "string") {
     throw new Error("Google 登入已失效，請重新登入。");
   }

@@ -1,3 +1,4 @@
+import { readJsonBody } from "../../_shared/request_body";
 import {
   Env,
   getAccessibleProfiles,
@@ -15,7 +16,7 @@ export const onRequestPatch: PagesFunction<Env> = async (context) => {
     }
 
     const { userId } = await getRequestUser(context);
-    const body = await request.json<{ profile_id?: unknown }>().catch(() => ({}));
+    const body = await readJsonBody<{ profile_id?: unknown }>(request);
     const profileId = Number(body.profile_id);
 
     if (!Number.isFinite(profileId) || profileId <= 0) {

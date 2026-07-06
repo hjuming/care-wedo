@@ -1,3 +1,4 @@
+import { readJsonBody } from "../../_shared/request_body";
 import {
   buildCareDocumentDetail,
   cleanDocumentString,
@@ -46,7 +47,7 @@ export const onRequestPatch: PagesFunction<Env> = async (context) => {
     const document = await fetchAccessibleDocument(env, id, documentContext.groupIds);
     if (!document) return Response.json({ error: "找不到文件或沒有修改權限" }, { status: 404 });
 
-    const body = await request.json<any>().catch(() => ({}));
+    const body = await readJsonBody<any>(request);
     const updates: Record<string, unknown> = {};
     if (body.document_type !== undefined) updates.document_type = normalizeDocumentType(body.document_type);
     if (body.document_title !== undefined) updates.document_title = cleanDocumentString(body.document_title, 120) || null;

@@ -1,3 +1,4 @@
+import { readJsonBody } from "../_shared/request_body";
 import { logError, logEvent } from "../_shared/logger";
 
 interface Env {
@@ -54,7 +55,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       return json({ error: "回饋信箱尚未設定，請先用 Email 聯絡我們。" }, { status: 503 });
     }
 
-    const body = await request.json<FeedbackBody>().catch(() => ({}));
+    const body = await readJsonBody<FeedbackBody>(request);
     const cleanName = body.name?.trim() || "Care WEDO 使用者";
     const cleanEmail = body.email?.trim() || "";
     const cleanTopic = body.topic?.trim() || "其他建議";

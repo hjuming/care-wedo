@@ -1,3 +1,4 @@
+import { readJsonBody } from "../_shared/request_body";
 import {
   UserFamilyGroupRow,
   createCareProfile,
@@ -126,7 +127,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   const { request, env } = context;
   try {
     const userId = await getIdentity(context);
-    const body = await request.json<{
+    const body = await readJsonBody<{
       action: string;
       name?: string;
       code?: string;
@@ -138,7 +139,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       receive_evening_alert?: boolean;
       receive_upload_summary?: boolean;
       notes?: string[] | string;
-    }>().catch(() => ({}));
+    }>(request);
 
     if (body.action === "create") {
       if (!body.name) return Response.json({ error: "請提供群組名稱" }, { status: 400 });

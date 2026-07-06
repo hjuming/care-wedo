@@ -1,3 +1,4 @@
+import { readJsonBody } from "../_shared/request_body";
 import {
   Env,
   VerifiedCareIdentity,
@@ -57,11 +58,11 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   const { request, env } = context;
   try {
     const { userId } = await getIdentity(context);
-    const body = await request.json<{
+    const body = await readJsonBody<{
       action?: string;
       family_name?: string;
       primary_care_name?: string;
-    }>().catch(() => ({}));
+    }>(request);
 
     if (body.action === "init_family") {
       // Create the primary family group and default care profile

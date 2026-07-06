@@ -1,3 +1,4 @@
+import { readJsonBody } from "../../_shared/request_body";
 import {
   Env,
   getBearerToken,
@@ -38,7 +39,7 @@ type PendingMedicationRow = {
   dosage_text?: string | null;
 };
 
-async function getCurrentUserContext(context: { request: Request; env: Env; data?: any }) {
+async function getCurrentUserContext(context: { request: Request; env: Env; data?: any }): Promise<{ error: Response } | { userId: number; groupIds: number[] }> {
   const { request, env } = context;
   const token = getBearerToken(request);
   if (!token) {
@@ -171,7 +172,7 @@ async function confirmMedications(env: Env, documentId: number) {
 export const onRequestPost: PagesFunction<Env> = async (context) => {
   const { request, env } = context;
   try {
-    const body = await request.json<{ document_id?: number }>().catch(() => ({}));
+    const body = await readJsonBody<{ document_id?: number }>(request);
     const documentId = Number(body.document_id);
     if (!Number.isFinite(documentId) || documentId <= 0) {
       return Response.json({ error: "請提供有效的文件 ID" }, { status: 400 });
