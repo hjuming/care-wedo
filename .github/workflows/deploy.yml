@@ -45,6 +45,9 @@ jobs:
         env:
           TZ: Asia/Taipei
 
+      - name: Typecheck (functions / scripts / workers)
+        run: npm run typecheck
+
       - name: Validate WCAG contrast (elder-friendly gate)
         run: npm run a11y:contrast
 

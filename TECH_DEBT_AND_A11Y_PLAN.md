@@ -93,9 +93,15 @@
 
 ### Phase B — 工程安全網（P0/P1，約 2 天）
 
-**B-1 補 typecheck gate（1 天，P0）**
-- 新增根目錄 `tsconfig.json`（`strict: true`、`noEmit`、涵蓋 `functions/`、`scripts/`、`workers/`），修完首輪型別錯誤後在 `deploy.yml` 的 Lint 之後加 `npx tsc --noEmit`。
-- 這是 Phase C 拆檔的前置條件。
+**B-1 補 typecheck gate（1 天，P0）** ✅ 已施作（2026-07-06）
+- 新增根目錄 `tsconfig.json`（strict + noEmit，涵蓋 functions/scripts/workers）；devDeps 加 typescript / @cloudflare/workers-types / @types/node。
+- 首輪 165 個型別錯誤全數修復。主要病灶與處置：
+  - 136 個來自 `request.json<T>().catch(() => ({}))` 產生 `T | {}` union → 新增共用 `functions/_shared/request_body.ts` 的 `readJsonBody<T>()`（回傳 `Partial<T>`），12 個 API 檔統一改用。
+  - **抓到一個真 bug**：`functions/api/documents/upload.ts` 用 `context.userId`（runtime 為 undefined），應為 `documentContext.userId`——上傳文件的 `uploaded_by` 與 log 的 user_id 一直是 undefined。
+  - `sendProductionAlert` 的 AlertEnv weak-type 錯誤 11 處 → 三份 local `Env` 型別補上 alert 欄位（也暴露了 Env 重複定義 3 份的技術債，列入 Phase C 收斂）。
+  - cron 兩檔：`uniqueNumbers` 補 typeof 收窄、`LineRecipient.groupId` 補 `?? null`；callback.ts reassign 分支補 `replyToken` guard；confirm.ts 補顯式回傳型別。
+- CI：deploy.yml 新增 `Typecheck` step；並新增 `npm run verify` 一鍵跑 lint + 前端測試 + typecheck + functions 測試 + contrast + RLS sync + receipt pack。
+- 驗證：`tsc --noEmit` 0 錯、前端 174/174、lint 0 錯、contrast/RLS/receipt gate 全過（functions 測試與 build 由 CI 驗證，沙箱平台限制）。
 
 **B-2 清理 bot 殘留（半小時，P1）** ✅ 已驗證（2026-07-06）
 - 實際開檔檢查：`care_wedo_prod.db` 與 `care_wedo_dev.db` 五張表（users、family_groups、user_family_groups、appointments、medications）**全部 0 筆**，僅空 schema，無真實資料。可直接刪除整個 `care-wedo-bot/`、`.gitidx.bNAUPF`、根目錄 `.pytest_cache`。
