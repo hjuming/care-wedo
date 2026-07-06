@@ -8,7 +8,7 @@
 
 ## 一句話結論
 
-功能面與資安面（租戶隔離、CI gate、RLS sync）做得比多數同規模專案扎實，但**「長輩友善」在視覺無障礙上不及格**（多處文字對比低於 WCAG AA），且 **App.jsx 巨石（3,667 行）＋ 全案零型別檢查**讓每次改動的回歸風險持續累積。
+功能面與資安面（租戶隔離、CI gate、RLS sync）做得比多數同規模專案扎實。2026-07-06 已完成本文件最關鍵的止血項：長輩友善對比 / 字級、strict typecheck、env readiness、stylelint、最小 E2E smoke。剩餘主要債務改為需求觸發處理：`App.jsx` / Knowledge Treasury 巨頁拆分、Env 型別收斂、核心 UI 元件渲染測試。
 
 ---
 
@@ -111,16 +111,23 @@
 - `functions/_shared/env_schema.ts`：`checkEnvReadiness(env)`，只驗存在與非空、絕不碰值。
 - `/api/health` 升級：公開只回 `env_ready` 布林（缺 required 時回 503 `degraded`）；帶 `CRON_SECRET` Bearer 才回缺漏「名稱」明細，供部署後 smoke：`curl -H "Authorization: Bearer $CRON_SECRET" .../api/health`。
 - `npm run env:check`（本機 .dev.vars 或 `--file .env`）與 `npm run env:check:example`（CI gate：.dev.vars.example 必須涵蓋全部 required，防新增變數漏更新文件）；後者已進 deploy.yml 與 verify。
-- 首跑即發現：本機 `.env` 缺 `CRON_SECRET`；`CARE_WEDO_SESSION_SECRET` 未設定（目前 session 簽章 fallback 用 service role key——輪替 key 會踢掉所有 session，建議在 Cloudflare 設定獨立 secret）。
+- 首跑即發現：本機 `.env` 缺 `CRON_SECRET`；`CARE_WEDO_SESSION_SECRET` 未設定（session 簽章 fallback 用 service role key 會導致輪替 key 時踢掉所有 session）。兩者已由使用者補入本機與 Cloudflare Pages；後續不回傳值，只檢查名稱存在與非空。
 
 **B-4 最小 E2E smoke／stylelint gate／env:check DX** ✅ 已施作（2026-07-06）
 - `npm run smoke:e2e`（`scripts/e2e-smoke.mjs`）：起本地靜態伺服器（含 SPA fallback）+ Playwright headless，驗 6 條路由（`/`、`/login`、`/app`、`/features`、`/privacy`、`/terms`）：HTTP 200、無 pageerror、`#root` 非白屏；`/app` 軟性檢查預約/用藥/上傳入口。API 404 屬預期（驗的是後端不可用時前端仍 render），只警告不擋。依決議暫不進 CI，穩定後再接。實跑 6/6 通過。
 - stylelint 接進 gate：新增 `.stylelintrc.json`（config-standard，關閉純風格規則）、`npm run lint:css`，已進 deploy.yml 與 verify。首輪 196 錯：192 個 `--fix` 自動修（rgba→rgb 現代寫法），手修 5 個（`.sr-only` 的 deprecated `clip` → `clip-path: inset(50%)`、2 處 deprecated `word-break: break-word` → `overflow-wrap: anywhere`、keyframes 格式）。一個字串回歸測試因 rgba 寫法改動而更新斷言（正好印證字串測試的脆弱性，D-5 元件測試仍有價值）。
 - env:check DX：未指定 `--file` 且無 `.dev.vars` 時自動 fallback 檢查 `.env`。
 
+**B-5 收工狀態（2026-07-06）**
+- 本輪安全網實際接到問題：對比度最低 2.75:1、`documents/upload.ts` 的 `uploaded_by_user_id` 來源錯誤、本機缺 `CRON_SECRET`、瀏覽器 smoke 首次正式覆蓋 6 條路由。
+- `CARE_WEDO_ALERT_WEBHOOK_URL` / `CARE_WEDO_ALERT_WEBHOOK_SECRET` 暫不設定，保留 warning；目前沒有既有接收端紀錄，正式營運前若要主動告警，應新建 alert relay。
+- git history 舊 blobs（`.git` 約 1.3GB）只影響 clone / CI checkout 速度，不影響部署與日常開發；除非明確要縮短 checkout，否則列為可永遠不做。若要做，需另排無進行中分支的時段，用 `git filter-repo` + force-push。
+
 ### Phase C — 拆 App.jsx 巨石（P1，約 1–1.5 週，分步可回退）
 
 已有現成模式可循：`src/features/{appointments,medications,ocr}/` 就是先例。依賴 B-1 完成。
+
+工作約定：不專門排純重構時段。下次要改 `App.jsx` 內的功能，先拆當次功能邊界再加新功能；Knowledge Treasury 巨頁同樣採需求觸發，施工前先拆再改。
 
 建議切法（每步一個 commit、跑完 174 測試再進下一步）：
 1. `LandingPage`（669–1019 行）→ `features/landing/`
@@ -137,8 +144,9 @@
 - **D-1 migration 制度化**：改用 `supabase db` CLI timestamped migrations；現存 19 檔壓成一個 baseline schema + 之後只允許 CLI 產生的新檔。驗證：從空 DB 重放到與 production schema diff 為零。
 - **D-2 CORS 收斂**：`Access-Control-Allow-Origin` 改為白名單（pages.dev 正式域 + localhost dev）。
 - **D-3 feedback rate limit**：比照 telemetry 的防護，加 body 上限＋簡單 IP 節流（Cloudflare KV 或 Turnstile）。
-- **D-4 index.css 模組化**：拆檔前先加 stylelint 到 CI（devDependencies 已裝但沒進 gate）；再依 Phase C 的 feature 邊界逐步搬移。
-- **D-5 元件測試**：至少為「今日清單、吃藥打卡、Profile 切換」三個核心流程補渲染測試（vitest + testing-library），彌補純字串回歸的盲區。
+- **D-4 index.css 模組化**：stylelint 已進 CI；後續依 Phase C 的 feature 邊界逐步搬移 CSS，不單獨排純拆檔。
+- **D-5 元件測試**：至少為「今日清單、吃藥打卡、Profile 切換」三個核心流程補渲染測試（vitest + testing-library），彌補純字串回歸的盲區。工作約定：下次有核心 UI 需求時，先補一個真渲染測試再動手。
+- **D-6 Env 型別收斂**：B-1 為了快速清零 typecheck，仍在數個 functions 檔保留局部 `Env` / `AlertEnv` 欄位補丁；下次碰 functions 或新增 env 時收斂為單一型別來源。
 
 ---
 

@@ -142,6 +142,8 @@ https://care.wedopr.com
 - LINE idToken 驗證與 API fail-closed 已完成。
 - 2026-06-20 已將 OCR、新增/編輯預約、用藥確認、文件、profile 排序、dashboard、me、groups 等 protected data API 改走 request-scoped `getRequestUser(context)`；middleware 驗過的 LINE / Supabase identity 會被 handler 重用，不再每個 handler 重複驗 token。另以 source guard 鎖住 protected route 不得再直接呼叫 LINE-only `verifyLineIdToken()` 或舊的 `getAuthenticatedUser()`。
 - 2026-06-20 已補 functions 跨戶隔離負向測試：medications、appointments、profiles、care_documents 跨群組 PATCH 會回 403 / 404 且不發出寫入；同群組 PATCH 回 200。
+- 2026-07-06 已補工程安全網：strict TypeScript typecheck、`npm run verify` 聚合 gate、env schema / `/api/health` readiness、WCAG AA contrast gate、stylelint gate、最小 E2E smoke。首輪 typecheck 抓到 `documents/upload.ts` 寫入 `uploaded_by_user_id` 來源錯誤，已修正為 request-scoped `documentContext.userId`。
+- 2026-07-06 已完成長輩友善快修：對比度從最低 2.75:1 修到 11 組 token 全過 WCAG AA，最小字級提高到 14px，加入 `prefers-reduced-motion`，補齊 modal 關閉鈕 `aria-label` 與 UploadGuide `role="dialog"`。
 - Dashboard 支援今日照護、未來行程、查詢紀錄、吃藥紀錄、家人協作。
 - 支援家庭群組、邀請碼、多位照護對象、照護對象排序。
 - 支援手動新增提醒、OCR 校正、確認後正式入庫。
@@ -153,7 +155,7 @@ https://care.wedopr.com
 - 照護圈標題列支援切換家庭群組，正在照護者可由頁首快速切換；點選照護者頭像可編輯主要照護者資料。
 - 其他頁面標題列已改成 compact 版，搜尋框與今日頁面對齊，避免排程、紀錄、用藥頁第一屏被標題佔滿。
 - 用藥總表手機版改為欄位標籤卡片；操作改為 `複製文字` 與 `儲存圖片`，比列印更符合長輩實際使用情境。
-- 2026-05-29 已補 Beta observability 基礎：前端 production error 可送入 `/api/telemetry`，Functions log 會帶 `ocr_failed`、`line_push_failed`、`quota_exceeded`、`auth_failed`、`cron_failed` 分類，並新增 Cloudflare tail runbook 與 `CARE_WEDO_ALERT_WEBHOOK_URL` 自動告警轉發。
+- 2026-05-29 已補 Beta observability 基礎：前端 production error 可送入 `/api/telemetry`，Functions log 會帶 `ocr_failed`、`line_push_failed`、`quota_exceeded`、`auth_failed`、`cron_failed` 分類，並新增 Cloudflare tail runbook 與 `CARE_WEDO_ALERT_WEBHOOK_URL` 告警轉發發送端；目前未設定接收端，正式營運前再決定 alert relay。
 - 2026-05-29 已建立真實單據回歸包基礎：`test-fixtures/real-receipt-regression/manifest.json` 定義 10 張台灣單據測試案例；真實圖片放在未追蹤的 private-images 目錄，避免醫療資料進 Git。2026-06-20 補 `expected-shapes.json`、`receipt-pack:shapes`、`receipt-pack:private-check` 與 `receipt-pack:hashes`；目前本機缺 10 張 private images，真實 sha256 待圖片到位後寫入。
 - 2026-05-29 已建立 Billing Data Foundation 草案：新增 `billing_subscriptions`、`billing_events`、`invoices` migration 與後端 `resolveGroupBillingEntitlement` / `recordBillingGroupEvent` helper；新增照護對象與新協作者加入會寫入可稽核事件、subscription snapshot 與當月 draft invoice。Production Supabase 已套用 `supabase/migration_phase55_billing_foundation.sql`。
 - 同一批次後續更新：`/api/groups` 追加回傳 `billing_entitlement`，照護圈頁使用後端實際權益快照做人數上限與 `estimatedMonthlyAmount` 顯示，避免前端硬編碼上限與稽核口徑不同步。
@@ -406,11 +408,37 @@ https://care.wedopr.com/callback
 
 CI/CD gate：
 
-- `.github/workflows/deploy.yml` 於 `main` push 後先跑 lint、前端與 regression 測試、functions tenant-isolation 測試、Phase 59 RLS policy sync、real-receipt regression pack、build，全部通過才部署 Cloudflare Pages。
+- `.github/workflows/deploy.yml` 於 `main` push 後先跑 ESLint、stylelint、前端與 regression 測試、functions tenant-isolation 測試、strict typecheck、env schema example sync、WCAG contrast gate、Phase 59 RLS policy sync、real-receipt regression pack、build，全部通過才部署 Cloudflare Pages。
 - `.github/workflows/deploy-reminder-scheduler.yml` 於 reminder scheduler worker 或 workflow 變更時部署 Cloudflare Cron Worker，並同步 `CRON_SECRET`。
 - GitHub Actions runtime 已升級到 Node 24 系列 action：`actions/checkout@v7`、`actions/setup-node@v6`；專案 build/test 的 `node-version` 維持 `22`。
 - 前端與 functions 測試在 CI 設定 `TZ=Asia/Taipei`，避免 GitHub runner 預設 UTC 造成 todayTasks 類日期斷言偏一天。
 - 資料圍堵明文採短期 service-role-only + app-layer ownership filters，細節見 `DATA_CONTAINMENT_CONTRACT.md`；staging smoke 前先跑 `npm run staging:smoke:ready` 檢查必要 env，Google protected write staging 驗收見 `GOOGLE_PROTECTED_WRITE_SMOKE_RUNBOOK.md` 與 `npm run google:protected-write:smoke`；Storage policy staging 驗收見 `STORAGE_POLICY_SMOKE_RUNBOOK.md` 與 `npm run storage:policy:smoke`。
+
+本機交付前建議：
+
+```bash
+npm run verify
+```
+
+`npm run verify` 會跑 ESLint、stylelint、前端測試、typecheck、env example sync、functions 測試、contrast、RLS sync 與 receipt pack。若只要檢查本機 env，跑 `npm run env:check`；沒有 `.dev.vars` 時會 fallback 檢查 `.env`，只驗變數名稱存在與非空，不輸出 secret 值。
+
+本機最小瀏覽器 smoke（不進 CI，UI / 路由改動後建議手動跑）：
+
+```bash
+npx playwright install chromium # 首次使用才需要
+npm run smoke:e2e
+```
+
+`smoke:e2e` 會用本地靜態伺服器檢查 `/`、`/login`、`/app`、`/features`、`/privacy`、`/terms` 不白屏且無未捕捉例外；`/app` 會軟性確認預約 / 用藥 / 上傳入口文字。
+
+部署後 health smoke：
+
+```bash
+curl https://care-wedo.pages.dev/api/health
+curl -H "Authorization: Bearer $CRON_SECRET" https://care-wedo.pages.dev/api/health
+```
+
+公開 health 只回 `env_ready`；帶正確 `CRON_SECRET` 才會回缺漏 env「名稱」明細。`CARE_WEDO_ALERT_WEBHOOK_URL` / `CARE_WEDO_ALERT_WEBHOOK_SECRET` 目前刻意不設定，保留為正式營運前的告警 relay 選配。
 
 ---
 
@@ -423,11 +451,14 @@ P0：
 - 用 10 張真實單據完成 LINE 實機回歸測試；目前已建立去識別化 manifest、expected shape、private image hash 工具與驗證工具；本機 dry-run 顯示 10 張 private images 尚未放入，待補真實 sha256 與實測紀錄。
 - 完成 390px 手機與 LINE WebView 實機檢查，尤其是照護圈、用藥總表、費用確認 modal。
 - 強化藥品去重：已補藥名正規化、商品名/學名/藥碼欄位、疑似重複候選標記、家人端提示與高信心 exact duplicate 合併；下一步補正式藥碼資料源與完整合併管理。
-- 已支援 webhook 自動告警；商轉前可再補 Sentry / Cloudflare Analytics。
+- 已支援 webhook 自動告警的發送端，但目前沒有既有接收端紀錄，Cloudflare Pages 也未設定 `CARE_WEDO_ALERT_WEBHOOK_URL` / `CARE_WEDO_ALERT_WEBHOOK_SECRET`；商轉前若要主動通知，應新建 alert relay（LINE / Slack / Discord / Email 皆可），不要尋找舊設定。
 - LINE 推播稽核已補 `line_push_logs` 程式、production migration 與照護圈送達面板；每日/晚間提醒是否實際送出可在後台查看。
 
 P1：
 
+- Env 型別收斂：目前 `Env` / `AlertEnv` 仍有局部重複定義；下次碰 functions 或 env 欄位時一併收斂，不單獨排純重構。
+- 元件渲染測試：下次要改今日清單、吃藥打卡、Profile 切換等核心 UI 時，先補一個真渲染測試，再動功能；不要只依賴字串回歸測試。
+- `App.jsx` / Knowledge Treasury 巨頁拆分維持需求觸發：碰功能時先拆當次邊界，再加新功能；不專門排純重構時段。
 - EmailJS 回饋資料整理成固定欄位，建立回饋分類表。
 - 支援長輩稱謂自訂，例如爸爸、媽媽、阿嬤。
 - 家人端顯示「本次 OCR 是新增還是更新」供除錯。
