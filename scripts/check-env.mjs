@@ -42,7 +42,12 @@ if (args.includes("--example-sync")) {
 }
 
 const fileIdx = args.indexOf("--file");
-const target = fileIdx >= 0 ? args[fileIdx + 1] : ".dev.vars";
+let target = fileIdx >= 0 ? args[fileIdx + 1] : ".dev.vars";
+// DX：未指定 --file 且沒有 .dev.vars 時，自動 fallback 檢查 .env
+if (fileIdx < 0 && !existsSync(resolve(root, target)) && existsSync(resolve(root, ".env"))) {
+  console.log("check-env: 找不到 .dev.vars，改檢查 .env（fallback）。");
+  target = ".env";
+}
 const path = resolve(root, target);
 if (!existsSync(path)) {
   console.error(`check-env: 找不到 ${target}。本機開發請從 .dev.vars.example 複製一份。`);
