@@ -113,6 +113,11 @@
 - `npm run env:check`（本機 .dev.vars 或 `--file .env`）與 `npm run env:check:example`（CI gate：.dev.vars.example 必須涵蓋全部 required，防新增變數漏更新文件）；後者已進 deploy.yml 與 verify。
 - 首跑即發現：本機 `.env` 缺 `CRON_SECRET`；`CARE_WEDO_SESSION_SECRET` 未設定（目前 session 簽章 fallback 用 service role key——輪替 key 會踢掉所有 session，建議在 Cloudflare 設定獨立 secret）。
 
+**B-4 最小 E2E smoke／stylelint gate／env:check DX** ✅ 已施作（2026-07-06）
+- `npm run smoke:e2e`（`scripts/e2e-smoke.mjs`）：起本地靜態伺服器（含 SPA fallback）+ Playwright headless，驗 6 條路由（`/`、`/login`、`/app`、`/features`、`/privacy`、`/terms`）：HTTP 200、無 pageerror、`#root` 非白屏；`/app` 軟性檢查預約/用藥/上傳入口。API 404 屬預期（驗的是後端不可用時前端仍 render），只警告不擋。依決議暫不進 CI，穩定後再接。實跑 6/6 通過。
+- stylelint 接進 gate：新增 `.stylelintrc.json`（config-standard，關閉純風格規則）、`npm run lint:css`，已進 deploy.yml 與 verify。首輪 196 錯：192 個 `--fix` 自動修（rgba→rgb 現代寫法），手修 5 個（`.sr-only` 的 deprecated `clip` → `clip-path: inset(50%)`、2 處 deprecated `word-break: break-word` → `overflow-wrap: anywhere`、keyframes 格式）。一個字串回歸測試因 rgba 寫法改動而更新斷言（正好印證字串測試的脆弱性，D-5 元件測試仍有價值）。
+- env:check DX：未指定 `--file` 且無 `.dev.vars` 時自動 fallback 檢查 `.env`。
+
 ### Phase C — 拆 App.jsx 巨石（P1，約 1–1.5 週，分步可回退）
 
 已有現成模式可循：`src/features/{appointments,medications,ocr}/` 就是先例。依賴 B-1 完成。

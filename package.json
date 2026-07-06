@@ -25,11 +25,14 @@
     "typecheck": "tsc --noEmit",
     "env:check": "node scripts/check-env.mjs",
     "env:check:example": "node scripts/check-env.mjs --example-sync",
-    "verify": "npm run lint --prefix care-wedo-app && npm test --prefix care-wedo-app && npm run typecheck && npm run env:check:example && npm run test:functions && npm run a11y:contrast && npm run rls:policy-sync && npm run receipt-pack:check"
+    "smoke:e2e": "node scripts/e2e-smoke.mjs",
+    "smoke:e2e:build": "node scripts/e2e-smoke.mjs --build",
+    "verify": "npm run lint --prefix care-wedo-app && npm run lint:css --prefix care-wedo-app && npm test --prefix care-wedo-app && npm run typecheck && npm run env:check:example && npm run test:functions && npm run a11y:contrast && npm run rls:policy-sync && npm run receipt-pack:check"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260706.1",
     "@types/node": "^26.1.0",
+    "playwright": "^1.61.1",
     "tsx": "^4.19.4",
     "typescript": "^6.0.3"
   }
