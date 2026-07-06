@@ -169,7 +169,7 @@ export function ManualReminderModal({ mode = "create", initialAppointment = null
       <div className="modal-content manual-reminder-modal">
         <div className="modal-header">
           <h2>{mode === "edit" ? "編輯提醒" : "手動新增提醒"}</h2>
-          <button type="button" onClick={onClose} className="btn-close">✕</button>
+          <button type="button" onClick={onClose} className="btn-close" aria-label="關閉">✕</button>
         </div>
         <form onSubmit={handleSubmit}>
           <div className="modal-body">

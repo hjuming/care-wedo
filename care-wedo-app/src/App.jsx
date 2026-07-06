@@ -2421,7 +2421,7 @@ function ProfileEditModal({ profile, onClose, onSave, canPersist }) {
       <div className="modal-content profile-edit-modal">
         <div className="modal-header">
           <h2>修改照護對象資訊</h2>
-          <button type="button" onClick={onClose} className="btn-close">✕</button>
+          <button type="button" onClick={onClose} className="btn-close" aria-label="關閉">✕</button>
         </div>
         <div className="modal-body">
           {!canPersist && (
@@ -3655,7 +3655,7 @@ function FamilyNotesModal({ groupName, notes, onClose, onSave }) {
             <p className="panel-eyebrow">{groupName}</p>
             <h2>編輯需要多留意</h2>
           </div>
-          <button type="button" onClick={onClose} className="btn-close">✕</button>
+          <button type="button" onClick={onClose} className="btn-close" aria-label="關閉">✕</button>
         </div>
         <div className="modal-body">
           <p className="helper-copy">每一則會成為一張家庭提醒卡，儲存在目前家庭群組，切換群組後會顯示各自的提醒。</p>

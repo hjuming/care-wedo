@@ -32,10 +32,10 @@ export function UploadGuide({ onConfirm, onTextSubmit, onClose }) {
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-content" role="dialog" aria-modal="true" aria-labelledby="upload-guide-title" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>拍照新增照護資料</h2>
-          <button type="button" onClick={onClose} className="btn-close">✕</button>
+          <h2 id="upload-guide-title">拍照新增照護資料</h2>
+          <button type="button" onClick={onClose} className="btn-close" aria-label="關閉">✕</button>
         </div>
         <div className="modal-body upload-guide-body">
           <p className="upload-guide-intro">
