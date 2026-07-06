@@ -48,6 +48,9 @@ jobs:
       - name: Typecheck (functions / scripts / workers)
         run: npm run typecheck
 
+      - name: Validate env schema doc sync (.dev.vars.example)
+        run: npm run env:check:example
+
       - name: Validate WCAG contrast (elder-friendly gate)
         run: npm run a11y:contrast
 

@@ -106,6 +106,13 @@
 **B-2 清理 bot 殘留（半小時，P1）** ✅ 已驗證（2026-07-06）
 - 實際開檔檢查：`care_wedo_prod.db` 與 `care_wedo_dev.db` 五張表（users、family_groups、user_family_groups、appointments、medications）**全部 0 筆**，僅空 schema，無真實資料。可直接刪除整個 `care-wedo-bot/`、`.gitidx.bNAUPF`、根目錄 `.pytest_cache`。
 
+**B-3 env schema／啟動前檢查** ✅ 已施作（2026-07-06）
+- `env.schema.json`（根目錄）＝單一事實來源：pages_functions（7 required / 6 recommended / optional / VITE fallback aliases）、reminder worker、前端 build。
+- `functions/_shared/env_schema.ts`：`checkEnvReadiness(env)`，只驗存在與非空、絕不碰值。
+- `/api/health` 升級：公開只回 `env_ready` 布林（缺 required 時回 503 `degraded`）；帶 `CRON_SECRET` Bearer 才回缺漏「名稱」明細，供部署後 smoke：`curl -H "Authorization: Bearer $CRON_SECRET" .../api/health`。
+- `npm run env:check`（本機 .dev.vars 或 `--file .env`）與 `npm run env:check:example`（CI gate：.dev.vars.example 必須涵蓋全部 required，防新增變數漏更新文件）；後者已進 deploy.yml 與 verify。
+- 首跑即發現：本機 `.env` 缺 `CRON_SECRET`；`CARE_WEDO_SESSION_SECRET` 未設定（目前 session 簽章 fallback 用 service role key——輪替 key 會踢掉所有 session，建議在 Cloudflare 設定獨立 secret）。
+
 ### Phase C — 拆 App.jsx 巨石（P1，約 1–1.5 週，分步可回退）
 
 已有現成模式可循：`src/features/{appointments,medications,ocr}/` 就是先例。依賴 B-1 完成。

@@ -23,7 +23,9 @@
     "manual:reminder": "tsx scripts/manual-reminder.ts",
     "test:functions": "tsx --test functions/_tests/*.test.ts",
     "typecheck": "tsc --noEmit",
-    "verify": "npm run lint --prefix care-wedo-app && npm test --prefix care-wedo-app && npm run typecheck && npm run test:functions && npm run a11y:contrast && npm run rls:policy-sync && npm run receipt-pack:check"
+    "env:check": "node scripts/check-env.mjs",
+    "env:check:example": "node scripts/check-env.mjs --example-sync",
+    "verify": "npm run lint --prefix care-wedo-app && npm test --prefix care-wedo-app && npm run typecheck && npm run env:check:example && npm run test:functions && npm run a11y:contrast && npm run rls:policy-sync && npm run receipt-pack:check"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260706.1",
