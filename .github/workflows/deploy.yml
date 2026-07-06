@@ -45,6 +45,9 @@ jobs:
         env:
           TZ: Asia/Taipei
 
+      - name: Validate WCAG contrast (elder-friendly gate)
+        run: npm run a11y:contrast
+
       - name: Validate Phase 59 RLS policy sync
         run: npm run rls:policy-sync
 

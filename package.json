@@ -19,6 +19,7 @@
     "staging:smoke:ready": "node scripts/staging-smoke-readiness.mjs",
     "staging:smoke:ready:report": "node scripts/staging-smoke-readiness.mjs --report-only",
     "rls:policy-sync": "node scripts/validate-phase59-policy-sync.mjs",
+    "a11y:contrast": "node scripts/contrast-check.mjs",
     "manual:reminder": "tsx scripts/manual-reminder.ts",
     "test:functions": "tsx --test functions/_tests/*.test.ts"
   },
