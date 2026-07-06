@@ -14,7 +14,7 @@
   color: var(--text-primary);
 }
 .btn-icon {
-  background: var(--primary);
+  background: var(--action-bg);
   border: none;
   color: white;
   width: 48px;
@@ -105,7 +105,7 @@
   font-size: 17px;
 }
 .btn-submit {
-  background: var(--primary);
+  background: var(--action-bg);
   color: white;
   border: none;
   border-radius: 8px;

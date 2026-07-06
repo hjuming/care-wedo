@@ -6,7 +6,7 @@
   --surface-strong: #ffffff;
   --text-primary: #1F2A2C;
   --text-secondary: #4B5B5F;
-  --text-muted: #8A9699;
+  --text-muted: #5F6D70;
   --primary: #5E8F9A;
   --primary-dark: #315F68;
   --primary-soft: #DDEBED;
@@ -30,6 +30,9 @@
   --radius-lg: 24px;
   --radius-card: 20px;
   --tap-min: 52px;
+  --action-bg: #315F68; /* 白字操作面，對比 7.08:1 */
+  --action-bg-hover: #24464E;
+  --accent-dark: #8A5310; /* 白字用深琥珀，對比 6.31:1 */
 }
 
 * {
@@ -40,8 +43,13 @@
 }
 
 html {
-  scroll-behavior: smooth;
   overflow-x: hidden;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
 }
 
 body {
@@ -617,7 +625,7 @@ input:focus-visible {
 }
 
 .featured-plan {
-  background: var(--primary);
+  background: var(--action-bg);
   color: white;
 }
 
@@ -1080,7 +1088,7 @@ input:focus-visible {
 
 .footer-copyright {
   width: 100%;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text-muted);
   padding-top: 8px;
 }
@@ -1276,7 +1284,7 @@ input:focus-visible {
 
 .app-date-pill span {
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .app-date-pill strong {
@@ -1299,13 +1307,13 @@ input:focus-visible {
   background: rgba(255, 250, 242, 0.78);
   color: var(--text-muted);
   cursor: pointer;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 800;
   transition: background 0.2s, color 0.2s;
 }
 
 .tab-nav button.active {
-  background: var(--primary);
+  background: var(--action-bg);
   color: #fff;
 }
 
@@ -1560,7 +1568,7 @@ input:focus-visible {
   width: 36px;
   height: 36px;
   border-radius: 999px;
-  background: var(--primary);
+  background: var(--action-bg);
   color: white;
   font-weight: 800;
 }
@@ -1748,7 +1756,7 @@ input:focus-visible {
 }
 
 .primary-action {
-  background: var(--primary);
+  background: var(--action-bg);
   color: white;
 }
 
@@ -1813,7 +1821,7 @@ input:focus-visible {
 }
 
 .status-subtext {
-  font-size: 12px;
+  font-size: 14px;
   color: var(--text-secondary);
 }
 
@@ -2200,7 +2208,7 @@ input:focus-visible {
   width: 40px;
   height: 40px;
   border-radius: 999px;
-  background: var(--primary);
+  background: var(--action-bg);
   color: #fff;
   font-weight: 800;
 }
@@ -2275,7 +2283,7 @@ input:focus-visible {
 .ocr-field span,
 .ocr-checkbox-field {
   color: var(--text-muted);
-  font-size: 0.78rem;
+  font-size: 0.875rem;
   font-weight: 800;
 }
 
@@ -2340,13 +2348,13 @@ input:focus-visible {
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 800;
   padding: 0;
 }
 
 .mobile-bottom-nav button.active {
-  background: var(--primary);
+  background: var(--action-bg);
   color: #fff;
 }
 
@@ -2471,7 +2479,7 @@ input:focus-visible {
 }
 
 .nav-item.active {
-  background: var(--item-color, var(--primary));
+  background: var(--item-color, var(--action-bg));
   color: white;
 }
 
@@ -2679,7 +2687,7 @@ input:focus-visible {
   align-items: center;
   gap: 8px;
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 900;
 }
 
@@ -2727,7 +2735,7 @@ input:focus-visible {
 .care-context-helper {
   min-width: 0;
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 800;
   line-height: 1.25;
   overflow: hidden;
@@ -2751,7 +2759,7 @@ input:focus-visible {
   border-radius: 999px;
   background: var(--primary-soft);
   color: var(--primary-dark);
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 900;
   object-fit: cover;
 }
@@ -2981,7 +2989,7 @@ input:focus-visible {
 
 .date-badge {
   display: inline-flex;
-  background: var(--primary);
+  background: var(--action-bg);
   color: white;
   border-radius: 8px;
   padding: 10px 14px;
@@ -3218,7 +3226,7 @@ input:focus-visible {
 }
 
 .calendar-day.is-today {
-  background: var(--accent);
+  background: var(--accent-dark);
   color: white;
   border-color: var(--accent);
 }
@@ -3360,7 +3368,7 @@ input:focus-visible {
 
 .calendar-action-choice.primary {
   border-color: var(--primary);
-  background: var(--primary);
+  background: var(--action-bg);
   color: #fff;
 }
 
@@ -3374,7 +3382,7 @@ input:focus-visible {
 
 .calendar-action-choice.primary:hover,
 .calendar-action-choice.primary:focus-visible {
-  background: var(--primary-dark);
+  background: var(--action-bg-hover);
   color: #fff;
 }
 
@@ -3718,7 +3726,7 @@ input:focus-visible {
 }
 
 .medicine-slot-picker button.is-active {
-  background: var(--primary);
+  background: var(--action-bg);
   border-color: var(--primary);
   color: white;
 }
@@ -4455,7 +4463,7 @@ input:focus-visible {
     grid-template-columns: minmax(82px, 1.05fr) repeat(3, minmax(0, 0.78fr));
     gap: 4px;
     padding: 10px;
-    font-size: 13px;
+    font-size: 14px;
   }
 
   .feature-row {
@@ -4742,7 +4750,7 @@ input:focus-visible {
 
   .mobile-bottom-nav button {
     min-height: 56px;
-    font-size: 11px;
+    font-size: 14px;
   }
 
   .nav-item {
@@ -4937,7 +4945,7 @@ input:focus-visible {
 
   .mobile-bottom-nav button {
     min-height: 62px;
-    font-size: 13px;
+    font-size: 14px;
   }
 
   .mobile-bottom-nav span {
@@ -5243,7 +5251,7 @@ input:focus-visible {
 
 .profile-create-form button {
   width: 100%;
-  background: var(--primary);
+  background: var(--action-bg);
   border: none;
   color: white;
   border-radius: 12px;
@@ -5513,7 +5521,7 @@ input:focus-visible {
   border-radius: 999px;
   background: rgba(24, 43, 46, 0.72);
   color: #fff;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 900;
 }
 
@@ -5772,7 +5780,7 @@ button:disabled,
 
 .small-copy {
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .setup-overlay {
@@ -5908,7 +5916,7 @@ button:disabled,
 }
 
 .btn-copy {
-  background: var(--primary);
+  background: var(--action-bg);
   color: white;
   border: none;
   border-radius: 14px;
@@ -5969,7 +5977,7 @@ button:disabled,
   padding: 10px;
   text-align: center;
   justify-content: center;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .member-avatar-item {
@@ -6013,7 +6021,7 @@ button:disabled,
   min-height: 24px;
   padding: 4px 8px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 700;
   line-height: 1;
 }
@@ -6058,7 +6066,7 @@ button:disabled,
 }
 
 .checkbox-container:hover {
-  background: var(--primary);
+  background: var(--action-bg);
   color: white;
 }
 
@@ -6142,7 +6150,7 @@ button:disabled,
 }
 
 .record-mode-switch button.active {
-  background: var(--primary);
+  background: var(--action-bg);
   color: white;
   box-shadow: 0 8px 18px rgba(49, 95, 104, 0.18);
 }
@@ -6331,7 +6339,7 @@ button:disabled,
 
 .record-edit-button:hover,
 .record-edit-button:focus-visible {
-  background: var(--primary);
+  background: var(--action-bg);
   color: white;
 }
 
@@ -6771,7 +6779,7 @@ button:disabled,
   content: "照護圈";
   margin-right: 8px;
   color: var(--accent);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .group-context-menu {
@@ -7401,5 +7409,17 @@ button:disabled,
     background: white;
     box-shadow: none;
     padding: 0;
+  }
+}
+
+/* === A-2 長輩友善：尊重系統「減少動態效果」設定 === */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
