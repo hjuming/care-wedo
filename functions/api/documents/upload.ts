@@ -225,11 +225,11 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       }),
     });
 
-    const saved = await saveParsedDataToProfile(env, parsed, context.userId, profile, documentId);
+    const saved = await saveParsedDataToProfile(env, parsed, documentContext.userId, profile, documentId);
     await incrementGroupOcrQuota(env, profile.group_id, groupPlan);
 
     logEvent("documents.upload_completed", {
-      user_id: context.userId,
+      user_id: documentContext.userId,
       group_id: profile.group_id,
       profile_id: profile.id,
       document_id: documentId,
