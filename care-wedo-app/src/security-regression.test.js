@@ -353,7 +353,7 @@ test("Appointment cards expose edit and soft-delete controls with scoped APIs", 
 test("Care reminder detail text is highlighted on cards", () => {
   const css = readProjectFile("care-wedo-app/src/index.css");
   assert.match(css, /\.event-row \.soft-note,\s*\.elder-task-body \.elder-task-detail/);
-  assert.match(css, /rgba\(255,\s*224,\s*111,\s*0\.58\)/);
+  assert.match(css, /rgba?\(255,?\s*224,?\s*111\s*[,/]\s*(0\.58|58%)\)/);
   assert.match(css, /box-decoration-break:\s*clone/);
 });
 

@@ -32,6 +32,10 @@ jobs:
         run: npm run lint
         working-directory: care-wedo-app
 
+      - name: Lint CSS (stylelint)
+        run: npm run lint:css
+        working-directory: care-wedo-app
+
       - name: Test (frontend + regression)
         run: npm test
         working-directory: care-wedo-app
