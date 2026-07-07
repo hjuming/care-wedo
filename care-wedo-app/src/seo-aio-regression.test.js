@@ -93,8 +93,9 @@ test("static AIO pages are readable without JavaScript", () => {
   assert.match(faq, /Care WEDO 是什麼/);
   assert.match(faq, /不是醫療診斷工具/);
   assert.match(guide, /第一次使用/);
-  assert.match(guide, /加入 Care WEDO LINE 小管家/);
+  assert.match(guide, /加入 LINE 照護小管家/);
+  assert.match(guide, /先選家人、再拍單子/);
   assert.match(pricing, /每個家庭群組/);
   assert.match(pricing, /\$30-250\/月/);
-  assert.match(pricing, /主帳號不計入協作者費用/);
+  assert.match(pricing, /主帳號[\s\S]*不計入協作者費用/);
 });

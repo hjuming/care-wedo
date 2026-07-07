@@ -306,6 +306,24 @@ const LANDING_WORKFLOW = [
   },
 ];
 
+const LANDING_PREVIEW_ITEMS = [
+  {
+    label: "今天 08:00",
+    title: "媽媽心臟科回診",
+    copy: "記得帶健保卡、上次檢查報告。",
+  },
+  {
+    label: "晚餐後",
+    title: "高血壓藥 1 顆",
+    copy: "家人已確認，今晚不用再重複提醒。",
+  },
+  {
+    label: "上傳完成",
+    title: "藥袋已整理成用藥清單",
+    copy: "下次看診可直接開給醫師看。",
+  },
+];
+
 const LANDING_ONBOARDING_STEPS = [
   {
     step: "1",
@@ -333,17 +351,17 @@ const LANDING_PAGE_ENTRIES = [
   {
     title: "功能導覽",
     copy: "看 Care WEDO 如何把單子整理成短提醒。",
-    href: "#features",
+    href: "/features",
   },
   {
     title: "方案比較",
     copy: "看免費版、照護圈升級與加人加資料怎麼算。",
-    href: "#plans",
+    href: "/pricing",
   },
   {
-    title: "回饋意見",
-    copy: "試用後告訴我們哪裡看不懂、哪裡需要更簡單。",
-    href: "#feedback",
+    title: "第一次使用",
+    copy: "照著 LINE 綁定、加入小管家、拍單子的順序開始。",
+    href: "/guide",
   },
 ];
 
@@ -666,11 +684,103 @@ function GoogleLoginAction({ loggingIn = false, disabled = false, onLogin }) {
   );
 }
 
+function ProductPreviewPanel() {
+  return (
+    <div className="landing-hero-panel landing-product-preview" aria-label="Care WEDO 提醒預覽">
+      <div className="preview-phone-header">
+        <span>今日照護</span>
+        <strong>家人一起看得懂</strong>
+      </div>
+      <div className="preview-reminder-list">
+        {LANDING_PREVIEW_ITEMS.map((item) => (
+          <article key={item.title} className="preview-reminder-card">
+            <span>{item.label}</span>
+            <strong>{item.title}</strong>
+            <p>{item.copy}</p>
+          </article>
+        ))}
+      </div>
+      <div className="preview-line-bubble">
+        <span>LINE 小管家</span>
+        <p>拍下藥袋或預約單，就整理成短提醒。</p>
+      </div>
+    </div>
+  );
+}
+
+function OnboardingGuidePanel() {
+  return (
+    <div className="landing-hero-panel landing-hero-guide" aria-label="第一次使用導引">
+      <div className="hero-guide-header">
+        <span>第一次使用照這樣做</span>
+        <strong>兩分鐘完成綁定</strong>
+      </div>
+      <ol className="hero-guide-steps">
+        {LANDING_ONBOARDING_STEPS.map((item) => (
+          <li key={item.step}>
+            <span>{item.step}</span>
+            <div>
+              <strong>{item.title}</strong>
+              <p>{item.copy}</p>
+            </div>
+          </li>
+        ))}
+      </ol>
+      <div className="hero-helper-card">
+        <strong>也要加入 LINE 照護小管家好友</strong>
+        <p>加入後才能上傳圖片、解析圖片與文字資料，並接收看診與用藥提醒通知。</p>
+      </div>
+    </div>
+  );
+}
+
 function LandingPage({ variant = "home" }) {
   const [loggingIn, setLoggingIn] = useState(false);
   const [loginError, setLoginError] = useState(null);
   const [showPlanDetails, setShowPlanDetails] = useState(false);
   const isDetailsPage = variant === "details";
+  const isGuidePage = variant === "guide";
+  const isPricingPage = variant === "pricing";
+  const showDetailedContent = isDetailsPage || isGuidePage || isPricingPage;
+  const heroMode = isGuidePage ? "guide" : isPricingPage ? "pricing" : isDetailsPage ? "features" : "home";
+  const heroContent = {
+    home: {
+      kicker: "給主要照顧者與家人",
+      title: ["幫家人記住", "看診、用藥", "與照護提醒。"],
+      desktop: "拍下藥袋、處方箋或預約單，Care WEDO 會整理成家人看得懂的提醒。長輩用 LINE 收重點，家人登入後台看完整紀錄。",
+      mobile: ["拍下藥袋、處方箋或預約單。", "系統整理成家人看得懂的提醒。"],
+      primaryLabel: "加入 LINE 小管家",
+      secondaryHref: "/guide",
+      secondaryLabel: "看第一次怎麼用",
+    },
+    features: {
+      kicker: "了解 Care WEDO",
+      title: ["把看診、用藥", "與提醒整理成", "家人看得懂。"],
+      desktop: "這裡整理完整功能、方案、回饋與常見問題。你可以先看 Care WEDO 如何把零散單據變成家庭照護紀錄。",
+      mobile: ["看 Care WEDO 如何整理單據、提醒與家人協作。", "第一次使用者可以先看教學。"],
+      primaryLabel: "用 LINE 開始",
+      secondaryHref: "/guide",
+      secondaryLabel: "第一次使用教學",
+    },
+    guide: {
+      kicker: "第一次使用 Care WEDO",
+      title: ["先加入小管家，", "再綁定帳號，", "拍照就能開始。"],
+      desktop: "不需要下載新的 App。照著 LINE 畫面完成綁定後，選家人、拍單子，系統會把日期、地點、用藥與提醒整理成短訊息。",
+      mobile: ["不用下載新 App。", "照著 LINE 畫面完成綁定，再拍單子。"],
+      primaryLabel: "用 LINE 綁定帳號",
+      secondaryHref: "/features",
+      secondaryLabel: "先看功能",
+    },
+    pricing: {
+      kicker: "Free / 照護圈升級",
+      title: ["先免費使用，", "需要長期保存", "再升級。"],
+      desktop: "測試期間一般帳號開放照護圈體驗；正式收費前會再次通知。Free 可先整理近期資料，照護圈升級適合長期照顧多位家人。",
+      mobile: ["測試期間可先免費使用。", "正式收費前會再次通知。"],
+      primaryLabel: "建立家庭協作",
+      secondaryHref: "/guide",
+      secondaryLabel: "看使用流程",
+    },
+  }[heroMode];
   const [feedbackForm, setFeedbackForm] = useState({
     name: "",
     email: "",
@@ -727,12 +837,13 @@ function LandingPage({ variant = "home" }) {
   }
 
   return (
-    <main className="landing-shell">
+    <main className={`landing-shell landing-shell-${heroMode}`}>
       <nav className="landing-nav" aria-label="Care WEDO 入口導覽">
         <a href="/" className="brand-home">Care WEDO</a>
         <div className="landing-nav-links">
           <a href="/features">功能說明</a>
-          <a href="/features#plans">方案</a>
+          <a href="/guide">第一次使用</a>
+          <a href="/pricing">方案</a>
           <a href="/features#feedback">回饋</a>
           <a href="/features#faq">FAQ</a>
           <a href="/privacy">隱私</a>
@@ -743,59 +854,134 @@ function LandingPage({ variant = "home" }) {
 
       <section className="landing-hero" aria-label="Care WEDO 首頁">
         <div className="landing-hero-copy">
-          <span className="landing-version">第一次使用 Care WEDO</span>
+          <span className="landing-version">{heroContent.kicker}</span>
           <h1>
-            <span>先綁定 LINE，</span>
-            <span>照護提醒</span>
-            <span>才不會漏掉。</span>
+            {heroContent.title.map((line) => <span key={line}>{line}</span>)}
           </h1>
           <p className="landing-hero-intro landing-hero-intro-desktop">
-            用 LINE 登入後，家人可以一起查看看診、用藥與提醒。記得加入 LINE 照護小管家，才能上傳單據、解析圖片與文字，並接收提醒通知。
+            {heroContent.desktop}
           </p>
           <p className="landing-hero-intro landing-hero-intro-mobile">
-            <span>家人要看提醒，請先按綁定。</span>
-            <span>也請加入小管家，才能上傳單據和收提醒。</span>
+            {heroContent.mobile.map((line) => <span key={line}>{line}</span>)}
           </p>
           <div className="landing-cta-row">
-            <LineLoginAction className="landing-line-login landing-bind-account" loggingIn={loggingIn} label="① 用 LINE 綁定帳號" onLogin={handleLineLogin} />
+            <LineLoginAction className="landing-line-login landing-bind-account" loggingIn={loggingIn} label={heroContent.primaryLabel} onLogin={handleLineLogin} />
+            <a className="landing-secondary-cta" href={heroContent.secondaryHref}>{heroContent.secondaryLabel}</a>
           </div>
           {loginError && <p className="notice-danger landing-login-error">{loginError}</p>}
           <p className="landing-trust-copy">Care WEDO 陪你照顧最重要的人。不取代醫師，只幫家人把照護資訊整理清楚。</p>
         </div>
-        <div className="landing-hero-panel landing-hero-guide" aria-label="第一次使用導引">
-          <div className="hero-guide-header">
-            <span>第一次使用照這樣做</span>
-            <strong>兩分鐘完成綁定</strong>
-          </div>
-          <ol className="hero-guide-steps">
-            {LANDING_ONBOARDING_STEPS.map((item) => (
-              <li key={item.step}>
-                <span>{item.step}</span>
-                <div>
-                  <strong>{item.title}</strong>
-                  <p>{item.copy}</p>
-                </div>
-              </li>
-            ))}
-          </ol>
-          <div className="hero-helper-card">
-            <strong>也要加入 LINE 照護小管家好友</strong>
-            <p>加入後才能上傳圖片、解析圖片與文字資料，並接收看診與用藥提醒通知。</p>
-          </div>
-        </div>
+        {isGuidePage ? <OnboardingGuidePanel /> : <ProductPreviewPanel />}
       </section>
 
       <a className="landing-helper-fab" href="https://lin.ee/xzbyyvf" target="_blank" rel="noopener noreferrer" aria-label="聯繫 LINE 照護小管家">
         <CareHelperIcon />
       </a>
 
-      {isDetailsPage ? (
+      {showDetailedContent ? (
         <>
           <section className="landing-section details-intro-section" aria-label="Care WEDO 說明">
-            <div className="section-kicker">了解 Care WEDO</div>
-            <h2>把看診、用藥與提醒整理成家人看得懂的照護資訊。</h2>
-            <p>這裡保留完整功能、方案、回饋與常見問題。第一次使用者可以先回首頁完成 LINE 綁定。</p>
+            <div className="section-kicker">
+              {isGuidePage ? "第一次使用" : isPricingPage ? "方案與保存" : "了解 Care WEDO"}
+            </div>
+            <h2>
+              {isGuidePage
+                ? "照著 LINE 綁定、加入小管家、拍照上傳，就能開始整理照護資料。"
+                : isPricingPage
+                  ? "先免費使用，需要長期保存與家人協作時再升級。"
+                  : "把看診、用藥與提醒整理成家人看得懂的照護資訊。"}
+            </h2>
+            <p>
+              {isGuidePage
+                ? "這頁只保留第一次上手最需要的步驟。若卡住，可以直接聯繫 LINE 照護小管家協助。"
+                : isPricingPage
+                  ? "測試期間一般帳號開放照護圈體驗；正式收費前會再次通知，不會靜默收費。"
+                  : "這裡保留完整功能、方案、回饋與常見問題。第一次使用者可以先看教學，再完成 LINE 綁定。"}
+            </p>
           </section>
+
+          {isGuidePage && (
+            <section className="landing-section guide-start-section" aria-label="第一次使用流程">
+              <div className="section-kicker">照這個順序開始</div>
+              <h2>先完成綁定，再拍單子。</h2>
+              <div className="guide-start-layout">
+                <OnboardingGuidePanel />
+                <div className="guide-workflow-card">
+                  <h3>上傳資料前，先選家人。</h3>
+                  <div className="workflow-grid compact-workflow-grid">
+                    {LANDING_WORKFLOW.map((item) => (
+                      <article key={item.step} className="workflow-card">
+                        <span>{item.step}</span>
+                        <h3>{item.title}</h3>
+                        <p>{item.copy}</p>
+                      </article>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {isPricingPage && (
+            <section className="landing-section pricing-start-section" id="plans" aria-label="Care WEDO 方案">
+              <div className="section-kicker">費用先講清楚</div>
+              <h2>Free 先試用，照護圈升級才做長期保存。</h2>
+              <div className="plan-cards">
+                <article className="plan-card">
+                  <span>Free</span>
+                  <h3>$0/月</h3>
+                  <p>適合先試用。可照顧 1 位家人，每月 10 筆 AI 整理，查看接下來的提醒；最近 30 天資料會保存但不開放歷史查詢。</p>
+                  <a href="https://lin.ee/xzbyyvf" target="_blank" rel="noopener noreferrer">加入 LINE 小管家</a>
+                </article>
+                <article className="plan-card featured-plan">
+                  <button type="button" className="plan-name-trigger" onClick={() => setShowPlanDetails(true)}>版本 A 收費方式</button>
+                  <h3>照護圈升級 $30/月起</h3>
+                  <p>適合長期照顧父母、長輩或慢性病家人。每個家庭群組最多 4 位主要照護對象、5 位協作者，月費清楚落在 $30-250。</p>
+                  <LineLoginAction loggingIn={loggingIn} label="建立家庭協作" onLogin={handleLineLogin} />
+                </article>
+              </div>
+              <div className="pricing-example-band" aria-label="收費方式範例">
+                <article>
+                  <span>照護協作者</span>
+                  <strong>+$10/人/月</strong>
+                  <p>可協助上傳、編輯、查看資料，不可更改付款與成員權限。</p>
+                </article>
+                <article>
+                  <span>照護對象</span>
+                  <strong>+$30/人/月</strong>
+                  <p>每多照顧一位家人，就增加一份長期資料保存空間。</p>
+                </article>
+                <article>
+                  <span>客服與資料問題</span>
+                  <strong>{CARE_WEDO_SUPPORT_EMAIL}</strong>
+                  <p>付款方式將優先支援 LINE Pay；正式收費前會清楚公告。</p>
+                </article>
+              </div>
+              <p className="plan-beta-note">系統測試期間，所有帳號開放照護圈升級體驗；正式收費前會再次通知。</p>
+              <div className="feature-table" role="table" aria-label="Care WEDO Free 與照護圈升級功能對照">
+                <div className="feature-row table-head" role="row">
+                  <strong>功能</strong>
+                  <strong>Free</strong>
+                  <strong>照護圈升級</strong>
+                </div>
+                {FREE_FEATURES.map(([feature, free, paid]) => (
+                  <div className="feature-row" role="row" key={feature}>
+                    <span>{feature}</span>
+                    <FeatureValue value={free} />
+                    <FeatureValue value={paid} />
+                  </div>
+                ))}
+              </div>
+              <div className="trust-note-panel">
+                <div>
+                  <p className="panel-eyebrow">資料怎麼保存</p>
+                  <h3>我們保存整理後的重要文字資料。</h3>
+                  <p>Care WEDO 使用雲端資料庫保存照護資料，並規劃定期備份。Free 會保留最近 30 天資料，但歷史查詢與完整保存是付費功能；若資料有問題、需要匯出或刪除，可聯絡客服信箱。</p>
+                </div>
+                <a href={`mailto:${CARE_WEDO_SUPPORT_EMAIL}`}>{CARE_WEDO_SUPPORT_EMAIL}</a>
+              </div>
+            </section>
+          )}
 
           <section className="landing-section landing-entry-section" aria-label="快速入口">
         <div className="section-kicker">網站入口</div>
@@ -836,6 +1022,7 @@ function LandingPage({ variant = "home" }) {
         </ul>
       </section>
 
+      {!isGuidePage && (
       <section className="landing-section workflow-section" aria-label="使用流程">
         <div className="section-kicker">使用流程</div>
         <h2>先選家人，再上傳照片。</h2>
@@ -849,7 +1036,9 @@ function LandingPage({ variant = "home" }) {
           ))}
         </div>
       </section>
+      )}
 
+      {!isPricingPage && (
       <section className="landing-section plan-section" id="plans">
         <div className="section-kicker">Free / 照護圈升級</div>
         <h2>先免費使用，需要查歷史再升級。</h2>
@@ -910,6 +1099,7 @@ function LandingPage({ variant = "home" }) {
           <a href={`mailto:${CARE_WEDO_SUPPORT_EMAIL}`}>{CARE_WEDO_SUPPORT_EMAIL}</a>
         </div>
       </section>
+      )}
 
       {showPlanDetails && (
         <PlanDetailsModal onClose={() => setShowPlanDetails(false)} />
@@ -983,6 +1173,20 @@ function LandingPage({ variant = "home" }) {
         </>
       ) : (
         <>
+          <section className="landing-section home-workflow-section" aria-label="Care WEDO 使用流程">
+            <div className="section-kicker">手機上這樣用</div>
+            <h2>先選家人，再拍單子，提醒就不會散掉。</h2>
+            <div className="workflow-grid">
+              {LANDING_WORKFLOW.map((item) => (
+                <article key={item.step} className="workflow-card">
+                  <span>{item.step}</span>
+                  <h3>{item.title}</h3>
+                  <p>{item.copy}</p>
+                </article>
+              ))}
+            </div>
+          </section>
+
           <section className="landing-section home-spirit-section" aria-label="Care WEDO 品牌精神">
             <div className="section-kicker">Care WEDO 的角色</div>
             <h2>陪你照顧最重要的人。</h2>
@@ -1078,9 +1282,10 @@ function LoginPage() {
 
           <div className="login-route-actions">
             <LineLoginAction loggingIn={loggingIn} onLogin={handleLineLogin} />
-            <GoogleLoginAction loggingIn={googleLoggingIn} disabled={!googleAuthReady} onLogin={handleGoogleLogin} />
-            {!googleAuthReady && (
-              <p className="helper-copy">Google 登入尚未開通，請先用 LINE 或稍後再試。</p>
+            {googleAuthReady ? (
+              <GoogleLoginAction loggingIn={googleLoggingIn} onLogin={handleGoogleLogin} />
+            ) : (
+              <p className="login-support-note">協作者 Google 後台登入尚未開放，請先用 LINE 進入 Care WEDO。</p>
             )}
             <a
               className="login-alt-link"
@@ -1217,6 +1422,8 @@ export default function App() {
   if (route === "auth-callback") return <AuthCallbackPage />;
   if (route === "login") return <LoginPage />;
   if (route === "features") return <LandingPage variant="details" />;
+  if (route === "guide") return <LandingPage variant="guide" />;
+  if (route === "pricing") return <LandingPage variant="pricing" />;
   if (route === "privacy") return <PrivacyPage />;
   if (route === "terms") return <TermsPage />;
   return <LandingPage />;

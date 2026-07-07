@@ -31,6 +31,8 @@ test("resolveCareWedoRoute keeps product information pages outside the dashboard
   assert.equal(resolveCareWedoRoute("/about"), "features");
   assert.equal(resolveCareWedoRoute("/features"), "features");
   assert.equal(resolveCareWedoRoute("/features#feedback"), "features");
+  assert.equal(resolveCareWedoRoute("/guide"), "guide");
+  assert.equal(resolveCareWedoRoute("/pricing"), "pricing");
 });
 
 test("resolveCareWedoRoute sends the privacy path to the privacy page", () => {
@@ -42,7 +44,7 @@ test("resolveCareWedoRoute sends the terms path to the terms page", () => {
 });
 
 test("resolveCareWedoRoute falls back to the public landing page", () => {
-  assert.equal(resolveCareWedoRoute("/pricing"), "landing");
+  assert.equal(resolveCareWedoRoute("/unknown"), "landing");
 });
 
 test("resolveInitialCareWedoRoute sends LINE callback URLs to the app without changing the URL first", () => {

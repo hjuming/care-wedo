@@ -243,6 +243,27 @@ input:focus-visible {
   font-size: 20px;
 }
 
+.landing-secondary-cta {
+  min-height: 64px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgb(49, 95, 104, 0.28);
+  border-radius: 16px;
+  background: rgb(255, 255, 255, 0.88);
+  color: var(--primary-dark);
+  padding: 14px 22px;
+  font-size: 18px;
+  font-weight: 900;
+  text-align: center;
+  text-decoration: none;
+}
+
+.landing-secondary-cta:hover {
+  border-color: rgb(49, 95, 104, 0.52);
+  background: white;
+}
+
 .landing-line-entry {
   min-height: 64px;
   border-radius: 16px;
@@ -318,6 +339,78 @@ input:focus-visible {
 .landing-hero-guide {
   padding: 18px;
   backdrop-filter: blur(4px);
+}
+
+.landing-product-preview {
+  gap: 14px;
+  align-self: stretch;
+  max-width: 420px;
+  padding: 18px;
+  border: 1px solid rgb(216, 210, 200, 0.82);
+  border-radius: 20px;
+  background: rgb(255, 250, 242, 0.92);
+  box-shadow: 0 18px 50px rgb(49, 95, 104, 0.16);
+  backdrop-filter: blur(6px);
+}
+
+.preview-phone-header {
+  display: grid;
+  gap: 4px;
+  padding: 4px 2px;
+}
+
+.preview-phone-header span,
+.preview-line-bubble span {
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.preview-phone-header strong {
+  color: var(--primary-dark);
+  font-size: 26px;
+  line-height: 1.18;
+}
+
+.preview-reminder-list {
+  display: grid;
+  gap: 10px;
+}
+
+.preview-reminder-card {
+  display: grid;
+  gap: 5px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgb(255, 255, 255, 0.78);
+  padding: 16px;
+}
+
+.preview-reminder-card span {
+  color: var(--primary-dark);
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.preview-reminder-card strong {
+  color: var(--text-primary);
+  font-size: 19px;
+  line-height: 1.25;
+}
+
+.preview-reminder-card p,
+.preview-line-bubble p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.preview-line-bubble {
+  border: 1px solid rgb(94, 143, 154, 0.32);
+  border-radius: 8px;
+  background: rgb(221, 235, 237, 0.9);
+  padding: 16px;
 }
 
 .hero-guide-header {
@@ -440,6 +533,38 @@ input:focus-visible {
 
 .landing-entry-section {
   padding-top: clamp(34px, 5vw, 52px);
+}
+
+.guide-start-layout {
+  display: grid;
+  grid-template-columns: minmax(300px, 0.85fr) minmax(0, 1fr);
+  gap: 22px;
+  align-items: start;
+}
+
+.guide-start-layout .landing-hero-guide {
+  position: sticky;
+  top: 18px;
+  max-width: none;
+}
+
+.guide-workflow-card {
+  display: grid;
+  gap: 16px;
+}
+
+.guide-workflow-card > h3 {
+  color: var(--primary-dark);
+  font-size: 26px;
+  line-height: 1.25;
+}
+
+.compact-workflow-grid {
+  grid-template-columns: 1fr;
+}
+
+.pricing-start-section .feature-table {
+  margin-top: 20px;
 }
 
 .landing-entry-grid,
@@ -1517,6 +1642,18 @@ input:focus-visible {
   font-weight: 900;
   font-size: 15px;
   line-height: 1;
+}
+
+.login-support-note {
+  margin: 0;
+  border: 1px solid rgb(49, 95, 104, 0.18);
+  border-radius: 12px;
+  background: rgb(221, 235, 237, 0.46);
+  color: var(--text-secondary);
+  padding: 12px 14px;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.55;
 }
 
 .nav-login-line-login {
@@ -4233,7 +4370,7 @@ input:focus-visible {
     min-height: auto;
     width: 100%;
     max-width: 100%;
-    padding: 22px 48px 24px 18px;
+    padding: 22px 18px 24px;
     border-radius: 20px;
     background:
       linear-gradient(180deg, rgb(255, 250, 242, 0.94) 0%, rgb(255, 250, 242, 0.82) 54%, rgb(255, 250, 242, 0.42) 100%),
@@ -4244,7 +4381,7 @@ input:focus-visible {
   .landing-hero-copy,
   .landing-hero-panel {
     width: 100%;
-    max-width: calc(100vw - 60px);
+    max-width: 100%;
   }
 
   .login-route-shell {
@@ -4318,7 +4455,6 @@ input:focus-visible {
     font-size: 18px;
     line-height: 1.65;
     overflow-wrap: anywhere;
-    word-break: break-all;
   }
 
   .landing-hero-intro-desktop {
@@ -4341,11 +4477,12 @@ input:focus-visible {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     width: 100%;
-    max-width: calc(100vw - 60px);
+    max-width: 100%;
   }
 
   .landing-cta-row .primary-action,
   .landing-cta-row .secondary-action,
+  .landing-cta-row .landing-secondary-cta,
   .landing-cta-row .line-login-action-stack,
   .landing-cta-row .line-login-btn {
     width: 100%;
@@ -4356,6 +4493,7 @@ input:focus-visible {
   }
 
   .landing-cta-row .line-login-btn,
+  .landing-cta-row .landing-secondary-cta,
   .landing-cta-row .landing-line-entry {
     min-height: 58px;
     padding: 14px 16px;
@@ -4363,6 +4501,7 @@ input:focus-visible {
   }
 
   .landing-hero-panel,
+  .guide-start-layout,
   .landing-card-grid,
   .landing-entry-grid,
   .workflow-grid,
@@ -4384,6 +4523,27 @@ input:focus-visible {
     max-width: 100%;
   }
 
+  .landing-product-preview {
+    padding: 14px;
+    border-radius: 16px;
+  }
+
+  .preview-phone-header strong {
+    font-size: 22px;
+  }
+
+  .preview-reminder-card {
+    padding: 14px;
+  }
+
+  .guide-start-layout .landing-hero-guide {
+    position: static;
+  }
+
+  .guide-workflow-card > h3 {
+    font-size: 22px;
+  }
+
   .landing-hero-guide,
   .hero-guide-steps li,
   .hero-helper-card {
@@ -4397,13 +4557,11 @@ input:focus-visible {
   .hero-guide-steps p,
   .hero-helper-card p {
     overflow-wrap: anywhere;
-    word-break: break-all;
   }
 
   .hero-guide-steps strong,
   .hero-helper-card strong {
     overflow-wrap: anywhere;
-    word-break: break-all;
   }
 
   .hero-guide-header strong {
@@ -4425,6 +4583,30 @@ input:focus-visible {
     bottom: calc(18px + env(safe-area-inset-bottom));
     width: 58px;
     height: 58px;
+  }
+
+  .landing-shell-home .landing-helper-fab,
+  .landing-shell-features .landing-helper-fab {
+    display: none;
+  }
+
+  .landing-shell-guide .landing-helper-fab,
+  .landing-shell-pricing .landing-helper-fab {
+    display: inline-flex;
+    position: static;
+    width: 100%;
+    height: 54px;
+    margin: 16px 0 0;
+    border-radius: 14px;
+    gap: 8px;
+  }
+
+  .landing-shell-guide .landing-helper-fab::after,
+  .landing-shell-pricing .landing-helper-fab::after {
+    content: "聯繫 LINE 照護小管家";
+    color: white;
+    font-size: 16px;
+    font-weight: 900;
   }
 
   .landing-helper-fab .care-helper-icon {

@@ -5,8 +5,8 @@
  * 檢查項目（每條路由）：
  *   1. document 回應 200
  *   2. 無 pageerror（瀏覽器 runtime 未捕捉例外）
- *   3. #root 有實質內容（非白屏）
- *   4. /app 額外做軟性關鍵字檢查（預約/用藥/上傳入口有 render）
+ *   3. React route 的 #root 有實質內容；靜態 AIO 頁的 body 有實質內容（非白屏）
+ *   4. /app 額外做軟性關鍵字檢查；本機靜態 smoke 若被 LIFF 導向 LINE OAuth，視為軟性資訊
  *
  * 用法：
  *   npm run smoke:e2e            # 用現有 care-wedo-app/dist
@@ -79,12 +79,14 @@ await new Promise((r) => server.listen(0, r));
 const base = `http://localhost:${server.address().port}`;
 console.log(`smoke: 靜態伺服器 ${base}（dist）`);
 
-/** @type {Array<{path:string, label:string, keywords?:string[]}>} */
+/** @type {Array<{path:string, label:string, keywords?:string[], allowStatic?:boolean, allowLineRedirect?:boolean}>} */
 const ROUTES = [
   { path: "/", label: "未登入首頁（landing）" },
   { path: "/login", label: "登入頁", keywords: ["登入"] },
-  { path: "/app", label: "受保護主頁（未登入應 render 登入導引或 demo，不得白屏）", keywords: ["登入"] },
-  { path: "/features", label: "功能介紹頁" },
+  { path: "/app", label: "受保護主頁（本機未登入可能觸發 LIFF 導向）", keywords: ["登入"], allowLineRedirect: true },
+  { path: "/features", label: "功能介紹頁", keywords: ["功能", "提醒"] },
+  { path: "/guide", label: "第一次使用教學頁（AIO 靜態頁）", keywords: ["第一次使用", "拍單子"], allowStatic: true },
+  { path: "/pricing", label: "方案價格頁（AIO 靜態頁）", keywords: ["Free", "$0/月", "照護圈"], allowStatic: true },
   { path: "/privacy", label: "隱私權頁" },
   { path: "/terms", label: "服務條款頁" },
 ];
@@ -104,10 +106,12 @@ for (const route of ROUTES) {
   let status = 0;
   let rootLength = 0;
   let text = "";
+  let finalUrl = "";
   try {
     const response = await page.goto(base + route.path, { waitUntil: "networkidle", timeout: 15000 });
     status = response?.status() ?? 0;
     await page.waitForTimeout(300);
+    finalUrl = page.url();
     rootLength = await page.evaluate(() => (document.querySelector("#root")?.innerHTML ?? "").trim().length);
     text = await page.evaluate(() => document.body.innerText || "");
   } catch (err) {
@@ -117,9 +121,15 @@ for (const route of ROUTES) {
   page.off("console", onConsole);
 
   const problems = [];
-  if (status !== 200) problems.push(`HTTP ${status}`);
+  const isAllowedLineRedirect = route.allowLineRedirect && finalUrl.startsWith("https://access.line.me/");
+  if (status !== 200 && !isAllowedLineRedirect) problems.push(`HTTP ${status}`);
   if (pageErrors.length) problems.push(`pageerror: ${pageErrors[0]}`);
-  if (rootLength < 40) problems.push(`#root 內容過少（${rootLength} chars）→ 疑似白屏`);
+  const contentLength = route.allowStatic ? text.trim().length : rootLength;
+  if (contentLength < 40 && !isAllowedLineRedirect) {
+    problems.push(route.allowStatic
+      ? `body 內容過少（${contentLength} chars）→ 疑似白屏`
+      : `#root 內容過少（${rootLength} chars）→ 疑似白屏`);
+  }
 
   const missingKeywords = (route.keywords ?? []).filter((k) => !text.includes(k));
 
@@ -127,7 +137,8 @@ for (const route of ROUTES) {
     failed += 1;
     console.error(`FAIL ${route.path}  ${route.label}\n     ${problems.join("；")}`);
   } else {
-    console.log(` ok  ${route.path}  ${route.label}（root ${rootLength} chars）`);
+    const note = isAllowedLineRedirect ? "LIFF 導向 LINE OAuth（本機靜態 smoke 軟性通過）" : `root ${rootLength} chars`;
+    console.log(` ok  ${route.path}  ${route.label}（${note}）`);
   }
   if (missingKeywords.length) console.warn(`warn ${route.path} 找不到關鍵字：${missingKeywords.join("、")}（軟性檢查，不擋）`);
   if (consoleErrors.length) console.warn(`warn ${route.path} console error ×${consoleErrors.length}（離線模式 API 404 屬預期，不擋）`);
@@ -137,9 +148,13 @@ for (const route of ROUTES) {
 try {
   await page.goto(base + "/app", { waitUntil: "networkidle", timeout: 15000 });
   await page.waitForTimeout(300);
-  const entryText = await page.evaluate(() => document.body.innerText || "");
-  const entries = ["行程", "藥", "上傳"].filter((k) => entryText.includes(k));
-  console.log(`info /app 入口關鍵字命中：${entries.length ? entries.join("、") : "無（未登入狀態可能未顯示，屬軟性資訊）"}`);
+  if (page.url().startsWith("https://access.line.me/")) {
+    console.log("info /app 本機靜態模式觸發 LIFF 導向，入口關鍵字檢查略過（屬軟性資訊）");
+  } else {
+    const entryText = await page.evaluate(() => document.body.innerText || "");
+    const entries = ["行程", "藥", "上傳"].filter((k) => entryText.includes(k));
+    console.log(`info /app 入口關鍵字命中：${entries.length ? entries.join("、") : "無（未登入狀態可能未顯示，屬軟性資訊）"}`);
+  }
 } catch { /* soft */ }
 
 await browser.close();

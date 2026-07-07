@@ -6,62 +6,273 @@
     <meta name="robots" content="index, follow, max-image-preview:large" />
     <meta
       name="description"
-      content="Care WEDO 使用教學：第一次使用、LINE 登入、加入 LINE 小管家、上傳醫療單據、家人協作與照護提醒流程。"
+      content="Care WEDO 使用教學：第一次使用 LINE 醫療照護小管家，先加入小管家、綁定帳號、選家人，再拍照上傳藥袋、處方箋或預約單。"
     />
     <link rel="canonical" href="https://care.wedopr.com/guide" />
     <title>Care WEDO 使用教學｜第一次使用 LINE 醫療照護小管家</title>
     <style>
-      :root { color-scheme: light; --ink:#172426; --muted:#4c5c60; --brand:#2c6670; --paper:#fffaf1; --line:#ded2c1; }
-      body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; background:var(--paper); color:var(--ink); line-height:1.75; }
-      main { max-width:860px; margin:0 auto; padding:40px 22px 72px; }
-      a { color:var(--brand); font-weight:800; }
-      header { border-bottom:1px solid var(--line); margin-bottom:28px; padding-bottom:20px; }
-      h1 { font-size:clamp(2rem,5vw,3.2rem); line-height:1.15; margin:8px 0; }
-      h2 { font-size:1.28rem; margin:28px 0 8px; color:var(--brand); }
-      p, li { color:var(--muted); font-size:1.02rem; }
-      .eyebrow { color:#b8722b; font-weight:900; margin:0; }
-      .step { background:#fffdf8; border:1px solid var(--line); border-radius:8px; padding:16px 18px; margin:12px 0; }
-      nav { display:flex; gap:14px; flex-wrap:wrap; margin-top:18px; }
+      :root {
+        color-scheme: light;
+        --bg: #f7f3ec;
+        --paper: #fffaf2;
+        --surface: #fffef9;
+        --ink: #1f2a2c;
+        --muted: #4b5b5f;
+        --brand: #315f68;
+        --soft: #ddebed;
+        --accent: #8a5310;
+        --line: #d8d2c8;
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: linear-gradient(180deg, #fffaf2, var(--bg));
+        color: var(--ink);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", sans-serif;
+        font-size: 18px;
+        line-height: 1.75;
+      }
+
+      main {
+        width: min(960px, calc(100% - 28px));
+        margin: 0 auto;
+        padding: 28px 0 72px;
+      }
+
+      nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-bottom: 22px;
+      }
+
+      a {
+        color: var(--brand);
+        font-weight: 900;
+      }
+
+      nav a,
+      .cta {
+        min-height: 48px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: rgb(255, 255, 255, 0.76);
+        padding: 10px 16px;
+        text-decoration: none;
+      }
+
+      .hero {
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: var(--paper);
+        padding: clamp(24px, 6vw, 56px);
+      }
+
+      .eyebrow {
+        width: fit-content;
+        margin: 0 0 16px;
+        border-radius: 999px;
+        background: var(--soft);
+        color: var(--brand);
+        padding: 8px 14px;
+        font-size: 0.9rem;
+        font-weight: 900;
+      }
+
+      h1 {
+        max-width: 760px;
+        margin: 0;
+        font-size: clamp(2.25rem, 9vw, 4.6rem);
+        line-height: 1.08;
+        letter-spacing: 0;
+        text-wrap: balance;
+      }
+
+      h2 {
+        margin: 0 0 12px;
+        color: var(--brand);
+        font-size: clamp(1.65rem, 5vw, 2.4rem);
+        line-height: 1.22;
+      }
+
+      h3 {
+        margin: 0 0 8px;
+        font-size: 1.35rem;
+        line-height: 1.3;
+      }
+
+      p {
+        margin: 12px 0 0;
+        color: var(--muted);
+      }
+
+      .hero p {
+        max-width: 720px;
+        font-size: 1.12rem;
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 24px;
+      }
+
+      .cta.primary {
+        border-color: var(--brand);
+        background: var(--brand);
+        color: white;
+      }
+
+      .section {
+        padding-top: clamp(38px, 7vw, 72px);
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .card {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--surface);
+        padding: 18px;
+      }
+
+      .number {
+        width: 44px;
+        height: 44px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 999px;
+        background: var(--brand);
+        color: white;
+        font-weight: 900;
+        margin-bottom: 14px;
+      }
+
+      .note {
+        border: 1px solid rgb(94, 143, 154, 0.32);
+        border-radius: 12px;
+        background: rgb(221, 235, 237, 0.55);
+        padding: 18px;
+      }
+
+      footer {
+        margin-top: 48px;
+        border-top: 1px solid var(--line);
+        padding-top: 22px;
+        color: var(--muted);
+        font-size: 0.95rem;
+      }
+
+      @media (max-width: 720px) {
+        main {
+          width: min(100% - 24px, 560px);
+          padding-top: 16px;
+        }
+
+        nav {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        nav a {
+          min-height: 44px;
+          border-radius: 14px;
+          padding: 8px 10px;
+          font-size: 1rem;
+        }
+
+        .cta {
+          width: 100%;
+        }
+
+        .hero {
+          padding: 22px 18px;
+        }
+
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
     </style>
   </head>
   <body>
     <main>
-      <header>
-        <p class="eyebrow">Care WEDO Guide</p>
-        <h1>第一次使用 Care WEDO</h1>
-        <p>這頁是不用 JavaScript 也能讀取的使用教學。目標是讓長輩只做主要功能，設定、邀請與資料確認由照護協作者代勞。</p>
-        <nav>
-          <a href="/">首頁</a>
-          <a href="/faq">常見問題</a>
-          <a href="/pricing">收費說明</a>
-          <a href="/app">進入後台</a>
-        </nav>
-      </header>
+      <nav aria-label="Care WEDO 公開頁導覽">
+        <a href="/">首頁</a>
+        <a href="/features">功能說明</a>
+        <a href="/pricing">方案</a>
+        <a href="/faq">FAQ</a>
+      </nav>
 
-      <section class="step">
-        <h2>1. 登入 Care WEDO</h2>
-        <p>家人先用 LINE Login 登入 Care WEDO 後台。若之前登入過，除非使用者登出，回到首頁後應直接進入後台首頁，減少長輩重複登入。</p>
+      <section class="hero">
+        <p class="eyebrow">第一次使用 Care WEDO</p>
+        <h1>先加入小管家，再綁定帳號，拍照就能開始。</h1>
+        <p>不用下載新的 App。照著 LINE 畫面完成綁定後，先選家人、再拍單子，Care WEDO 會把日期、地點、用藥與提醒整理成短訊息。</p>
+        <div class="actions">
+          <a class="cta primary" href="https://lin.ee/xzbyyvf">加入 LINE 照護小管家</a>
+          <a class="cta" href="/login">用 LINE 綁定帳號</a>
+        </div>
       </section>
 
-      <section class="step">
-        <h2>2. 加入 Care WEDO LINE 小管家</h2>
-        <p>若要收到上傳摘要、每日提醒與晚間空腹提醒，家人需要加入 Care WEDO LINE 小管家。LINE Login 不等於加入官方帳號。</p>
+      <section class="section" aria-labelledby="steps-title">
+        <p class="eyebrow">照這個順序開始</p>
+        <h2 id="steps-title">兩分鐘完成第一次設定。</h2>
+        <div class="grid">
+          <article class="card">
+            <span class="number">1</span>
+            <h3>加入 LINE 小管家</h3>
+            <p>加入後才能上傳圖片、解析圖片與文字資料，並接收看診與用藥提醒。</p>
+          </article>
+          <article class="card">
+            <span class="number">2</span>
+            <h3>用 LINE 綁定帳號</h3>
+            <p>照著 LINE 畫面按確認，不用下載 App。完成後家人才能一起看資料。</p>
+          </article>
+          <article class="card">
+            <span class="number">3</span>
+            <h3>先選家人，再拍單子</h3>
+            <p>藥袋、處方箋、掛號單或預約單都可以拍照傳給小管家。</p>
+          </article>
+        </div>
       </section>
 
-      <section class="step">
-        <h2>3. 建立家庭群組與照護對象</h2>
-        <p>每個家庭群組預設由主帳號管理。建議同一群組最多 4 位主要照護對象、5 位共同協作者、1 位主帳號，避免資料混亂與操作負擔。</p>
+      <section class="section" aria-labelledby="result-title">
+        <p class="eyebrow">你會得到什麼</p>
+        <h2 id="result-title">長輩看短提醒，家人看完整紀錄。</h2>
+        <div class="grid">
+          <article class="card">
+            <h3>看診不漏</h3>
+            <p>日期、地點、要帶什麼會整理成清楚提醒。</p>
+          </article>
+          <article class="card">
+            <h3>藥袋看懂</h3>
+            <p>用藥資訊會整理成家人可確認、醫師可參考的清單。</p>
+          </article>
+          <article class="card">
+            <h3>家人同步</h3>
+            <p>誰上傳、誰陪診、誰確認過，最好有一份大家都看得到的紀錄。</p>
+          </article>
+        </div>
       </section>
 
-      <section class="step">
-        <h2>4. 上傳醫療資料</h2>
-        <p>用手機拍看診單、藥袋、處方箋或預約單，也可以貼上醫療相關文字。系統會先整理成待確認資料，再由家人確認後存入照護紀錄。</p>
+      <section class="section note">
+        <h2>不確定怎麼操作？</h2>
+        <p>直接聯繫 LINE 照護小管家。Care WEDO 不取代醫師，只幫家人把照護資訊整理清楚。</p>
       </section>
 
-      <section class="step">
-        <h2>5. 長輩只看主要提醒</h2>
-        <p>今日照護只保留拍照新增、查看提醒與完成確認。編輯照護對象、手動新增提醒、邀請協作者、費用預估與通知設定，都集中在協作者管理中心。</p>
-      </section>
+      <footer>
+        <p>Care WEDO｜讓照護資訊更清楚，讓家庭陪伴更安心。</p>
+      </footer>
     </main>
   </body>
 </html>
