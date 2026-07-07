@@ -79,7 +79,14 @@ function makeContext(body: Record<string, unknown>, envOverrides: Record<string,
   } as any;
 }
 
-function entitlementRoutes(url: string, subscriptionRows: unknown[] = []) {
+function entitlementRoutes(
+  url: string,
+  subscriptionRows: unknown[] = [],
+  options: {
+    profileRows?: Array<{ id: number }>;
+    memberRows?: Array<{ user_id: number }>;
+  } = {},
+) {
   if (url.includes(`/rest/v1/user_family_groups?user_id=eq.${USER_ID}&group_id=eq.${GROUP_ID}`)) {
     return json([{ role: "admin", can_pay: false }]);
   }
@@ -93,10 +100,10 @@ function entitlementRoutes(url: string, subscriptionRows: unknown[] = []) {
     return json([planRow("pro")]);
   }
   if (url.includes(`/rest/v1/care_profiles?group_id=eq.${GROUP_ID}`)) {
-    return json([{ id: 501 }]);
+    return json(options.profileRows ?? [{ id: 501 }]);
   }
   if (url.includes(`/rest/v1/user_family_groups?group_id=eq.${GROUP_ID}`)) {
-    return json([{ user_id: USER_ID }]);
+    return json(options.memberRows ?? [{ user_id: USER_ID }]);
   }
   if (url.includes(`/rest/v1/billing_subscriptions?family_group_id=eq.${GROUP_ID}`) && !url.includes("on_conflict")) {
     return json(subscriptionRows);
@@ -185,6 +192,62 @@ test("billing checkout signs a central ECPay subscription request and records ch
     const eventWrite = writes.find((write) => write.url.endsWith("/rest/v1/billing_events"));
     assert.equal(eventWrite?.body.event_type, "checkout_created");
     assert.equal(eventWrite?.body.after_snapshot.estimatedMonthlyAmount, 30);
+  });
+});
+
+test("billing checkout can settle an existing group without adding another recipient or collaborator", async () => {
+  let centralCheckoutPayload: any = null;
+
+  await withMockedFetch(async (url, init) => {
+    const entitlement = entitlementRoutes(url, [], {
+      profileRows: [{ id: 501 }, { id: 502 }, { id: 503 }],
+      memberRows: [{ user_id: USER_ID }, { user_id: 91 }],
+    });
+    if (entitlement) return entitlement;
+
+    if (url === CHECKOUT_URL) {
+      centralCheckoutPayload = JSON.parse(String(init?.body || "{}"));
+      return json({
+        provider: "ecpay",
+        checkout: {
+          action: "https://payment.ecpay.com.tw/Cashier/AioCheckOut/V5",
+          method: "POST",
+          fields: {
+            MerchantTradeNo: "CWSETTLE123",
+            TotalAmount: 70,
+            ItemName: "Care WEDO 照護圈 70 元/月",
+          },
+        },
+      });
+    }
+
+    if (url.includes("/rest/v1/billing_subscriptions") && init?.method === "POST") {
+      return json([{ id: 77 }]);
+    }
+    if (url.includes("/rest/v1/invoices?on_conflict=family_group_id,period") && init?.method === "POST") {
+      return json([]);
+    }
+    if (url.includes("/rest/v1/billing_events") && init?.method === "POST") {
+      const eventBody = JSON.parse(String(init.body));
+      assert.equal(eventBody.note, "settle_group");
+      assert.equal(eventBody.after_snapshot.careProfileCount, 3);
+      assert.equal(eventBody.after_snapshot.paidCollaboratorCount, 1);
+      return json([]);
+    }
+
+    throw new Error(`unexpected fetch: ${url}`);
+  }, async () => {
+    const response = await billingCheckout(makeContext({ group_id: GROUP_ID, action_type: "settle_group" }));
+    const body = await response.json() as { checkout_required: boolean; amount: number };
+
+    assert.equal(response.status, 200);
+    assert.equal(body.checkout_required, true);
+    assert.equal(body.amount, 70);
+    assert.equal(centralCheckoutPayload.amount, 70);
+    assert.equal(centralCheckoutPayload.description, "啟用目前 Care WEDO 家庭群組月費");
+    assert.equal(centralCheckoutPayload.metadata.action_type, "settle_group");
+    assert.equal(centralCheckoutPayload.metadata.care_profile_count, 3);
+    assert.equal(centralCheckoutPayload.metadata.paid_collaborator_count, 1);
   });
 });
 

@@ -93,7 +93,7 @@ type BillingGroupEventInput = {
 type BillingCheckoutCreatedInput = {
   groupId: number;
   actorUserId: number;
-  actionType: "create_profile" | "invite_collaborator";
+  actionType: "create_profile" | "invite_collaborator" | "settle_group";
   requestId: string;
   provider: string;
   providerCheckoutId?: string | null;

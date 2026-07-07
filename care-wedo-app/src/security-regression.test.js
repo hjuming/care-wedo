@@ -606,6 +606,7 @@ test("Paid care actions show a beta fee confirmation before continuing", () => {
   assert.match(component, /buildPaidActionPreview/);
   assert.match(component, /第一位主要照護對象測試期減免/);
   assert.match(component, /本次需要前往綠界安全付款/);
+  assert.match(component, /requiresCheckout = action\.preview\.delta > 0/);
   assert.match(component, /這個動作會讓/);
   assert.match(component, /若協作者完成加入/);
   assert.match(component, /前往安全付款/);
@@ -613,10 +614,16 @@ test("Paid care actions show a beta fee confirmation before continuing", () => {
   assert.match(component, /requestProfileCreationConfirmation/);
   assert.match(component, /requestInviteConfirmation/);
   assert.match(component, /runConfirmedPaidAction/);
+  assert.match(component, /handleGroupBillingCheckout/);
+  assert.match(component, /actionType:\s*"settle_group"/);
+  assert.match(component, /費用與付款/);
+  assert.match(component, /前往付款/);
   assert.match(component, /createBillingCheckout/);
   assert.match(component, /submitGatewayCheckout/);
   assert.match(component, /Care WEDO 不保存信用卡資料/);
   assert.match(component, /已達 .*位共同協作者上限/);
+  assert.match(css, /\.group-billing-panel/);
+  assert.match(css, /\.group-billing-pay-button/);
   assert.match(css, /\.paid-action-modal/);
   assert.match(css, /width:\s*min\(560px,\s*calc\(100vw - 40px\)\)/);
   assert.match(css, /width:\s*calc\(100vw - 24px\)/);
@@ -745,6 +752,8 @@ test("Dashboard exposes recent LINE push audit summaries without sensitive messa
   assert.doesNotMatch(app, /line_user_id|message_text/);
   assert.match(css, /\.reminder-audit-panel/);
   assert.match(css, /\.reminder-audit-row/);
+  assert.match(css, /overflow-wrap:\s*anywhere/);
+  assert.match(css, /\.reminder-audit-row\s*\{\s*grid-template-columns:\s*1fr/s);
 });
 
 test("Morning reminders target today while evening reminders tolerate delayed schedule runs", () => {

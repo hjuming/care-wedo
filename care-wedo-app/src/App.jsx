@@ -3734,6 +3734,7 @@ function SettingsView({
           <p className="panel-eyebrow">本月費用預估</p>
           <h3>{priceEstimate.label}</h3>
           <p>
+            這是目前帳號資料的粗估；實際付款請到上方每個家庭群組卡片的「費用與付款」處理。
             每個家庭群組上限：主要照護對象 {CARE_WEDO_GROUP_LIMITS.maxCareProfiles} 位、
             協作者 {CARE_WEDO_GROUP_LIMITS.maxPaidCollaborators} 位；主帳號不列入協作者費用。
           </p>

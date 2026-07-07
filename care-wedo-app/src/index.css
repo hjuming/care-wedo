@@ -3991,10 +3991,16 @@ input:focus-visible {
   padding: 14px;
 }
 
+.reminder-audit-row > div {
+  min-width: 0;
+}
+
 .reminder-audit-row strong,
 .reminder-audit-row span,
 .reminder-audit-row small {
   display: block;
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 
 .reminder-audit-row strong {
@@ -5393,6 +5399,66 @@ input:focus-visible {
 
 .settings-group-header strong {
   font-size: 17px;
+}
+
+.group-billing-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  border: 1px solid rgb(94, 143, 154, 0.24);
+  border-radius: 12px;
+  background: #fff;
+  padding: 14px;
+}
+
+.group-billing-panel > div {
+  min-width: 0;
+}
+
+.group-billing-label {
+  margin: 0 0 6px;
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.group-billing-panel strong {
+  display: block;
+  color: var(--primary-dark);
+  font-size: 24px;
+  line-height: 1.15;
+}
+
+.group-billing-panel span {
+  display: block;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.5;
+}
+
+.group-billing-meta {
+  display: grid;
+  gap: 4px;
+  min-width: 150px;
+}
+
+.group-billing-pay-button {
+  grid-column: 1 / -1;
+  width: 100%;
+  border: 0;
+  border-radius: 12px;
+  background: var(--action-bg);
+  color: #fff;
+  cursor: pointer;
+  font-weight: 900;
+  padding: 14px 16px;
+}
+
+.group-billing-pay-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.64;
 }
 
 .settings-toggle-list {
@@ -7479,6 +7545,23 @@ button:disabled,
   .billing-line {
     grid-template-columns: 1fr;
     gap: 6px;
+  }
+
+  .reminder-audit-row {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .reminder-audit-row > div:last-child {
+    text-align: left;
+  }
+
+  .group-billing-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .group-billing-meta {
+    min-width: 0;
   }
 
   .paid-action-breakdown div,

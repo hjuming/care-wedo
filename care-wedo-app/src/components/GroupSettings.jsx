@@ -74,6 +74,7 @@ function getBillingLimitConfig(group) {
     canAddCareProfile: typeof entitlement.canAddCareProfile === "boolean" ? entitlement.canAddCareProfile : true,
     estimatedMonthlyAmount: Number.isFinite(entitlement.estimatedMonthlyAmount) ? entitlement.estimatedMonthlyAmount : null,
     paidMonthlyAmount: Number.isFinite(entitlement.paidMonthlyAmount) ? entitlement.paidMonthlyAmount : null,
+    subscriptionStatus: entitlement.subscriptionStatus || null,
     careProfileCount: Number.isFinite(entitlement.careProfileCount) ? entitlement.careProfileCount : null,
     paidCollaboratorCount: Number.isFinite(entitlement.paidCollaboratorCount) ? entitlement.paidCollaboratorCount : null,
   };
@@ -86,15 +87,29 @@ function buildPaidActionPreview({ actionType, group, careProfileCount, collabora
     careProfileCount: actionType === "create_profile" ? careProfileCount + 1 : careProfileCount,
     collaboratorCount: actionType === "invite_collaborator" ? collaboratorCount + 1 : collaboratorCount,
   });
+  const coveredCurrentTotal = billingLimits.paidMonthlyAmount ?? billingLimits.estimatedMonthlyAmount ?? current.total;
   return {
     actionType,
     groupName: group?.name || "家庭群組",
     current: {
       ...current,
-      total: billingLimits.paidMonthlyAmount ?? billingLimits.estimatedMonthlyAmount ?? current.total,
+      total: coveredCurrentTotal,
     },
     next,
-    delta: Math.max(next.total - current.total, 0),
+    delta: Math.max(next.total - coveredCurrentTotal, 0),
+  };
+}
+
+function buildGroupBillingSummary({ group, careProfileCount, collaboratorCount }) {
+  const billingConfig = getBillingLimitConfig(group);
+  const fallback = calculateGroupMonthlyEstimate({ careProfileCount, collaboratorCount });
+  const estimatedMonthlyAmount = billingConfig.estimatedMonthlyAmount ?? fallback.total;
+  const paidMonthlyAmount = billingConfig.paidMonthlyAmount ?? 0;
+  return {
+    estimatedMonthlyAmount,
+    paidMonthlyAmount,
+    amountDue: Math.max(estimatedMonthlyAmount - paidMonthlyAmount, 0),
+    subscriptionStatus: billingConfig.subscriptionStatus,
   };
 }
 
@@ -133,7 +148,7 @@ function PaidActionConfirmationModal({ action, onCancel, onConfirm, submitting =
   const isProfileAction = action.preview.actionType === "create_profile";
   const title = isProfileAction ? "新增主要照護對象" : "邀請共同協作者";
   const deltaLabel = action.preview.delta > 0 ? `+$${action.preview.delta}/月` : "$0";
-  const requiresCheckout = action.preview.next.total > 0;
+  const requiresCheckout = action.preview.delta > 0;
   const feeChangeCopy = isProfileAction
     ? `這個動作會讓「${action.preview.groupName}」月費從 $${action.preview.current.total} 變成 $${action.preview.next.total}。`
     : `若協作者完成加入，「${action.preview.groupName}」月費會從 $${action.preview.current.total} 變成 $${action.preview.next.total}。`;
@@ -475,6 +490,30 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
     }
   }
 
+  async function handleGroupBillingCheckout(group) {
+    if (!group?.id) return;
+    setError(null);
+    setSuccess(null);
+    setBillingSubmitting(true);
+    try {
+      const checkout = await createBillingCheckout({
+        idToken: identity.idToken,
+        groupId: group.id,
+        actionType: "settle_group",
+      });
+      if (!checkout.checkout_required) {
+        setSuccess(checkout.message || "目前付款狀態已涵蓋這個家庭群組。");
+        setBillingSubmitting(false);
+        await loadGroups();
+        return;
+      }
+      submitGatewayCheckout(checkout.checkout);
+    } catch (err) {
+      setError(err.message || "無法建立付款連結");
+      setBillingSubmitting(false);
+    }
+  }
+
   async function handleToggle(groupId, field, checked) {
     setError(null);
     setSuccess(null);
@@ -561,6 +600,8 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
             const collaboratorCount = getCollaboratorCount(group);
             const collaboratorLimitReached = isCollaboratorLimitReached(group);
             const groupBillingConfig = getBillingLimitConfig(group);
+            const billingSummary = buildGroupBillingSummary({ group, careProfileCount, collaboratorCount });
+            const canStartPayment = isAdmin || membership?.can_pay === true;
             return (
               <div key={group.id} className="settings-group-card">
                 <div className="settings-group-header">
@@ -571,6 +612,38 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
                       主要照護對象 {careProfileCount}/{groupBillingConfig.maxCareProfiles}・協作者 {collaboratorCount}/{groupBillingConfig.maxPaidCollaborators}
                     </p>
                   </div>
+                </div>
+
+                <div className="group-billing-panel" aria-label={`${group.name} 費用與付款`}>
+                  <div>
+                    <p className="group-billing-label">費用與付款</p>
+                    <strong>目前月費 ${billingSummary.estimatedMonthlyAmount}</strong>
+                    <span>
+                      已付款涵蓋 ${billingSummary.paidMonthlyAmount}
+                      {billingSummary.subscriptionStatus === "checkout_pending" ? "・付款同步中" : ""}
+                    </span>
+                  </div>
+                  <div className="group-billing-meta">
+                    <span>照護對象 {careProfileCount}/{groupBillingConfig.maxCareProfiles}</span>
+                    <span>協作者 {collaboratorCount}/{groupBillingConfig.maxPaidCollaborators}</span>
+                    <span>首位照護對象測試期減免</span>
+                  </div>
+                  {billingSummary.amountDue > 0 ? (
+                    canStartPayment ? (
+                      <button
+                        type="button"
+                        className="group-billing-pay-button"
+                        onClick={() => handleGroupBillingCheckout(group)}
+                        disabled={billingSubmitting}
+                      >
+                        {billingSubmitting ? "準備付款中..." : `前往付款 $${billingSummary.amountDue}/月`}
+                      </button>
+                    ) : (
+                      <p className="quota-note">請群組管理者或付款負責人處理付款。</p>
+                    )
+                  ) : (
+                    <p className="quota-note">目前付款狀態已涵蓋這個群組。</p>
+                  )}
                 </div>
 
                 <div className="group-invite-block">

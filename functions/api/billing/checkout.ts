@@ -14,7 +14,7 @@ type BillingCheckoutEnv = Env & {
   CARE_WEDO_PUBLIC_BASE_URL?: string;
 };
 
-type BillingCheckoutActionType = "create_profile" | "invite_collaborator";
+type BillingCheckoutActionType = "create_profile" | "invite_collaborator" | "settle_group";
 
 type BillingCheckoutRequestBody = {
   group_id?: number;
@@ -39,7 +39,7 @@ function parsePositiveInteger(value: unknown): number | null {
 }
 
 function isCheckoutActionType(value: unknown): value is BillingCheckoutActionType {
-  return value === "create_profile" || value === "invite_collaborator";
+  return value === "create_profile" || value === "invite_collaborator" || value === "settle_group";
 }
 
 function normalizeReturnPath(value: unknown): string {
@@ -85,6 +85,9 @@ async function assertCanStartCheckout(env: Env, userId: number, groupId: number)
 function buildCheckoutDescription(actionType: BillingCheckoutActionType): string {
   if (actionType === "create_profile") {
     return "新增照護對象後的 Care WEDO 照護圈月費";
+  }
+  if (actionType === "settle_group") {
+    return "啟用目前 Care WEDO 家庭群組月費";
   }
   return "新增共同協作者後的 Care WEDO 照護圈月費";
 }
