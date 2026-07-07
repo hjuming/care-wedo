@@ -97,7 +97,8 @@ test("subscription payments are gated by an explicit state machine before checko
   const stateMachine = readProjectFile("SUBSCRIPTION_STATE_MACHINE.md");
   const helper = readProjectFile("functions/_shared/subscription_state.ts");
   const helperTest = readProjectFile("functions/_tests/subscription-state.test.ts");
-  const app = readProjectFile("care-wedo-app/src/App.jsx");
+  const component = readProjectFile("care-wedo-app/src/components/GroupSettings.jsx");
+  const checkoutApi = readProjectFile("functions/api/billing/checkout.ts");
 
   for (const state of [
     "beta",
@@ -135,7 +136,11 @@ test("subscription payments are gated by an explicit state machine before checko
   assert.match(stateMachine, /idempotent/i);
   assert.match(stateMachine, /checkout_created` 不等於付款成功/);
   assert.match(stateMachine, /醫療資料不能因付款失敗或取消被硬刪/);
-  assert.doesNotMatch(app, /checkout|paymentIntent|信用卡付款/);
+  assert.match(checkoutApi, /recordBillingCheckoutCreated/);
+  assert.match(checkoutApi, /WEDO_BILLING_CHECKOUT_SECRET/);
+  assert.match(component, /createBillingCheckout/);
+  assert.match(component, /submitGatewayCheckout/);
+  assert.doesNotMatch(`${checkoutApi}\n${component}`, /paymentIntent|card_number|credit_card_number/i);
 });
 
 test("central billing webhook requires HMAC verification and provider-event idempotency", () => {

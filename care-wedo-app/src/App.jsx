@@ -197,6 +197,7 @@ const CARE_WEDO_SUPPORT_EMAIL = "Care@wedopr.com";
 const CARE_WEDO_PRICING = {
   recipientMonthly: 30,
   collaboratorMonthly: 10,
+  includedCareProfilesDuringBeta: 1,
   freeMonthlyOcrLimit: 10,
   paidMonthlyOcrLimit: 100,
 };
@@ -377,12 +378,12 @@ const FREE_FEATURES = [
   ["照護協作者", "不含協作者", "最多 5 位"],
   ["今日照護與未來行程", true, true],
   ["完整歷史紀錄與健康時間線", false, "完整保存與查詢"],
-  ["正式版月費訂閱", "$0", "$30-250/月"],
+  ["正式版月費訂閱", "$0", "首位測試期減免，增加才收費"],
 ];
 
 const PLAN_TIERS = [
   { name: "Free", label: "免費版", price: "$0/月", copy: "1 位照護對象、每月 10 筆 AI 整理，可看未來提醒；最近 30 天資料會保存但不開放歷史查詢。", featured: false },
-  { name: "Care Circle", label: "照護圈升級", price: "$30-250/月", copy: "每個家庭群組最多 4 位主要照護對象、5 位協作者；主帳號不列入協作者費用。", featured: true },
+  { name: "Care Circle", label: "照護圈升級", price: "首位減免，增加才收費", copy: "開放測試期首位主要照護對象減免 $30/月；新增照護對象或協作者才收費。", featured: true },
   { name: "Helper", label: "增加照護協作者", price: "+$10/人/月", copy: "可協助上傳、編輯、查看照護資料；不可變更付款與成員權限。" },
   { name: "Care Recipient", label: "增加照護對象", price: "+$30/人/月", copy: "每增加一位爸爸、媽媽、自己或其他照護對象，加收資料保存費。" },
 ];
@@ -422,7 +423,7 @@ const LANDING_FAQS = [
   },
   {
     question: "測試期間需要付費嗎？",
-    answer: "不需要。目前系統測試期間一般測試帳號開放照護圈升級體驗。正式收費方案會在上線前清楚公告。",
+    answer: "第一位主要照護對象在開放測試期減免 $30/月。若新增照護對象或協作者，會在付款前清楚顯示月費並前往綠界安全付款。",
   },
   {
     question: "家人可以一起看同一份紀錄嗎？",
@@ -493,9 +494,9 @@ function PlanDetailsModal({ onClose }) {
           <PlanTierTable />
           <div className="pricing-note-card">
             <strong>版本 A 收費方向</strong>
-            <p>免費可以先照顧 1 位家人，最近 30 天資料會保存但不開放歷史查詢。正式收費後，每個家庭群組以照護對象與協作者計費，月費區間 $30-250。</p>
+            <p>免費可以先照顧 1 位家人，最近 30 天資料會保存但不開放歷史查詢。開放測試期首位照護對象減免 $30/月；新增照護對象或協作者才會進入付款確認。</p>
           </div>
-          <p className="helper-copy">系統測試期間，所有帳號開放照護圈升級體驗，正式收費前會再次公告。付款與資料問題可聯絡 <a href={`mailto:${CARE_WEDO_SUPPORT_EMAIL}`}>{CARE_WEDO_SUPPORT_EMAIL}</a>。</p>
+          <p className="helper-copy">付款由綠界安全處理，Care WEDO 不保存信用卡資料。付款與資料問題可聯絡 <a href={`mailto:${CARE_WEDO_SUPPORT_EMAIL}`}>{CARE_WEDO_SUPPORT_EMAIL}</a>。</p>
         </div>
       </div>
     </div>
@@ -511,7 +512,7 @@ function PlanUpgradeModal({ reason = "quota", onClose, onViewPlans }) {
     : "升級照護圈後可以繼續保存新資料，並查看完整歷史紀錄。";
   const heroCopy = isHistory
     ? "升級照護圈後，可以查看完整歷史紀錄與健康時間線，家人回診前也比較容易一起確認過去資料。"
-    : "測試期間尚未正式收費，正式收費前會再次通知。也可以下個月再繼續使用免費整理額度。";
+    : "開放測試期首位照護對象減免；若新增照護對象或協作者，付款前會清楚確認。也可以下個月再繼續使用免費整理額度。";
   const secondaryActionLabel = isHistory ? "先看未來安排" : "先不要保存";
 
   return (
@@ -546,7 +547,7 @@ function PlanUpgradeModal({ reason = "quota", onClose, onViewPlans }) {
               <p>每多照顧一位家人加一份保存空間。</p>
             </article>
           </div>
-          <p className="helper-copy">Free 會保留最近 30 天資料，但歷史查詢與完整保存是付費功能。付款方式將優先支援 LINE Pay，其次評估藍新、綠界與 Stripe。</p>
+          <p className="helper-copy">Free 會保留最近 30 天資料，但歷史查詢與完整保存是付費功能。Care WEDO 目前透過綠界安全付款，後續可再納入藍新等金流。</p>
           <div className="quota-upgrade-actions">
             <button type="button" className="primary-action" onClick={onViewPlans}>查看方案</button>
             <button type="button" className="secondary-action" onClick={onClose}>{secondaryActionLabel}</button>
@@ -561,25 +562,27 @@ function PlanUpgradeModal({ reason = "quota", onClose, onViewPlans }) {
 function estimateCareCirclePrice({ careProfiles = [], collaborators = [] } = {}) {
   const recipientCount = Math.max(careProfiles.length, 1);
   const paidCollaboratorCount = Math.max(collaborators.length - 1, 0);
-  const needsPaidCircle = recipientCount > 1 || paidCollaboratorCount > 0;
-  const recipientSubtotal = needsPaidCircle ? recipientCount * CARE_WEDO_PRICING.recipientMonthly : 0;
+  const chargeableRecipientCount = Math.max(recipientCount - CARE_WEDO_PRICING.includedCareProfilesDuringBeta, 0);
+  const recipientSubtotal = chargeableRecipientCount * CARE_WEDO_PRICING.recipientMonthly;
   const collaboratorSubtotal = paidCollaboratorCount * CARE_WEDO_PRICING.collaboratorMonthly;
   const total = recipientSubtotal + collaboratorSubtotal;
 
-  if (!needsPaidCircle) {
+  if (total <= 0) {
     return {
       recipientCount,
+      chargeableRecipientCount,
       paidCollaboratorCount,
       total: 0,
       recipientSubtotal,
       collaboratorSubtotal,
       label: "目前可用 Free",
-      note: "免費版適合單一照護對象自己使用；新增照護對象或協作者時，會升級為照護圈收費。",
+      note: "開放測試期首位主要照護對象減免 $30/月；新增照護對象或協作者時才會收費。",
     };
   }
 
   return {
     recipientCount,
+    chargeableRecipientCount,
     paidCollaboratorCount,
     total,
     recipientSubtotal,
@@ -774,8 +777,8 @@ function LandingPage({ variant = "home" }) {
     pricing: {
       kicker: "Free / 照護圈升級",
       title: ["先免費使用，", "需要長期保存", "再升級。"],
-      desktop: "測試期間一般帳號開放照護圈體驗；正式收費前會再次通知。Free 可先整理近期資料，照護圈升級適合長期照顧多位家人。",
-      mobile: ["測試期間可先免費使用。", "正式收費前會再次通知。"],
+      desktop: "開放測試期首位照護對象減免；新增照護對象或協作者才收費。Free 可先整理近期資料，照護圈升級適合長期照顧多位家人。",
+      mobile: ["首位照護對象測試期減免。", "增加家人或協作者才收費。"],
       primaryLabel: "建立家庭協作",
       secondaryHref: "/guide",
       secondaryLabel: "看使用流程",
@@ -895,7 +898,7 @@ function LandingPage({ variant = "home" }) {
               {isGuidePage
                 ? "這頁只保留第一次上手最需要的步驟。若卡住，可以直接聯繫 LINE 照護小管家協助。"
                 : isPricingPage
-                  ? "測試期間一般帳號開放照護圈體驗；正式收費前會再次通知，不會靜默收費。"
+                  ? "首位照護對象測試期減免；增加家人或協作者前會清楚確認費用，不會靜默收費。"
                   : "這裡保留完整功能、方案、回饋與常見問題。第一次使用者可以先看教學，再完成 LINE 綁定。"}
             </p>
           </section>
@@ -935,8 +938,8 @@ function LandingPage({ variant = "home" }) {
                 </article>
                 <article className="plan-card featured-plan">
                   <button type="button" className="plan-name-trigger" onClick={() => setShowPlanDetails(true)}>版本 A 收費方式</button>
-                  <h3>照護圈升級 $30/月起</h3>
-                  <p>適合長期照顧父母、長輩或慢性病家人。每個家庭群組最多 4 位主要照護對象、5 位協作者，月費清楚落在 $30-250。</p>
+                  <h3>首位減免，增加才收費</h3>
+                  <p>適合長期照顧父母、長輩或慢性病家人。開放測試期首位照護對象減免；新增照護對象 $30/位/月、協作者 $10/人/月。</p>
                   <LineLoginAction loggingIn={loggingIn} label="建立家庭協作" onLogin={handleLineLogin} />
                 </article>
               </div>
@@ -954,10 +957,10 @@ function LandingPage({ variant = "home" }) {
                 <article>
                   <span>客服與資料問題</span>
                   <strong>{CARE_WEDO_SUPPORT_EMAIL}</strong>
-                  <p>付款方式將優先支援 LINE Pay；正式收費前會清楚公告。</p>
+                  <p>付款由綠界安全處理，Care WEDO 不保存信用卡資料。</p>
                 </article>
               </div>
-              <p className="plan-beta-note">系統測試期間，所有帳號開放照護圈升級體驗；正式收費前會再次通知。</p>
+              <p className="plan-beta-note">開放測試期間，首位主要照護對象減免 $30/月；增加照護對象或協作者才會進入付款確認。</p>
               <div className="feature-table" role="table" aria-label="Care WEDO Free 與照護圈升級功能對照">
                 <div className="feature-row table-head" role="row">
                   <strong>功能</strong>
@@ -1051,8 +1054,8 @@ function LandingPage({ variant = "home" }) {
           </article>
           <article className="plan-card featured-plan">
             <button type="button" className="plan-name-trigger" onClick={() => setShowPlanDetails(true)}>版本 A 收費方式</button>
-            <h3>照護圈升級 $30/月</h3>
-            <p>適合長期照顧父母、長輩或慢性病家人。每個家庭群組最多 4 位主要照護對象、5 位協作者，月費清楚落在 $30-250。</p>
+            <h3>首位減免，增加才收費</h3>
+            <p>適合長期照顧父母、長輩或慢性病家人。開放測試期首位照護對象減免；新增照護對象 $30/位/月、協作者 $10/人/月。</p>
             <LineLoginAction loggingIn={loggingIn} label="建立家庭協作" onLogin={handleLineLogin} />
           </article>
         </div>
@@ -1070,10 +1073,10 @@ function LandingPage({ variant = "home" }) {
           <article>
             <span>客服與資料問題</span>
             <strong>{CARE_WEDO_SUPPORT_EMAIL}</strong>
-            <p>付款方式將優先支援 LINE Pay；正式收費前會清楚公告。</p>
+            <p>付款由綠界安全處理，Care WEDO 不保存信用卡資料。</p>
           </article>
         </div>
-        <p className="plan-beta-note">系統測試期間，所有帳號開放照護圈升級體驗；正式收費前會再次通知。</p>
+        <p className="plan-beta-note">開放測試期間，首位主要照護對象減免 $30/月；增加照護對象或協作者才會進入付款確認。</p>
 
         <div className="feature-table" role="table" aria-label="Care WEDO Free 與照護圈升級功能對照">
           <div className="feature-row table-head" role="row">
@@ -3740,8 +3743,13 @@ function SettingsView({
             <>
               <div className="billing-line">
                 <span>主要照護對象</span>
-                <strong>${CARE_WEDO_PRICING.recipientMonthly} x {priceEstimate.recipientCount} 位</strong>
+                <strong>${CARE_WEDO_PRICING.recipientMonthly} x {priceEstimate.chargeableRecipientCount} 位</strong>
                 <em>${priceEstimate.recipientSubtotal}</em>
+              </div>
+              <div className="billing-line">
+                <span>測試期減免</span>
+                <strong>首位主要照護對象</strong>
+                <em>$0</em>
               </div>
               {priceEstimate.paidCollaboratorCount > 0 && (
                 <div className="billing-line">
@@ -3759,7 +3767,7 @@ function SettingsView({
             </div>
           )}
         </div>
-        <p className="helper-copy">平台收費區間：$30-250/月。{priceEstimate.note}</p>
+        <p className="helper-copy">開放測試期：首位主要照護對象減免 $30/月；新增照護對象 $30/位/月、協作者 $10/人/月。{priceEstimate.note}</p>
         <p className="helper-copy">超過上限時，請用其他協作者帳號另外開設家庭群組。付款與資料問題可聯絡 <a href={`mailto:${CARE_WEDO_SUPPORT_EMAIL}`}>{CARE_WEDO_SUPPORT_EMAIL}</a>。</p>
       </section>
 

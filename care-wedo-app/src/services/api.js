@@ -564,6 +564,26 @@ export async function createCareProfile({ idToken, groupId, displayName, relatio
   return resp.json();
 }
 
+export async function createBillingCheckout({ idToken, groupId, actionType, returnPath = "/app/settings?billing=return" }) {
+  const resp = await fetch(`${API_BASE}/billing/checkout`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+    },
+    body: JSON.stringify({
+      group_id: groupId,
+      action_type: actionType,
+      return_path: returnPath,
+    }),
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw createApiError(err.error || "無法建立付款連結", resp.status);
+  }
+  return resp.json();
+}
+
 /**
  * 取得群組成員清單
  */

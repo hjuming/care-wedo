@@ -1,6 +1,8 @@
 import {
   CARE_WEDO_CARE_PROFILE_MONTHLY_PRICE,
   CARE_WEDO_PAID_COLLABORATOR_MONTHLY_PRICE,
+  CARE_WEDO_INCLUDED_CARE_PROFILES_DURING_BETA,
+  getChargeableCareProfileCountDuringBeta,
   resolveGroupBillingEntitlement,
   type GroupBillingEntitlement,
 } from "./billing";
@@ -40,6 +42,9 @@ type BillingSubscriptionRow = {
   owner_user_id: number | null;
   status: string | null;
   plan_id: string | null;
+  care_profile_count: number | null;
+  paid_collaborator_count: number | null;
+  estimated_monthly_amount: number | null;
 };
 
 type BillingSnapshot = {
@@ -163,13 +168,35 @@ function toSnapshot(
   };
 }
 
+function snapshotFromSubscription(
+  entitlement: GroupBillingEntitlement,
+  subscription: BillingSubscriptionRow | null,
+  status: CareSubscriptionState,
+): BillingSnapshot {
+  if (!subscription) return toSnapshot(entitlement, status);
+  const careProfileCount = Math.max(subscription.care_profile_count || 0, entitlement.careProfileCount);
+  const paidCollaboratorCount = Math.max(subscription.paid_collaborator_count || 0, entitlement.paidCollaboratorCount);
+  return {
+    groupId: entitlement.groupId,
+    ownerUserId: subscription.owner_user_id ?? entitlement.ownerUserId,
+    planId: subscription.plan_id || entitlement.planId,
+    status,
+    careProfileCount,
+    paidCollaboratorCount,
+    memberCount: Math.max(entitlement.memberCount, paidCollaboratorCount + 1),
+    estimatedMonthlyAmount: Math.max(subscription.estimated_monthly_amount || 0, entitlement.estimatedMonthlyAmount),
+  };
+}
+
 function buildLineItems(snapshot: BillingSnapshot) {
+  const chargeableCareProfileCount = getChargeableCareProfileCountDuringBeta(snapshot.careProfileCount);
   return [
     {
-      label: "主要照護對象",
-      quantity: snapshot.careProfileCount,
+      label: "主要照護對象（首位測試期減免）",
+      quantity: chargeableCareProfileCount,
+      included_quantity: Math.min(snapshot.careProfileCount, CARE_WEDO_INCLUDED_CARE_PROFILES_DURING_BETA),
       unit_amount: CARE_WEDO_CARE_PROFILE_MONTHLY_PRICE,
-      amount: snapshot.careProfileCount * CARE_WEDO_CARE_PROFILE_MONTHLY_PRICE,
+      amount: chargeableCareProfileCount * CARE_WEDO_CARE_PROFILE_MONTHLY_PRICE,
     },
     {
       label: "共同協作者",
@@ -215,7 +242,7 @@ async function getBillingSubscription(
 ): Promise<BillingSubscriptionRow | null> {
   const rows = await supabaseFetch<BillingSubscriptionRow[]>(
     env,
-    `billing_subscriptions?family_group_id=eq.${groupId}&select=id,family_group_id,owner_user_id,status,plan_id&limit=1`,
+    `billing_subscriptions?family_group_id=eq.${groupId}&select=id,family_group_id,owner_user_id,status,plan_id,care_profile_count,paid_collaborator_count,estimated_monthly_amount&limit=1`,
   );
   return rows[0] ?? null;
 }
@@ -351,7 +378,9 @@ async function ensureCheckoutPending(
   providerEventId: string,
 ): Promise<{ subscriptionId: number; state: CareSubscriptionState; snapshot: BillingSnapshot }> {
   const entitlement = await resolveGroupBillingEntitlement(env, groupId);
-  const snapshot = toSnapshot(entitlement, currentState);
+  const snapshot = currentState === "checkout_pending"
+    ? snapshotFromSubscription(entitlement, subscription, currentState)
+    : toSnapshot(entitlement, currentState);
   let subscriptionId = subscription?.id ?? await upsertSubscription(env, snapshot, null, {
     source: "billing_webhook",
     hydrated_from: "provider_callback",
@@ -433,7 +462,10 @@ export async function handleCentralBillingWebhook(
   }
 
   const afterEntitlement = await resolveGroupBillingEntitlement(env, groupId);
-  const afterSnapshot = toSnapshot(afterEntitlement, transition.to);
+  const liveAfterSnapshot = toSnapshot(afterEntitlement, transition.to);
+  const afterSnapshot = prepared.snapshot.estimatedMonthlyAmount > liveAfterSnapshot.estimatedMonthlyAmount
+    ? { ...prepared.snapshot, status: transition.to, planId: transition.to === "active" ? "pro" : prepared.snapshot.planId }
+    : liveAfterSnapshot;
   const subscriptionId = await upsertSubscription(env, afterSnapshot, prepared.subscriptionId, {
     source: "billing_webhook",
     provider,

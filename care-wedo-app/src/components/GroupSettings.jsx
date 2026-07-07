@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { createCareProfile, fetchGroups, regenerateInvite, removeMember, updateMembership } from "../services/api";
+import {
+  createBillingCheckout,
+  createCareProfile,
+  fetchGroups,
+  regenerateInvite,
+  removeMember,
+  updateMembership,
+} from "../services/api";
 import { buildCollaboratorContact } from "../services/contact";
 import { resetCareWedoSessionAndReturnHome } from "../services/liff";
 
@@ -12,22 +19,48 @@ const GROUP_LIMITS = {
 const GROUP_PRICING = {
   recipientMonthly: 30,
   collaboratorMonthly: 10,
+  includedCareProfilesDuringBeta: 1,
 };
 
 function calculateGroupMonthlyEstimate({ careProfileCount = 1, collaboratorCount = 0 } = {}) {
   const recipientCount = Math.max(Number(careProfileCount) || 0, 1);
   const paidCollaboratorCount = Math.max(Number(collaboratorCount) || 0, 0);
-  const needsPaidCircle = recipientCount > 1 || paidCollaboratorCount > 0;
-  const recipientSubtotal = needsPaidCircle ? recipientCount * GROUP_PRICING.recipientMonthly : 0;
+  const chargeableRecipientCount = Math.max(recipientCount - GROUP_PRICING.includedCareProfilesDuringBeta, 0);
+  const recipientSubtotal = chargeableRecipientCount * GROUP_PRICING.recipientMonthly;
   const collaboratorSubtotal = paidCollaboratorCount * GROUP_PRICING.collaboratorMonthly;
 
   return {
     recipientCount,
+    chargeableRecipientCount,
     paidCollaboratorCount,
     recipientSubtotal,
     collaboratorSubtotal,
     total: recipientSubtotal + collaboratorSubtotal,
   };
+}
+
+function submitGatewayCheckout(checkout) {
+  if (!checkout?.action || !checkout?.fields) {
+    throw new Error("付款表單資料不完整，請稍後再試。");
+  }
+  const actionUrl = new URL(checkout.action);
+  if (actionUrl.protocol !== "https:") {
+    throw new Error("付款網址格式不安全，已停止送出。");
+  }
+  const form = document.createElement("form");
+  form.method = String(checkout.method || "POST").toUpperCase();
+  form.action = actionUrl.toString();
+  form.style.display = "none";
+  Object.entries(checkout.fields).forEach(([name, value]) => {
+    if (value === undefined || value === null) return;
+    const input = document.createElement("input");
+    input.type = "hidden";
+    input.name = name;
+    input.value = String(value);
+    form.appendChild(input);
+  });
+  document.body.appendChild(form);
+  form.submit();
 }
 
 function getBillingLimitConfig(group) {
@@ -40,6 +73,7 @@ function getBillingLimitConfig(group) {
       : GROUP_LIMITS.maxMembersIncludingOwner,
     canAddCareProfile: typeof entitlement.canAddCareProfile === "boolean" ? entitlement.canAddCareProfile : true,
     estimatedMonthlyAmount: Number.isFinite(entitlement.estimatedMonthlyAmount) ? entitlement.estimatedMonthlyAmount : null,
+    paidMonthlyAmount: Number.isFinite(entitlement.paidMonthlyAmount) ? entitlement.paidMonthlyAmount : null,
     careProfileCount: Number.isFinite(entitlement.careProfileCount) ? entitlement.careProfileCount : null,
     paidCollaboratorCount: Number.isFinite(entitlement.paidCollaboratorCount) ? entitlement.paidCollaboratorCount : null,
   };
@@ -57,14 +91,14 @@ function buildPaidActionPreview({ actionType, group, careProfileCount, collabora
     groupName: group?.name || "家庭群組",
     current: {
       ...current,
-      total: billingLimits.estimatedMonthlyAmount ?? current.total,
+      total: billingLimits.paidMonthlyAmount ?? billingLimits.estimatedMonthlyAmount ?? current.total,
     },
     next,
     delta: Math.max(next.total - current.total, 0),
   };
 }
 
-function PaidActionConfirmationModal({ action, onCancel, onConfirm }) {
+function PaidActionConfirmationModal({ action, onCancel, onConfirm, submitting = false }) {
   if (!action) return null;
 
   if (action.type === "limit_reached") {
@@ -99,22 +133,25 @@ function PaidActionConfirmationModal({ action, onCancel, onConfirm }) {
   const isProfileAction = action.preview.actionType === "create_profile";
   const title = isProfileAction ? "新增主要照護對象" : "邀請共同協作者";
   const deltaLabel = action.preview.delta > 0 ? `+$${action.preview.delta}/月` : "$0";
+  const requiresCheckout = action.preview.next.total > 0;
   const feeChangeCopy = isProfileAction
-    ? `正式版這個動作會讓「${action.preview.groupName}」月費從 $${action.preview.current.total} 變成 $${action.preview.next.total}。`
-    : `正式版若協作者完成加入，「${action.preview.groupName}」月費會從 $${action.preview.current.total} 變成 $${action.preview.next.total}。`;
+    ? `這個動作會讓「${action.preview.groupName}」月費從 $${action.preview.current.total} 變成 $${action.preview.next.total}。`
+    : `若協作者完成加入，「${action.preview.groupName}」月費會從 $${action.preview.current.total} 變成 $${action.preview.next.total}。`;
 
   return (
     <div className="modal-overlay paid-action-modal-overlay" onClick={onCancel}>
       <div className="modal-content paid-action-modal" role="dialog" aria-modal="true" aria-labelledby="paid-action-title" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
           <div>
-            <p className="modal-kicker">Beta 費用確認</p>
+              <p className="modal-kicker">測試期優惠與付款確認</p>
             <h2 id="paid-action-title">{title}</h2>
           </div>
           <button type="button" className="btn-close" onClick={onCancel} aria-label="關閉">×</button>
         </div>
         <div className="modal-body">
-          <p className="helper-copy">目前測試期間不會扣款。{feeChangeCopy}</p>
+          <p className="helper-copy">
+            第一位主要照護對象測試期減免 $30/月。{requiresCheckout ? "本次需要前往綠界安全付款。" : "本次仍在減免額度內，不需付款。"}{feeChangeCopy}
+          </p>
           <div className="paid-action-total-row">
             <span>本次月費影響</span>
             <strong>{deltaLabel}</strong>
@@ -122,9 +159,16 @@ function PaidActionConfirmationModal({ action, onCancel, onConfirm }) {
           <div className="paid-action-breakdown" aria-label="增加後月費明細">
             <div>
               <span>主要照護對象</span>
-              <strong>${GROUP_PRICING.recipientMonthly} x {action.preview.next.recipientCount} 位</strong>
+              <strong>${GROUP_PRICING.recipientMonthly} x {action.preview.next.chargeableRecipientCount} 位</strong>
               <em>${action.preview.next.recipientSubtotal}</em>
             </div>
+            {action.preview.next.recipientCount > 0 && (
+              <div>
+                <span>測試期減免</span>
+                <strong>首位主要照護對象</strong>
+                <em>$0</em>
+              </div>
+            )}
             {action.preview.next.paidCollaboratorCount > 0 && (
               <div>
                 <span>共同協作者</span>
@@ -134,11 +178,13 @@ function PaidActionConfirmationModal({ action, onCancel, onConfirm }) {
             )}
           </div>
           <p className="quota-note">
-            正式收費前會再次確認，不會靜默扣款。主帳號不列入協作者費用。
+            主帳號不列入協作者費用。付款頁由綠界提供，Care WEDO 不保存信用卡資料。
           </p>
           <div className="paid-action-buttons">
-            <button type="button" className="primary-action" onClick={onConfirm}>我了解，繼續新增</button>
-            <button type="button" className="secondary-action" onClick={onCancel}>先不要新增</button>
+            <button type="button" className="primary-action" onClick={onConfirm} disabled={submitting}>
+              {submitting ? "準備付款中..." : requiresCheckout ? "前往安全付款" : "我了解，繼續新增"}
+            </button>
+            <button type="button" className="secondary-action" onClick={onCancel} disabled={submitting}>先不要新增</button>
           </div>
         </div>
       </div>
@@ -157,6 +203,7 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
   const [updatingGroupId, setUpdatingGroupId] = useState(null);
   const [copiedCode, setCopiedCode] = useState(null);
   const [pendingPaidAction, setPendingPaidAction] = useState(null);
+  const [billingSubmitting, setBillingSubmitting] = useState(false);
 
   const loadGroups = useCallback(async () => {
     if (!identity || (identity.status !== "demo" && !identity.idToken)) return;
@@ -180,6 +227,15 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
     if (!identity || identity.status === "loading") return;
     loadGroups();
   }, [identity, loadGroups]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("billing") !== "return") return;
+    setSuccess("付款結果正在同步中。若剛完成付款，請稍候重新整理照護圈設定。");
+    url.searchParams.delete("billing");
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  }, []);
 
   function getMembersByGroup(groupId) {
     return data.user_memberships?.filter((m) => m.group_id === groupId) || [];
@@ -218,6 +274,7 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
     setPendingPaidAction({
       type: "invite_collaborator",
       copyMode,
+      groupId: group.id,
       group,
       preview: buildPaidActionPreview({
         actionType: "invite_collaborator",
@@ -370,11 +427,43 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
 
   async function runConfirmedPaidAction() {
     const action = pendingPaidAction;
-    setPendingPaidAction(null);
     if (!action || action.type === "limit_reached") return;
+    if (action.preview.delta > 0) {
+      setBillingSubmitting(true);
+      try {
+        const checkout = await createBillingCheckout({
+          idToken: identity.idToken,
+          groupId: action.groupId || action.group?.id,
+          actionType: action.preview.actionType,
+        });
+        if (!checkout.checkout_required) {
+          setPendingPaidAction(null);
+          setBillingSubmitting(false);
+          if (action.type === "invite_collaborator") {
+            executeInviteCopy(action.group, action.copyMode);
+            setSuccess("已複製邀請內容。");
+            return;
+          }
+          if (action.type === "create_profile") {
+            await submitCreateProfile({
+              groupId: action.groupId,
+              profileName: action.profileName,
+              profileRelationship: action.profileRelationship,
+            });
+          }
+          return;
+        }
+        submitGatewayCheckout(checkout.checkout);
+      } catch (err) {
+        setError(err.message || "無法建立付款連結");
+        setBillingSubmitting(false);
+      }
+      return;
+    }
+    setPendingPaidAction(null);
     if (action.type === "invite_collaborator") {
       executeInviteCopy(action.group, action.copyMode);
-      setSuccess("已複製邀請內容。正式版加入協作者前會再次確認費用。");
+      setSuccess("已複製邀請內容。");
       return;
     }
     if (action.type === "create_profile") {
@@ -630,8 +719,12 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
       </div>
       <PaidActionConfirmationModal
         action={pendingPaidAction}
-        onCancel={() => setPendingPaidAction(null)}
+        onCancel={() => {
+          setPendingPaidAction(null);
+          setBillingSubmitting(false);
+        }}
         onConfirm={runConfirmedPaidAction}
+        submitting={billingSubmitting}
       />
     </div>
   );

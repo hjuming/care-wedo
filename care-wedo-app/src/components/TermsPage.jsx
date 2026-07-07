@@ -47,7 +47,7 @@ export default function TermsPage() {
 
       <section className="landing-section legal-section">
         <h2>3. Free 與照護圈升級</h2>
-        <p>目前系統測試期間，所有測試帳號暫時開放照護圈升級體驗。正式收費前會再次公告。</p>
+        <p>開放測試期間，首位主要照護對象減免 $30/月；新增照護對象或協作者時，系統會在付款前清楚顯示月費。</p>
         <ul className="legal-list">
           <li><strong>Free</strong>：保留 LINE 小管家、每月 10 筆 AI 整理、長輩友善短提醒；最近 30 天資料會保存，但不開放歷史查詢。</li>
           <li><strong>照護圈升級</strong>：提供完整保存、家庭群組、每位照護對象每月 100 筆整理額度與健康時間線。</li>

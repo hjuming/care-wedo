@@ -1,7 +1,7 @@
 # Care WEDO Subscription State Machine
 
 > 最後更新：2026-07-07
-> 狀態：設計合約 + pure transition helper / unit tests；已補 Care 端中央金流 webhook 驗簽、去重與本機 fixture tests；尚未接正式付款按鈕 / checkout UI。
+> 狀態：設計合約 + pure transition helper / unit tests；已補 Care 端中央金流 webhook 驗簽、去重、本機 fixture tests，以及 Care checkout API / 付款 UI。
 > 原則：先定狀態機與資料不變條件，再實作 migration / webhook / checkout UI。
 
 ## 1. 現況事實
@@ -11,7 +11,7 @@
 | Billing foundation 已存在 | `billing_subscriptions`、`billing_events`、`invoices` 已在 phase55 migration / `supabase/schema.sql` |
 | 目前仍是 Beta / no-charge | `recordBillingGroupEvent()` 會寫 subscription snapshot 與 draft invoice，但不收款 |
 | 方案計算已有後端來源 | `resolveGroupBillingEntitlement()` 計算照護對象數、共同協作者數、估算月費與上限 |
-| 正式付款入口尚未接 | 目前前端只有費用確認與方案說明，沒有 checkout / paymentIntent / 信用卡付款 flow |
+| 正式付款入口已接上中央金流 | `functions/api/billing/checkout.ts` 以 HMAC 呼叫 WEDOPR checkout；前端只送綠界表單，不接觸卡號或 paymentIntent |
 | Pure state helper 已存在 | `functions/_shared/subscription_state.ts` 定義狀態、事件、side effects、idempotency key contract 與 `transitionSubscriptionState()` |
 | State helper 已有 unit tests | `functions/_tests/subscription-state.test.ts` 覆蓋合法 transition、非法 transition、checkout pending 不擴權、provider webhook idempotency key 與 no-op entitlement/retry 事件 |
 | Care 端中央 webhook 已有本機驗收 | `functions/api/billing/webhook.ts` / `functions/_shared/billing_webhook.ts` 驗 `x-wedo-billing-*` HMAC、`billing_events.provider_event_id` 去重，fixture 覆蓋成功、失敗、重送與錯簽章 |
@@ -155,7 +155,7 @@ create unique index if not exists invoices_provider_invoice_uidx
 3. 補 unit tests：合法 transition、非法 transition、idempotent webhook replay。（已完成：`functions/_tests/subscription-state.test.ts`）
 4. 補 Care 端中央 webhook API：驗簽、去重、呼叫 state transition helper。（已完成：`functions/api/billing/webhook.ts`、`functions/_tests/billing-webhook.test.ts`）
 5. 補 provider adapter：目前由 WEDOPR 中央金流轉送標準化 payload；Care 端不保存綠界 HashKey / HashIV。（部分完成）
-6. 補 checkout API / UI：只有 state helper 與 webhook 測試綠了，才放付款按鈕。（待做）
+6. 補 checkout API / UI：只有 state helper 與 webhook 測試綠了，才放付款按鈕。（已完成：`functions/api/billing/checkout.ts`、`care-wedo-app/src/components/GroupSettings.jsx`）
 7. 補 staging E2E：checkout → webhook success → entitlement active；payment_failed → grace/suspended。（待做）
 
 ## 10. Review Gate

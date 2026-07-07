@@ -34,15 +34,20 @@ export const CARE_WEDO_MAX_MEMBERS_PER_GROUP = CARE_WEDO_MAX_PAID_COLLABORATORS_
 export const CARE_WEDO_CARE_PROFILE_MONTHLY_PRICE = 30;
 export const CARE_WEDO_PAID_COLLABORATOR_MONTHLY_PRICE = 10;
 export const CARE_WEDO_GROUP_MONTHLY_PRICE_MAX = 250;
+export const CARE_WEDO_INCLUDED_CARE_PROFILES_DURING_BETA = 1;
 
 export type GroupBillingEntitlement = {
   groupId: number;
   ownerUserId: number | null;
   planId: string;
+  subscriptionStatus: string | null;
   careProfileCount: number;
   paidCollaboratorCount: number;
   memberCount: number;
   estimatedMonthlyAmount: number;
+  paidMonthlyAmount: number;
+  coveredCareProfileCount: number;
+  coveredPaidCollaboratorCount: number;
   maxCareProfiles: number;
   maxPaidCollaborators: number;
   maxMembersIncludingOwner: number;
@@ -51,6 +56,7 @@ export type GroupBillingEntitlement = {
 };
 
 type BillingEventType =
+  | "checkout_created"
   | "care_profile_created"
   | "collaborator_joined"
   | "subscription_upgraded"
@@ -67,6 +73,13 @@ type BillingSnapshot = {
   estimatedMonthlyAmount: number;
 };
 
+type BillingSubscriptionSnapshotRow = {
+  status: string | null;
+  care_profile_count: number | null;
+  paid_collaborator_count: number | null;
+  estimated_monthly_amount: number | null;
+};
+
 type BillingGroupEventInput = {
   groupId: number;
   actorUserId: number;
@@ -75,6 +88,19 @@ type BillingGroupEventInput = {
   subjectUserId?: number | null;
   careProfileId?: number | null;
   note?: string;
+};
+
+type BillingCheckoutCreatedInput = {
+  groupId: number;
+  actorUserId: number;
+  actionType: "create_profile" | "invite_collaborator";
+  requestId: string;
+  provider: string;
+  providerCheckoutId?: string | null;
+  merchantTradeNo?: string | null;
+  amount: number;
+  beforeSnapshot: GroupBillingEntitlement;
+  afterSnapshot: BillingSnapshot;
 };
 
 // Fallback plan definition — used when DB lookup fails or group has no plan_id.
@@ -113,19 +139,39 @@ async function getGroupRecipientCount(env: Env, groupId: number | null): Promise
   return Math.max(profiles.length, 1);
 }
 
-function calculateCareCircleMonthlyAmount(careProfileCount: number, paidCollaboratorCount: number): number {
+export function getChargeableCareProfileCountDuringBeta(careProfileCount: number): number {
+  return Math.max((Number(careProfileCount) || 0) - CARE_WEDO_INCLUDED_CARE_PROFILES_DURING_BETA, 0);
+}
+
+export function calculateCareCircleMonthlyAmount(careProfileCount: number, paidCollaboratorCount: number): number {
   const amount = (
-    Math.max(careProfileCount, 1) * CARE_WEDO_CARE_PROFILE_MONTHLY_PRICE
+    getChargeableCareProfileCountDuringBeta(careProfileCount) * CARE_WEDO_CARE_PROFILE_MONTHLY_PRICE
     + Math.max(paidCollaboratorCount, 0) * CARE_WEDO_PAID_COLLABORATOR_MONTHLY_PRICE
   );
   return Math.min(amount, CARE_WEDO_GROUP_MONTHLY_PRICE_MAX);
+}
+
+async function getBillingSubscriptionSnapshot(
+  env: Env,
+  groupId: number,
+): Promise<BillingSubscriptionSnapshotRow | null> {
+  try {
+    const rows = await supabaseFetch<BillingSubscriptionSnapshotRow[]>(
+      env,
+      `billing_subscriptions?family_group_id=eq.${groupId}&select=status,care_profile_count,paid_collaborator_count,estimated_monthly_amount&limit=1`,
+    );
+    return rows[0] ?? null;
+  } catch (error) {
+    if (!isBillingFoundationMissingError(error)) throw error;
+    return null;
+  }
 }
 
 export async function resolveGroupBillingEntitlement(
   env: Env,
   groupId: number,
 ): Promise<GroupBillingEntitlement> {
-  const [groups, profiles, members, plan] = await Promise.all([
+  const [groups, profiles, members, plan, subscription] = await Promise.all([
     supabaseFetch<Array<{ owner_user_id: number | null; plan_id: string | null }>>(
       env,
       `family_groups?id=eq.${groupId}&select=owner_user_id,plan_id&limit=1`,
@@ -139,6 +185,7 @@ export async function resolveGroupBillingEntitlement(
       `user_family_groups?group_id=eq.${groupId}&select=user_id`,
     ),
     getGroupPlan(env, groupId),
+    getBillingSubscriptionSnapshot(env, groupId),
   ]);
 
   const ownerUserId = groups[0]?.owner_user_id ?? null;
@@ -155,15 +202,29 @@ export async function resolveGroupBillingEntitlement(
   const estimatedMonthlyAmount = isCareCircle
     ? calculateCareCircleMonthlyAmount(careProfileCount, paidCollaboratorCount)
     : 0;
+  const subscriptionStatus = subscription?.status ?? null;
+  const paidMonthlyAmount = subscriptionStatus === "active"
+    ? Math.max(subscription?.estimated_monthly_amount || 0, 0)
+    : 0;
+  const coveredCareProfileCount = subscriptionStatus === "active"
+    ? Math.max(subscription?.care_profile_count || 0, careProfileCount)
+    : careProfileCount;
+  const coveredPaidCollaboratorCount = subscriptionStatus === "active"
+    ? Math.max(subscription?.paid_collaborator_count || 0, paidCollaboratorCount)
+    : paidCollaboratorCount;
 
   return {
     groupId,
     ownerUserId,
     planId: groups[0]?.plan_id || plan.id,
+    subscriptionStatus,
     careProfileCount,
     paidCollaboratorCount,
     memberCount: members.length,
     estimatedMonthlyAmount,
+    paidMonthlyAmount,
+    coveredCareProfileCount,
+    coveredPaidCollaboratorCount,
     maxCareProfiles,
     maxPaidCollaborators,
     maxMembersIncludingOwner,
@@ -193,12 +254,14 @@ function isBillingFoundationMissingError(error: unknown): boolean {
 }
 
 function buildBillingLineItems(snapshot: BillingSnapshot) {
+  const chargeableCareProfileCount = getChargeableCareProfileCountDuringBeta(snapshot.careProfileCount);
   return [
     {
-      label: "主要照護對象",
-      quantity: snapshot.careProfileCount,
+      label: "主要照護對象（首位測試期減免）",
+      quantity: chargeableCareProfileCount,
+      included_quantity: Math.min(snapshot.careProfileCount, CARE_WEDO_INCLUDED_CARE_PROFILES_DURING_BETA),
       unit_amount: CARE_WEDO_CARE_PROFILE_MONTHLY_PRICE,
-      amount: snapshot.careProfileCount * CARE_WEDO_CARE_PROFILE_MONTHLY_PRICE,
+      amount: chargeableCareProfileCount * CARE_WEDO_CARE_PROFILE_MONTHLY_PRICE,
     },
     {
       label: "共同協作者",
@@ -212,6 +275,7 @@ function buildBillingLineItems(snapshot: BillingSnapshot) {
 async function upsertBillingSubscriptionSnapshot(
   env: Env,
   snapshot: BillingSnapshot,
+  status = "beta",
 ): Promise<number | null> {
   const rows = await supabaseFetch<Array<{ id: number }>>(
     env,
@@ -223,7 +287,7 @@ async function upsertBillingSubscriptionSnapshot(
         family_group_id: snapshot.groupId,
         owner_user_id: snapshot.ownerUserId,
         plan_id: snapshot.planId,
-        status: "beta",
+        status,
         currency: "TWD",
         care_profile_count: snapshot.careProfileCount,
         paid_collaborator_count: snapshot.paidCollaboratorCount,
@@ -240,6 +304,7 @@ async function upsertBillingInvoiceDraft(
   env: Env,
   snapshot: BillingSnapshot,
   subscriptionId: number | null,
+  status = "draft",
 ): Promise<void> {
   await supabaseFetch(
     env,
@@ -252,7 +317,7 @@ async function upsertBillingInvoiceDraft(
         subscription_id: subscriptionId,
         owner_user_id: snapshot.ownerUserId,
         period: currentPeriod(),
-        status: "draft",
+        status,
         currency: "TWD",
         care_profile_count: snapshot.careProfileCount,
         paid_collaborator_count: snapshot.paidCollaboratorCount,
@@ -261,6 +326,62 @@ async function upsertBillingInvoiceDraft(
       }),
     },
   );
+}
+
+export function buildBillingSnapshotFromEntitlement(
+  entitlement: GroupBillingEntitlement,
+  overrides: Partial<Pick<BillingSnapshot, "planId" | "careProfileCount" | "paidCollaboratorCount" | "memberCount" | "estimatedMonthlyAmount">> = {},
+): BillingSnapshot {
+  const careProfileCount = overrides.careProfileCount ?? entitlement.careProfileCount;
+  const paidCollaboratorCount = overrides.paidCollaboratorCount ?? entitlement.paidCollaboratorCount;
+  return {
+    groupId: entitlement.groupId,
+    ownerUserId: entitlement.ownerUserId,
+    planId: overrides.planId ?? entitlement.planId,
+    careProfileCount,
+    paidCollaboratorCount,
+    memberCount: overrides.memberCount ?? entitlement.memberCount,
+    estimatedMonthlyAmount: overrides.estimatedMonthlyAmount
+      ?? calculateCareCircleMonthlyAmount(careProfileCount, paidCollaboratorCount),
+  };
+}
+
+export async function recordBillingCheckoutCreated(
+  env: Env,
+  input: BillingCheckoutCreatedInput,
+): Promise<boolean> {
+  try {
+    const subscriptionId = await upsertBillingSubscriptionSnapshot(env, input.afterSnapshot, "checkout_pending");
+    await upsertBillingInvoiceDraft(env, input.afterSnapshot, subscriptionId, "open");
+    await supabaseFetch(env, "billing_events", {
+      method: "POST",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({
+        family_group_id: input.groupId,
+        subscription_id: subscriptionId,
+        actor_user_id: input.actorUserId,
+        event_type: "checkout_created",
+        amount_delta: input.afterSnapshot.estimatedMonthlyAmount - input.beforeSnapshot.estimatedMonthlyAmount,
+        before_snapshot: serializeBillingSnapshot(input.beforeSnapshot),
+        after_snapshot: input.afterSnapshot,
+        provider: input.provider,
+        provider_checkout_id: input.providerCheckoutId || null,
+        merchant_trade_no: input.merchantTradeNo || null,
+        transition: {
+          from: "beta",
+          to: "checkout_pending",
+          request_id: input.requestId,
+        },
+        note: input.actionType,
+      }),
+    });
+    return true;
+  } catch (error) {
+    if (!isBillingFoundationMissingError(error)) {
+      console.warn("Care WEDO billing checkout was not recorded", error);
+    }
+    return false;
+  }
 }
 
 export async function recordBillingGroupEvent(
@@ -273,8 +394,9 @@ export async function recordBillingGroupEvent(
       : null;
     const afterEntitlement = await resolveGroupBillingEntitlement(env, input.groupId);
     const afterSnapshot = serializeBillingSnapshot(afterEntitlement);
-    const subscriptionId = await upsertBillingSubscriptionSnapshot(env, afterSnapshot);
-    await upsertBillingInvoiceDraft(env, afterSnapshot, subscriptionId);
+    const subscriptionStatus = input.beforeSnapshot?.subscriptionStatus === "active" ? "active" : "beta";
+    const subscriptionId = await upsertBillingSubscriptionSnapshot(env, afterSnapshot, subscriptionStatus);
+    await upsertBillingInvoiceDraft(env, afterSnapshot, subscriptionId, subscriptionStatus === "active" ? "paid" : "draft");
     await supabaseFetch(env, "billing_events", {
       method: "POST",
       headers: { Prefer: "return=minimal" },

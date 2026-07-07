@@ -1,8 +1,8 @@
 # Care WEDO — Beta 開發進度與後續計畫
 
-> **最後更新**：2026-06-20
+> **最後更新**：2026-07-07
 > **當前狀態**：LINE 長輩上傳流程已跑通；後台已收斂成協作者管理中心，並可查看去識別化提醒送達紀錄；Google OAuth 後台登入 MVP 已完成程式與 Phase 58 migration；protected data API 已改用 request-scoped `getRequestUser(context)`，deploy 前 CI gate 已上線。
-> **測試政策**：系統測試期間尚未啟用正式收費；介面先呈現照護圈正式計費邏輯與上限。
+> **測試政策**：開放測試期間首位主要照護對象減免 $30/月；新增照護對象或協作者才進入付款確認，付款先走 WEDOPR 中央金流與綠界。
 
 ---
 
@@ -248,7 +248,7 @@ EmailJS 需要的環境變數：
 | V1.0.2 | 醫療資料品質補強 | 藥品去重、OCR 低信心確認、家人端新增/更新標示 |
 | V1.1 | Beta 訪談與 AIO 補強 | FAQ、教學、靜態 pricing/guide/faq 頁面 |
 | V1.2 | 商轉資料基礎 | billing schema、entitlement helper、帳單快照 |
-| V1.3 | 正式訂閱 | LINE Pay / 藍新 / 綠界金流與訂閱流程 |
+| V1.3 | 正式訂閱 | 綠界 / 藍新優先，後續再評估 LINE Pay / Stripe |
 
 ### 下一階段 PR 建議
 

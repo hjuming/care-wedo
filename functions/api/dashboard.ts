@@ -31,7 +31,7 @@ type Env = {
 };
 
 const FREE_HISTORY_RETENTION_DAYS = 30;
-const PAYMENT_PROVIDER_PRIORITY = ["LINE Pay", "NewebPay", "ECPay", "Stripe"];
+const PAYMENT_PROVIDER_PRIORITY = ["ECPay", "NewebPay", "LINE Pay", "Stripe"];
 
 function canPlanViewHistory(plan: PlanRow, hasUnlimitedAccess = false) {
   return hasUnlimitedAccess || plan.id !== "free";

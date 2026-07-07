@@ -160,7 +160,7 @@ https://care.wedopr.com
 - 2026-05-29 已建立 Billing Data Foundation 草案：新增 `billing_subscriptions`、`billing_events`、`invoices` migration 與後端 `resolveGroupBillingEntitlement` / `recordBillingGroupEvent` helper；新增照護對象與新協作者加入會寫入可稽核事件、subscription snapshot 與當月 draft invoice。Production Supabase 已套用 `supabase/migration_phase55_billing_foundation.sql`。
 - 同一批次後續更新：`/api/groups` 追加回傳 `billing_entitlement`，照護圈頁使用後端實際權益快照做人數上限與 `estimatedMonthlyAmount` 顯示，避免前端硬編碼上限與稽核口徑不同步。
 - 2026-06-20 已補 `SUBSCRIPTION_STATE_MACHINE.md` 與 `functions/_shared/subscription_state.ts`，先定義 `beta`、`checkout_pending`、`active`、`past_due`、`grace_period`、`suspended`、`cancel_at_period_end`、`canceled`、side effects 與 webhook idempotency，並以 `functions/_tests/subscription-state.test.ts` 鎖定合法 / 非法 transition。
-- 2026-07-07 已補 Care 端中央金流 webhook：`POST /api/billing/webhook` 以 `WEDO_BILLING_GATEWAY_SECRET` 驗 WEDOPR HMAC 簽章，使用 `billing_events(provider, provider_event_id)` 去重，成功付款會把對應家庭群組訂閱推進到 `active`；前端正式付款按鈕 / checkout UI 仍未開。
+- 2026-07-07 已補 Care 端中央金流 webhook 與 checkout：`POST /api/billing/webhook` 以 `WEDO_BILLING_GATEWAY_SECRET` 驗 WEDOPR HMAC 簽章，使用 `billing_events(provider, provider_event_id)` 去重，成功付款會把對應家庭群組訂閱推進到 `active`；`POST /api/billing/checkout` 以 `WEDO_BILLING_CHECKOUT_SECRET` 呼叫 WEDOPR 中央金流，前端只送出綠界付款表單，不處理或保存信用卡資料。
 
 ### 7. 未登入首頁與回饋收集
 
@@ -326,7 +326,7 @@ git tag phase55_release_pre
 
 - 一般測試帳號：照護圈升級能力，登入後照護圈頁顯示實際上限與費用預估。
 - 內部測試權限不顯示為公開方案，不放入公開方案介紹。
-- 商轉前置：後端已補 billing entitlement、event helper、pure subscription state machine 與 Care 端中央金流 webhook fixture test；正式收費前仍需補 Care checkout API / 付款 UI，以及一筆小額 live callback 驗收。
+- 商轉前置：後端已補 billing entitlement、event helper、pure subscription state machine、Care 端中央金流 webhook fixture test、Care checkout API 與付款 UI；正式公開收費前仍需做一筆小額 live callback 驗收。
 
 ---
 
@@ -468,7 +468,7 @@ P1：
 P2：
 
 - App 結構債已開始拆分：`care-wedo-app/src/features/medications/MedicationView.jsx` 已承接用藥管理 view / 用藥總表 helper；`care-wedo-app/src/features/appointments/AppointmentView.jsx` 已承接手動提醒 modal 與月曆排程 view；`care-wedo-app/src/features/ocr/OcrWorkflow.jsx` 已承接掃描進度、拍照/文字上傳導引與醫療文件上傳 modal；`care-wedo-app/src/features/shared/careFormatters.js` 已承接日期與類型顯示 helper，避免 App 與 appointments module 各自複製。Shared helper 已把 auth/session/token 驗證抽到 `functions/_shared/auth_identity.ts`，billing / quota / plan limit helper 抽到 `functions/_shared/billing.ts`，`functions/_shared/supabase.ts` 目前 783 行；下一步再逐塊拆 records / document detail、`index.css` 與剩餘 Supabase data helper。
-- 正式付費方案與金流：已先補 `SUBSCRIPTION_STATE_MACHINE.md`、pure transition helper、unit tests、Care 端中央 webhook 驗簽 / 去重 / fixture tests；下一步才補 Care checkout API、付款 UI 與小額 live callback 驗收。
+- 正式付費方案與金流：已補 `SUBSCRIPTION_STATE_MACHINE.md`、pure transition helper、unit tests、Care 端中央 webhook 驗簽 / 去重 / fixture tests、Care checkout API 與付款 UI；下一步是小額 live callback 驗收。
 - Billing Data Foundation 已上線：已補後端 entitlement helper、paid action event、draft invoice snapshot 與 WEDOPR 中央 webhook 接收端；後續再把取消、退款與付款失敗寬限期完整接入 `billing_events` / `invoices`。
 - 持續補 AIO 內容：把 Beta 訪談、真實使用教學與資料安全聲明整理進 `/faq`、`/guide`、`/pricing`、`/llms.txt`。
 - 照護資料匯出。
