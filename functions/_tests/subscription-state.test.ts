@@ -74,6 +74,16 @@ test("subscription state machine handles cancel and re-checkout transitions with
 });
 
 test("checkout pending never grants paid entitlements before payment succeeds", () => {
+  const failedCheckout = transitionSubscriptionState("checkout_pending", {
+    type: "payment_failed",
+    provider: "line_pay",
+    providerEventId: "evt_checkout_failed",
+  });
+  assert.equal(failedCheckout.accepted, true);
+  assert.equal(failedCheckout.to, "beta");
+  assert.equal(failedCheckout.invoiceStatus, "failed");
+  assert.ok(!failedCheckout.sideEffects.includes("activate_paid_entitlements"));
+
   const expiredToBeta = transitionSubscriptionState("checkout_pending", {
     type: "checkout_expired",
     provider: "line_pay",

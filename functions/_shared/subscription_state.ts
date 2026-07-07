@@ -188,6 +188,15 @@ export function transitionSubscriptionState(
           "paid",
         );
       }
+      if (event.type === "payment_failed") {
+        return accepted(
+          currentState,
+          "beta",
+          event,
+          ["mark_invoice_failed"],
+          "failed",
+        );
+      }
       if (event.type === "checkout_expired") {
         return accepted(
           currentState,

@@ -23,6 +23,8 @@ test("billing foundation schema defines auditable group billing tables", () => {
   assert.match(combined, /paid_collaborator_count integer not null default 0/i);
   assert.match(combined, /estimated_monthly_amount integer not null default 0/i);
   assert.match(combined, /unique\(family_group_id, period\)/i);
+  assert.match(combined, /provider_event_id text/i);
+  assert.match(combined, /billing_events_provider_event_unique_idx/i);
 });
 
 test("billing foundation keeps public tables protected by RLS and service-role-only grants", () => {
@@ -134,4 +136,20 @@ test("subscription payments are gated by an explicit state machine before checko
   assert.match(stateMachine, /checkout_created` 不等於付款成功/);
   assert.match(stateMachine, /醫療資料不能因付款失敗或取消被硬刪/);
   assert.doesNotMatch(app, /checkout|paymentIntent|信用卡付款/);
+});
+
+test("central billing webhook requires HMAC verification and provider-event idempotency", () => {
+  const webhookApi = readProjectFile("functions/api/billing/webhook.ts");
+  const webhookHelper = readProjectFile("functions/_shared/billing_webhook.ts");
+  const middleware = readProjectFile("functions/api/_middleware.ts");
+  const envSchema = readProjectFile("env.schema.json");
+
+  assert.match(middleware, /\/api\/billing\/webhook/);
+  assert.match(envSchema, /WEDO_BILLING_GATEWAY_SECRET/);
+  assert.match(webhookApi, /handleCentralBillingWebhook/);
+  assert.match(webhookHelper, /verifyBillingWebhookSignature/);
+  assert.match(webhookHelper, /x-wedo-billing-timestamp|provider_event_id_required|findDuplicateProviderEvent/s);
+  assert.match(webhookHelper, /transitionSubscriptionState/);
+  assert.match(webhookHelper, /plan_id:\s*"pro"/);
+  assert.doesNotMatch(webhookHelper, /HashKey|HashIV|card_number|credit_card_number/i);
 });

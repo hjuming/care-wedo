@@ -20,6 +20,7 @@ function isPublicPath(pathname: string, method: string): boolean {
   if (pathname === "/api/health") return true;
   if (pathname === "/api/feedback" && method === "POST") return true;
   if (pathname === "/api/telemetry" && method === "POST") return true;
+  if (pathname === "/api/billing/webhook" && method === "POST") return true;
   if (pathname === "/api/session") return true;
   if (pathname === "/api/session/handoff" && method === "POST") return true;
   if (pathname.startsWith("/api/cron/")) return true;

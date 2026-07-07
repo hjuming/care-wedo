@@ -422,9 +422,16 @@ create table if not exists public.billing_events (
   subject_user_id bigint references public.users(id) on delete set null,
   care_profile_id bigint references public.care_profiles(id) on delete set null,
   event_type text not null,
+  provider text,
+  provider_event_id text,
+  gateway_transaction_id text,
+  merchant_trade_no text,
+  provider_trade_no text,
   amount_delta integer not null default 0,
   before_snapshot jsonb not null default '{}'::jsonb,
   after_snapshot jsonb not null default '{}'::jsonb,
+  raw_event jsonb not null default '{}'::jsonb,
+  transition jsonb not null default '{}'::jsonb,
   note text,
   created_at timestamptz not null default now()
 );
@@ -516,6 +523,14 @@ create index if not exists billing_events_family_created_idx
 
 create index if not exists billing_events_type_created_idx
   on public.billing_events (event_type, created_at desc);
+
+create unique index if not exists billing_events_provider_event_unique_idx
+  on public.billing_events (provider, provider_event_id)
+  where provider is not null and provider_event_id is not null;
+
+create index if not exists billing_events_provider_created_idx
+  on public.billing_events (provider, created_at desc)
+  where provider is not null;
 
 create index if not exists invoices_family_period_idx
   on public.invoices (family_group_id, period);

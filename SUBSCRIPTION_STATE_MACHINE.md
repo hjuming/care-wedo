@@ -1,7 +1,7 @@
 # Care WEDO Subscription State Machine
 
-> 最後更新：2026-06-20
-> 狀態：設計合約 + pure transition helper / unit tests；尚未接正式付款按鈕、金流 provider 或 webhook。
+> 最後更新：2026-07-07
+> 狀態：設計合約 + pure transition helper / unit tests；已補 Care 端中央金流 webhook 驗簽、去重與本機 fixture tests；尚未接正式付款按鈕 / checkout UI。
 > 原則：先定狀態機與資料不變條件，再實作 migration / webhook / checkout UI。
 
 ## 1. 現況事實
@@ -11,9 +11,10 @@
 | Billing foundation 已存在 | `billing_subscriptions`、`billing_events`、`invoices` 已在 phase55 migration / `supabase/schema.sql` |
 | 目前仍是 Beta / no-charge | `recordBillingGroupEvent()` 會寫 subscription snapshot 與 draft invoice，但不收款 |
 | 方案計算已有後端來源 | `resolveGroupBillingEntitlement()` 計算照護對象數、共同協作者數、估算月費與上限 |
-| 正式金流尚未接 | 目前前端只有費用確認與方案說明，沒有 checkout / paymentIntent / 信用卡付款 flow |
+| 正式付款入口尚未接 | 目前前端只有費用確認與方案說明，沒有 checkout / paymentIntent / 信用卡付款 flow |
 | Pure state helper 已存在 | `functions/_shared/subscription_state.ts` 定義狀態、事件、side effects、idempotency key contract 與 `transitionSubscriptionState()` |
 | State helper 已有 unit tests | `functions/_tests/subscription-state.test.ts` 覆蓋合法 transition、非法 transition、checkout pending 不擴權、provider webhook idempotency key 與 no-op entitlement/retry 事件 |
+| Care 端中央 webhook 已有本機驗收 | `functions/api/billing/webhook.ts` / `functions/_shared/billing_webhook.ts` 驗 `x-wedo-billing-*` HMAC、`billing_events.provider_event_id` 去重，fixture 覆蓋成功、失敗、重送與錯簽章 |
 
 ## 2. 狀態定義
 
@@ -41,7 +42,7 @@
 | `checkout_created` | 後端 checkout API | `provider`、`provider_checkout_id`、`invoice_id` | `beta/canceled` → `checkout_pending` |
 | `checkout_expired` | provider webhook / scheduled job | `provider_event_id` | `checkout_pending` → 原 state 或 `canceled` |
 | `payment_succeeded` | provider webhook | `provider_event_id`、`provider_payment_id`、`paid_at` | `checkout_pending/past_due/grace_period/suspended` → `active` |
-| `payment_failed` | provider webhook | `provider_event_id`、`failure_code` | `active` → `past_due` |
+| `payment_failed` | provider webhook | `provider_event_id`、`failure_code` | `checkout_pending` → `beta`；`active` → `past_due` |
 | `retry_scheduled` | 後端 job | `next_retry_at` | 記錄重試，不一定轉 state |
 | `grace_period_started` | 後端 job | `grace_until` | `past_due` → `grace_period` |
 | `grace_period_expired` | 後端 job | `grace_until` | `grace_period` → `suspended` |
@@ -57,6 +58,7 @@
 |---|---|---|---|
 | `beta` | `checkout_created` | `checkout_pending` | 建立 `invoice.status=open`；保存 provider checkout id |
 | `checkout_pending` | `payment_succeeded` | `active` | `invoice.status=paid`；設定 current period；更新 entitlement snapshot |
+| `checkout_pending` | `payment_failed` | `beta` | `invoice.status=failed`；不可授權 paid entitlement |
 | `checkout_pending` | `checkout_expired` | `beta` / `canceled` | `invoice.status=void`；不可授權 paid entitlement |
 | `active` | `payment_failed` | `past_due` | `invoice.status=failed` 或 `open`；設定 retry schedule |
 | `past_due` | `payment_succeeded` | `active` | 清除 failure / retry；補記 paid invoice |
@@ -74,13 +76,20 @@
 目前程式合約：
 
 - `transitionSubscriptionState(currentState, event)` 是純函式；不呼叫 provider、不寫 DB、不改前端權益。
-- 所有接受的 transition 都回傳 `sideEffects`，由未來 webhook / checkout API 決定如何落到 `billing_subscriptions`、`invoices`、`billing_events`。
+- 所有接受的 transition 都回傳 `sideEffects`，由 webhook / checkout API 決定如何落到 `billing_subscriptions`、`invoices`、`billing_events`。
 - `payment_succeeded`、`payment_failed`、`checkout_expired`、`subscription_canceled`、`refund_confirmed` 屬 provider webhook event，必須有 `provider + providerEventId` 形成 idempotency key，否則 transition 會拒絕。
 - `refund_confirmed` 目前刻意拒絕並回 `refund_transition_requires_policy`；正式退款 / chargeback 規則未定前，不讓 helper 自行猜測狀態。
 
-## 5. DB 欄位缺口
+## 5. DB 欄位狀態
 
-正式實作前，需要在 migration 補齊：
+Phase 60 已先補 Care 端 webhook 必需的事件欄位：
+
+| Table | 欄位 / 索引 | 狀態 |
+|---|---|---|
+| `billing_events` | `provider`、`provider_event_id`、`merchant_trade_no`、`provider_trade_no`、`raw_event`、`transition` | 已補：`supabase/migration_phase60_billing_webhook_events.sql` |
+| `billing_events` | `billing_events_provider_event_unique_idx` | 已補，用於 webhook replay 去重 |
+
+後續 checkout / 取消 / 退款前，仍需要補齊：
 
 | Table | 欄位 | 原因 |
 |---|---|---|
@@ -88,7 +97,6 @@
 | `billing_subscriptions` | `current_period_start`、`current_period_end` | 判斷當期權益與到期取消 |
 | `billing_subscriptions` | `grace_until`、`cancel_at_period_end`、`canceled_at` | 支援付款失敗與取消流程 |
 | `billing_subscriptions` | `state_version` | 避免 webhook / API 競態覆蓋 |
-| `billing_events` | `provider_event_id`、`provider_event_type` | webhook idempotency |
 | `billing_events` | `request_id` | API / job 重試去重 |
 | `invoices` | `provider_invoice_id`、`provider_payment_id` | 對帳 |
 | `invoices` | `status` enum-like contract: `draft/open/paid/failed/void/refunded` | 避免自由字串 |
@@ -97,10 +105,9 @@
 必要索引 / unique：
 
 ```sql
--- 概念草案，正式 migration 需 idempotent。
-create unique index if not exists billing_events_provider_event_uidx
+create unique index if not exists billing_events_provider_event_unique_idx
   on public.billing_events (provider, provider_event_id)
-  where provider_event_id is not null;
+  where provider is not null and provider_event_id is not null;
 
 create unique index if not exists invoices_provider_invoice_uidx
   on public.invoices (provider, provider_invoice_id)
@@ -146,8 +153,8 @@ create unique index if not exists invoices_provider_invoice_uidx
 1. 補 migration：欄位、索引、enum-like check 或 domain contract。（待做）
 2. 補 pure state transition helper：輸入 current state + event，輸出 next state + side effects。（已完成：`functions/_shared/subscription_state.ts`）
 3. 補 unit tests：合法 transition、非法 transition、idempotent webhook replay。（已完成：`functions/_tests/subscription-state.test.ts`）
-4. 補 provider adapter：先 LINE Pay，其次 NewebPay / ECPay；adapter 只轉 provider payload，不決定商業狀態。（待做）
-5. 補 webhook API：驗簽、去重、呼叫 state transition helper。（待做）
+4. 補 Care 端中央 webhook API：驗簽、去重、呼叫 state transition helper。（已完成：`functions/api/billing/webhook.ts`、`functions/_tests/billing-webhook.test.ts`）
+5. 補 provider adapter：目前由 WEDOPR 中央金流轉送標準化 payload；Care 端不保存綠界 HashKey / HashIV。（部分完成）
 6. 補 checkout API / UI：只有 state helper 與 webhook 測試綠了，才放付款按鈕。（待做）
 7. 補 staging E2E：checkout → webhook success → entitlement active；payment_failed → grace/suspended。（待做）
 
