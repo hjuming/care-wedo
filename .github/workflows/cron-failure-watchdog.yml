@@ -1,0 +1,54 @@
+name: Cron Failure Watchdog
+
+# 任一被監控的 workflow 失敗（failure / timed_out）時，用 WedoRadarBot 推 Telegram 告警。
+# 為什麼存在：cron 靜默失敗過去要人工才發現。這支讓「壞了自己會知道」。
+# 需要 repo Secrets：TELEGRAM_BOT_TOKEN、TELEGRAM_CHAT_ID（沿用 WEDOPR 的 WedoRadarBot 同一組值）。未設定時只警告、不硬失敗。
+# 維護：新增 workflow 時，把它的 name 加進下方 workflows 清單即可。
+
+on:
+  workflow_run:
+    workflows:
+      - "Daily Medical Reminders"
+      - "Deploy Reminder Scheduler"
+      - "Deploy to Cloudflare Pages"
+      - "Evening Fasting Reminders"
+    types:
+      - completed
+
+permissions:
+  contents: read
+
+jobs:
+  alert:
+    if: >-
+      github.event.workflow_run.conclusion == 'failure' ||
+      github.event.workflow_run.conclusion == 'timed_out'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify Telegram on failure
+        env:
+          TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+          WF_NAME: ${{ github.event.workflow_run.name }}
+          WF_URL: ${{ github.event.workflow_run.html_url }}
+          WF_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          WF_EVENT: ${{ github.event.workflow_run.event }}
+          WF_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${TG_TOKEN:-}" ] || [ -z "${TG_CHAT:-}" ]; then
+            echo "::warning::TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID 未設定，略過告警。到 repo Settings → Secrets and variables → Actions 設定後才會推播。"
+            exit 0
+          fi
+          TS="$(TZ=Asia/Taipei date '+%Y-%m-%d %H:%M')"
+          TEXT="🔴 Cron 失敗 — ${REPO}
+          Workflow: ${WF_NAME}
+          結論: ${WF_CONCLUSION}｜觸發: ${WF_EVENT}｜分支: ${WF_BRANCH}
+          時間: ${TS} (Asia/Taipei)
+          👉 ${WF_URL}"
+          curl -sS --fail -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${TG_CHAT}" \
+            --data-urlencode "text=${TEXT}" > /dev/null
+          echo "✅ 已推播 Telegram 告警：${WF_NAME} (${WF_CONCLUSION})"
