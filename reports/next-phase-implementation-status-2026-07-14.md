@@ -25,7 +25,7 @@
 - staging tooling 測試：8/8 通過（fixture 3、migration check 3、role e2e plan 2）。
 - TypeScript、ESLint、Vite build、`git diff --check` 通過。
 - 完整 `npm run verify` 通過：lint、stylelint、前端／Functions、typecheck、env example、contrast、RLS policy sync、10-case receipt pack。
-- Git：最新實作 `9affe09` 已推送 `origin/main`；包含費用 SSOT、staging pricing gate、提醒 persistence、行程／服藥 fail-closed、staging fixture medication 與三角色 fresh-context runner。
+- Git：最新實作 `e7608e6`（本次 runner 增量）待推送 `origin/main`；包含協作者記錄服藥與主要照護者 read-back，並保留重跑去重行為。
 - staging deployment：`https://b28d8777.care-wedo-staging.pages.dev`，alias `https://main.care-wedo-staging.pages.dev`。
 - staging 首頁：HTTP 200。
 - staging `/api/health`：HTTP 503、`env_ready:false`；符合「未就緒不得誤報 production-ready」的 gate。
