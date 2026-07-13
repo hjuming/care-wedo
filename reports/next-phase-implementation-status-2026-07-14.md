@@ -22,7 +22,7 @@
 - Functions 測試：53/53 通過。
 - staging tooling 測試：6/6 通過（fixture 3、migration check 3）。
 - TypeScript、ESLint、Vite build、`git diff --check` 通過。
-- Git：`6e62e8e feat: harden family reminder persistence and staging fixture` 已推送 `origin/main`。
+- Git：最新實作 `dc3c54f` 已推送 `origin/main`；包含提醒 persistence、行程 fail-closed 去重與 staging readiness checks。
 - staging deployment：`https://d0cf98af.care-wedo-staging.pages.dev`，alias `https://main.care-wedo-staging.pages.dev`。
 - staging 首頁：HTTP 200。
 - staging `/api/health`：HTTP 503、`env_ready:false`；符合「未就緒不得誤報 production-ready」的 gate。
