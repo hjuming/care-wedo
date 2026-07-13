@@ -238,6 +238,7 @@ test("Medication view exposes an A4-friendly doctor summary", () => {
 
 test("Version A pricing is visible without wiring live payments", () => {
   const app = readProjectFile("care-wedo-app/src/App.jsx");
+  const groupSettings = readProjectFile("care-wedo-app/src/components/GroupSettings.jsx");
   const css = readProjectFile("care-wedo-app/src/index.css");
 
   assert.match(app, /recipientMonthly:\s*30/);
@@ -245,8 +246,9 @@ test("Version A pricing is visible without wiring live payments", () => {
   assert.match(app, /maxCareProfiles:\s*4/);
   assert.match(app, /maxPaidCollaborators:\s*5/);
   assert.match(app, /estimateCareCirclePrice/);
-  assert.match(app, /本月費用預估/);
-  assert.match(app, /主帳號不列入協作者費用/);
+  assert.match(app, /pricing-mode-panel/);
+  assert.match(app, /目前為測試模式：不會實際扣款/);
+  assert.match(groupSettings, /主帳號不列入協作者費用/);
   assert.doesNotMatch(app, /主帳號：\$0/);
   assert.match(app, /首位減免，增加才收費/);
   assert.match(app, /每位照護對象 100 筆\/月/);
@@ -361,9 +363,10 @@ test("Care reminder detail text is highlighted on cards", () => {
 test("Today task cards keep only the primary elder action", () => {
   const app = readProjectFile("care-wedo-app/src/App.jsx");
   const overviewView = app.slice(app.indexOf("function OverviewView"), app.indexOf("function appointmentTimeValue"));
+  const taskStart = overviewView.indexOf('<article key={task.id');
   const todayTaskCard = overviewView.slice(
-    overviewView.indexOf('<article key={task.id}'),
-    overviewView.indexOf("</article>"),
+    taskStart,
+    overviewView.indexOf("</article>", taskStart),
   );
 
   assert.match(todayTaskCard, /elder-primary-action/);
