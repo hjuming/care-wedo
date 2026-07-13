@@ -20,6 +20,7 @@
     "staging:smoke:ready:report": "node scripts/staging-smoke-readiness.mjs --report-only",
     "staging:fixture:dry": "node scripts/staging-care-fixture.mjs",
     "staging:fixture:apply": "node scripts/staging-care-fixture.mjs --apply --confirm-staging",
+    "staging:migration:check": "node scripts/staging-migration-check.mjs",
     "rls:policy-sync": "node scripts/validate-phase59-policy-sync.mjs",
     "a11y:contrast": "node scripts/contrast-check.mjs",
     "manual:reminder": "tsx scripts/manual-reminder.ts",
