@@ -13,6 +13,7 @@ import { confirmOcrDocument, createAppointment, deleteAppointment, deleteCareDoc
 import { buildExternalAppUrl, buildLiffEntryUrl, buildLineAppLiffFallbackUrl, initLineIdentity, isLineInAppBrowser, loginWithLine, logoutLineIdentity, openDashboardInExternalBrowserAfterLineCallback, openUrlInExternalBrowser, resetCareWedoSessionAndReturnHome, shouldOpenLiffEntryUrl } from "./services/liff";
 import { completeSupabaseOAuthCallback, hasSupabaseAuthConfig, loginWithGoogle, signInWithSupabasePassword } from "./services/supabaseAuth";
 import { safeReviewLoginEnabled } from "./services/safeReviewLogin";
+import { deriveCareCapabilities } from "./services/capabilities";
 import { trackError, trackEvent } from "./services/telemetry";
 import { buildTodayTasks, formatTaipeiTodayLabel, hasSameDayTasks } from "./services/todayTasks";
 import { buildSearchSuggestions, matchSearch } from "./services/search";
@@ -1752,6 +1753,10 @@ function DashboardApp() {
   } : null);
   const planPermissions = dashboard?.plan_permissions || permissionVersion?.capabilities || {};
   const canViewHistory = planPermissions.can_view_history !== false;
+  const careCapabilities = deriveCareCapabilities(dashboard || {});
+  const { canManageCare, canCompleteMedication, readOnly } = careCapabilities;
+  const visibleSections = canManageCare ? SECTIONS : SECTIONS.filter((section) => ["overview", "calendar", "meds"].includes(section.id));
+  const visibleMobileSections = canManageCare ? MOBILE_SECTIONS : MOBILE_SECTIONS.filter((section) => ["overview", "calendar", "meds"].includes(section.id));
   const selectedProfile = careProfiles.find((profile) => profile.id === activeProfileId)
     || careProfiles.find((profile) => profile.group_id === activeGroupId)
     || careProfiles[0]
@@ -1847,6 +1852,12 @@ function DashboardApp() {
   }), [appointments, todayDate]);
   const collaborators = dashboard?.collaborators || dashboard?.members || [];
   const linePushAudit = dashboard?.line_push_audit || [];
+
+  useEffect(() => {
+    if (readOnly && !visibleSections.some((section) => section.id === activeSection)) {
+      setActiveSection("overview");
+    }
+  }, [activeSection, readOnly, visibleSections]);
 
   useEffect(() => {
     setFamilyNotes(dashboard?.family_notes || []);
@@ -2127,19 +2138,6 @@ function DashboardApp() {
   }
 
   async function handleMedicationTaken(group, status) {
-    updateActiveDashboard((prev) => ({
-      ...prev,
-      medications: (prev.medications || []).map((medication) => (
-        group.medicationIds.includes(medication.id)
-          ? {
-              ...medication,
-              taken_status: status,
-              taken_date: todayInTaipei(),
-              taken_slots: Array.from(new Set([...(medication.taken_slots || []), group.slot])),
-            }
-          : medication
-      )),
-    }));
     try {
       await markMedicationSlotStatus({
         medicationIds: group.medicationIds,
@@ -2375,11 +2373,12 @@ function DashboardApp() {
             groups={groups}
             activeProfileId={activeProfileId}
             onChange={handleProfileChange}
-            onReorder={handleProfileOrderChange}
+            onReorder={canManageCare ? handleProfileOrderChange : undefined}
+            readOnly={readOnly}
           />
 
           <nav className="section-nav">
-            {SECTIONS.map((section) => (
+            {visibleSections.map((section) => (
               <button
                 key={section.id}
                 type="button"
@@ -2419,9 +2418,10 @@ function DashboardApp() {
             activeGroupName={activeGroup?.name || dashboard?.active_group_name}
             collaborators={collaborators}
             onProfileChange={handleProfileChange}
-            onGroupChange={handleGroupChange}
-            onOpenProfile={() => setShowEditProfile(true)}
-            onOpenFamily={() => openSection("settings")}
+            onGroupChange={canManageCare ? handleGroupChange : undefined}
+            onOpenProfile={canManageCare ? () => setShowEditProfile(true) : undefined}
+            onOpenFamily={canManageCare ? () => openSection("settings") : undefined}
+            readOnly={readOnly}
           />
 
           {activeSection !== "overview" && activeSection !== "settings" && (
@@ -2459,8 +2459,9 @@ function DashboardApp() {
               familyNotes={familyNotes}
               hasCareData={hasCareData}
               onOpenCalendar={() => openSection("calendar")}
-              onUpload={handleUploadClick}
-              onComplete={handleComplete}
+              onUpload={canManageCare ? handleUploadClick : undefined}
+              onComplete={canManageCare ? handleComplete : undefined}
+              readOnly={readOnly}
             />
           )}
 
@@ -2468,9 +2469,9 @@ function DashboardApp() {
             <CalendarView
               appointments={appointments}
               careName={selectedProfile?.display_name || patient.name}
-              onUpload={handleUploadClick}
+              onUpload={canManageCare ? handleUploadClick : undefined}
               onAddToCalendar={handleAddAppointmentToCalendar}
-              onEditAppointment={setEditingAppointment}
+              onEditAppointment={canManageCare ? setEditingAppointment : undefined}
             />
           )}
 
@@ -2484,8 +2485,10 @@ function DashboardApp() {
               copyText={copyText}
               formatDateLabel={formatDateLabel}
               onClearSearch={() => setSearchQuery("")}
-              onUpload={handleUploadClick}
-              onTaken={handleMedicationTaken}
+              onUpload={canManageCare ? handleUploadClick : undefined}
+              onTaken={canCompleteMedication ? handleMedicationTaken : undefined}
+              canCompleteMedication={canCompleteMedication}
+              readOnly={readOnly}
             />
           )}
 
@@ -2494,17 +2497,18 @@ function DashboardApp() {
               records={allAppointments}
               documents={documents}
               searchQuery={searchQuery}
-              onUpload={handleUploadClick}
-              onUploadDocument={() => setShowDocumentUpload(true)}
+              onUpload={canManageCare ? handleUploadClick : undefined}
+              onUploadDocument={canManageCare ? () => setShowDocumentUpload(true) : undefined}
               onOpenDocument={handleDocumentOpen}
-              onEditRecord={setEditingAppointment}
+              onEditRecord={canManageCare ? setEditingAppointment : undefined}
+              readOnly={readOnly}
               canViewHistory={canViewHistory}
               documentNotice={documentNotice}
               onUpgradeRequired={(reason) => showPlanUpgradePrompt(reason, "records_history")}
             />
           )}
 
-          {activeSection === "settings" && (
+          {activeSection === "settings" && canManageCare && (
             <SettingsView
               patient={patient}
               identity={identity}
@@ -2604,7 +2608,7 @@ function DashboardApp() {
       )}
 
       <MobileBottomNav
-        sections={MOBILE_SECTIONS}
+        sections={visibleMobileSections}
         activeSection={activeSection}
         onChange={handleMobileNavChange}
       />
@@ -2798,7 +2802,7 @@ function groupProfilesForSwitcher(profiles = [], groups = []) {
   return [...knownSections, ...extraSections];
 }
 
-function ProfileSwitcher({ profiles, groups = [], activeProfileId, onChange, onReorder }) {
+function ProfileSwitcher({ profiles, groups = [], activeProfileId, onChange, onReorder, readOnly = false }) {
   const [dragState, setDragState] = useState(null);
   const longPressTimerRef = useRef(null);
   const pointerDragRef = useRef(null);
@@ -2881,7 +2885,7 @@ function ProfileSwitcher({ profiles, groups = [], activeProfileId, onChange, onR
                 <button
                   key={profile.id}
                   type="button"
-                  draggable
+                  draggable={!readOnly}
                   data-profile-id={profile.id}
                   data-group-id={profile.group_id || "ungrouped"}
                   className={[
@@ -2895,24 +2899,26 @@ function ProfileSwitcher({ profiles, groups = [], activeProfileId, onChange, onR
                     onChange(profile.id);
                   }}
                   onDragStart={(event) => {
+                    if (readOnly) return;
                     event.dataTransfer.effectAllowed = "move";
                     event.dataTransfer.setData("text/plain", String(profile.id));
                     setDragState({ profileId: profile.id, groupId: profile.group_id || "ungrouped", targetId: profile.id });
                   }}
-                  onDragOver={(event) => event.preventDefault()}
+                  onDragOver={(event) => { if (!readOnly) event.preventDefault(); }}
                   onDrop={(event) => {
+                    if (readOnly) return;
                     event.preventDefault();
                     requestReorder(profile.group_id || "ungrouped", dragState?.profileId || event.dataTransfer.getData("text/plain"), profile.id);
                     setDragState(null);
                   }}
                   onDragEnd={() => setDragState(null)}
-                  onPointerDown={(event) => handlePointerDown(event, profile)}
-                  onPointerMove={handlePointerMove}
-                  onPointerCancel={handlePointerEnd}
-                  onPointerUp={handlePointerEnd}
+                  onPointerDown={(event) => { if (!readOnly) handlePointerDown(event, profile); }}
+                  onPointerMove={(event) => { if (!readOnly) handlePointerMove(event); }}
+                  onPointerCancel={readOnly ? undefined : handlePointerEnd}
+                  onPointerUp={readOnly ? undefined : handlePointerEnd}
                 >
                   <span className="profile-option-name">{profile.display_name}</span>
-                  <span className="profile-drag-handle" aria-hidden="true">☰</span>
+                  {!readOnly && <span className="profile-drag-handle" aria-hidden="true">☰</span>}
                 </button>
               );
             })}
@@ -2976,6 +2982,7 @@ function CareContextHeader({
   onGroupChange,
   onOpenProfile,
   onOpenFamily,
+  readOnly = false,
 }) {
   const careName = selectedProfile?.display_name || patient?.name || "照護對象";
   const careTitle = getCareTodayTitle(selectedProfile, careName);
@@ -2998,14 +3005,20 @@ function CareContextHeader({
   return (
     <section className="care-context-header" aria-label={careTitle}>
       <div className="care-context-main">
-        <button type="button" className="care-context-avatar" onClick={onOpenProfile} aria-label="編輯照護者資料">
-          <img src={selectedProfile?.avatar_url || aiAvatar} alt={`${careName} 頭像`} />
-        </button>
+        {onOpenProfile ? (
+          <button type="button" className="care-context-avatar" onClick={onOpenProfile} aria-label="編輯照護者資料">
+            <img src={selectedProfile?.avatar_url || aiAvatar} alt={`${careName} 頭像`} />
+          </button>
+        ) : (
+          <div className="care-context-avatar" aria-hidden="true">
+            <img src={selectedProfile?.avatar_url || aiAvatar} alt={`${careName} 頭像`} />
+          </div>
+        )}
         <div className="care-context-copy">
           <p className="care-context-eyebrow">正在照護</p>
           <h2>{careName}</h2>
           <p className="care-context-meta">{careMeta}</p>
-          {profiles.length > 1 && (
+          {profiles.length > 1 && !readOnly && (
             <label className="care-profile-quick-switch">
               <span>切換照護者</span>
               <select value={selectedProfile?.id || ""} onChange={(event) => onProfileChange?.(Number(event.target.value))}>
@@ -3029,23 +3042,39 @@ function CareContextHeader({
             fallbackLabel="尚未建立照護圈"
           />
         </div>
-        <button type="button" className="care-context-item care-context-family-button" onClick={onOpenFamily}>
-          <span className="care-context-label">照護協作者</span>
-          <strong>{collaboratorSummary}</strong>
-          {collaboratorPreview.length > 0 && (
-            <span className="care-context-avatar-stack" aria-label="協作者頭像">
-              {collaboratorPreview.map((item) => (
-                item.avatarUrl
-                  ? <img key={item.id} src={item.avatarUrl} alt={`${item.displayName} 頭像`} />
-                  : <span key={item.id}>{item.displayName.slice(0, 2)}</span>
-              ))}
-            </span>
-          )}
-        </button>
+        {onOpenFamily ? (
+          <button type="button" className="care-context-item care-context-family-button" onClick={onOpenFamily}>
+            <span className="care-context-label">照護協作者</span>
+            <strong>{collaboratorSummary}</strong>
+            {collaboratorPreview.length > 0 && (
+              <span className="care-context-avatar-stack" aria-label="協作者頭像">
+                {collaboratorPreview.map((item) => (
+                  item.avatarUrl
+                    ? <img key={item.id} src={item.avatarUrl} alt={`${item.displayName} 頭像`} />
+                    : <span key={item.id}>{item.displayName.slice(0, 2)}</span>
+                ))}
+              </span>
+            )}
+          </button>
+        ) : (
+          <div className="care-context-item">
+            <span className="care-context-label">照護協作者</span>
+            <strong>{collaboratorSummary}</strong>
+            {collaboratorPreview.length > 0 && (
+              <span className="care-context-avatar-stack" aria-label="協作者頭像">
+                {collaboratorPreview.map((item) => (
+                  item.avatarUrl
+                    ? <img key={item.id} src={item.avatarUrl} alt={`${item.displayName} 頭像`} />
+                    : <span key={item.id}>{item.displayName.slice(0, 2)}</span>
+                ))}
+              </span>
+            )}
+          </div>
+        )}
         <div className="care-context-item">
           <span className="care-context-label">登入者</span>
           <strong>{loginName}</strong>
-          <span className="care-context-helper">{identity?.status === "demo" ? "範例畫面" : "目前帳號"}</span>
+          <span className="care-context-helper">{readOnly ? "僅可查看" : identity?.status === "demo" ? "範例畫面" : "目前帳號"}</span>
         </div>
       </div>
     </section>
@@ -3227,10 +3256,12 @@ function OverviewView({
   onOpenCalendar,
   onUpload,
   onComplete,
+  readOnly = false,
 }) {
   const [locallyDoneTaskIds, setLocallyDoneTaskIds] = useState(() => new Set());
 
   function handlePrimaryAction(task) {
+    if (readOnly || !onComplete) return;
     setLocallyDoneTaskIds((prev) => new Set(prev).add(task.id));
     if (task.kind === "appointment") {
       onComplete(task.sourceId);
@@ -3250,8 +3281,14 @@ function OverviewView({
           </p>
         </div>
         <div className="today-main-actions" aria-label="今天常用操作">
-          <button type="button" className="primary-action" onClick={onUpload}>拍照新增照護資料</button>
-          <p className="today-upload-helper">用藥、回診、處方箋、掛號單都從這裡開始。</p>
+          {onUpload ? (
+            <>
+              <button type="button" className="primary-action" onClick={onUpload}>拍照新增照護資料</button>
+              <p className="today-upload-helper">用藥、回診、處方箋、掛號單都從這裡開始。</p>
+            </>
+          ) : (
+            <p className="today-upload-helper read-only-helper">目前是唯讀查看模式，資料由家人協作者管理。</p>
+          )}
         </div>
       </section>
 
@@ -3284,9 +3321,11 @@ function OverviewView({
                     {task.needsReview && <p className="elder-task-warning">這筆資料還需要家人確認日期或內容。</p>}
                   </div>
                   <div className="elder-task-actions">
-                    <button type="button" className="primary-action elder-primary-action" onClick={() => handlePrimaryAction(task)} disabled={isDone}>
-                      {isDone ? "已記好了" : task.primaryActionLabel}
-                    </button>
+                    {!readOnly && onComplete && (
+                      <button type="button" className="primary-action elder-primary-action" onClick={() => handlePrimaryAction(task)} disabled={isDone}>
+                        {isDone ? "已記好了" : task.primaryActionLabel}
+                      </button>
+                    )}
                   </div>
                 </article>
               );
@@ -3417,7 +3456,7 @@ async function copyText(text) {
   document.body.removeChild(textarea);
 }
 
-function RecordsView({ records, documents = [], searchQuery, onUpload, onUploadDocument, onOpenDocument, onEditRecord, canViewHistory = true, documentNotice = "", onUpgradeRequired }) {
+function RecordsView({ records, documents = [], searchQuery, onUpload, onUploadDocument, onOpenDocument, onEditRecord, canViewHistory = true, documentNotice = "", onUpgradeRequired, readOnly = false }) {
   const [mode, setMode] = useState("future");
   const [copyNotice, setCopyNotice] = useState({ id: null, message: "" });
   const activeMode = canViewHistory ? mode : "future";
@@ -3492,7 +3531,7 @@ function RecordsView({ records, documents = [], searchQuery, onUpload, onUploadD
         <DocumentLibraryView
           documents={documents}
           searchQuery={searchQuery}
-          onUploadDocument={onUploadDocument}
+          onUploadDocument={readOnly ? undefined : onUploadDocument}
           onOpenDocument={onOpenDocument}
         />
       ) : grouped.length ? grouped.map(([month, items]) => (
@@ -3535,9 +3574,11 @@ function RecordsView({ records, documents = [], searchQuery, onUpload, onUploadD
                   </div>
                   <div className="record-card-actions">
                     {copyNotice.id === record.id && <span className="record-copy-notice">{copyNotice.message}</span>}
-                    <button type="button" className="record-edit-button" onClick={() => onEditRecord?.(record)} aria-label={`編輯 ${title} 提醒`}>
-                      編輯
-                    </button>
+                    {onEditRecord && (
+                      <button type="button" className="record-edit-button" onClick={() => onEditRecord?.(record)} aria-label={`編輯 ${title} 提醒`}>
+                        編輯
+                      </button>
+                    )}
                   </div>
                 </article>
               );
@@ -3548,7 +3589,7 @@ function RecordsView({ records, documents = [], searchQuery, onUpload, onUploadD
         <EmptyGuide
           title={searchQuery ? "沒有符合的紀錄。" : `目前沒有${modeLabel}。`}
           description={searchQuery ? "換一個醫院、科別、醫師或提醒類型試試看。" : mode === "history" ? "切回未來安排可以查看接下來要做的事。" : "拍藥袋、處方箋、掛號單或提醒單後，整理好的照護資料會先出現在這裡。"}
-          primaryLabel="拍照新增照護資料"
+          primaryLabel={onUpload ? "拍照新增照護資料" : undefined}
           onPrimary={onUpload}
         />
       )}
@@ -3576,7 +3617,7 @@ function DocumentLibraryView({ documents, searchQuery, onUploadDocument, onOpenD
       <EmptyGuide
         title={searchQuery ? "沒有符合的文件。" : "目前沒有醫療文件。"}
         description={searchQuery ? "換一個醫院、文件類型、藥名或日期試試看。" : "可以上傳醫院申請回來的病歷、用藥紀錄、檢查報告或處方箋。"}
-        primaryLabel="上傳病歷文件"
+        primaryLabel={onUploadDocument ? "上傳病歷文件" : undefined}
         onPrimary={onUploadDocument}
       />
     );
@@ -3585,7 +3626,7 @@ function DocumentLibraryView({ documents, searchQuery, onUploadDocument, onOpenD
   return (
     <div className="document-library-view">
       <div className="document-library-actions">
-        <button type="button" className="primary-action" onClick={onUploadDocument}>上傳病歷文件</button>
+        {onUploadDocument && <button type="button" className="primary-action" onClick={onUploadDocument}>上傳病歷文件</button>}
       </div>
       {grouped.map(([month, items]) => (
         <section key={month} className="record-month-group">
@@ -3695,7 +3736,14 @@ function SettingsView({
   onLogout,
 }) {
   const priceEstimate = estimateCareCirclePrice({ careProfiles, collaborators });
-  const accountProviderLabel = identity.provider === "supabase" ? "Google 帳號" : "LINE 帳號";
+  const accountProvider = identity.profile?.authProvider || identity.provider;
+  const accountProviderLabel = accountProvider === "email"
+    ? "Email／密碼測試帳號"
+    : accountProvider === "google"
+      ? "Google 帳號"
+      : accountProvider === "supabase"
+        ? "Supabase 帳號"
+        : "LINE 帳號";
   const accountDisplayName = identity.profile?.displayName || identity.profile?.email || accountProviderLabel;
 
   return (
@@ -3828,6 +3876,7 @@ function SettingsView({
 function FamilyNotesEditor({ notes, onChange }) {
   const [drafts, setDrafts] = useState(notes.length ? notes : [""]);
   const [saved, setSaved] = useState(false);
+  const [savedAt, setSavedAt] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -3853,11 +3902,14 @@ function FamilyNotesEditor({ notes, onChange }) {
   async function handleSave() {
     setSaving(true);
     setError("");
+    setSaved(false);
     try {
       await onChange(drafts);
       setSaved(true);
-      setTimeout(() => setSaved(false), 1800);
+      setSavedAt(new Date());
+      setTimeout(() => setSaved(false), 2400);
     } catch (err) {
+      setSavedAt(null);
       setError(err.message || "儲存失敗，請再試一次");
     } finally {
       setSaving(false);
@@ -3885,6 +3937,7 @@ function FamilyNotesEditor({ notes, onChange }) {
         ))}
       </div>
       {error && <p className="error-msg">{error}</p>}
+      {saved && <p className="success-msg" role="status">已儲存{savedAt ? `・${savedAt.toLocaleTimeString("zh-TW", { hour: "2-digit", minute: "2-digit" })}` : ""}，家庭成員重新整理後即可看到。</p>}
       <div className="family-notes-actions">
         <button type="button" className="secondary-action" onClick={addDraft}>
           新增

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { groupMedicationsBySchedule } from "../../services/todayTasks";
+import { medicationMutationErrorMessage } from "../../services/medicationFeedback";
 
 const MEDICATION_SLOT_OPTIONS = [
   { value: "morning", label: "早" },
@@ -256,11 +257,14 @@ export default function MedicationView({
   onClearSearch,
   onUpload,
   onTaken,
+  canCompleteMedication = true,
+  readOnly = false,
 }) {
   const [savingSlot, setSavingSlot] = useState(null);
   const [expandedMedicationId, setExpandedMedicationId] = useState(null);
   const [showMedicationSummary, setShowMedicationSummary] = useState(false);
   const [locallyTakenSlots, setLocallyTakenSlots] = useState(() => new Set());
+  const [slotFeedback, setSlotFeedback] = useState({});
   const medicationGroups = useMemo(() => groupMedicationsBySchedule(medications), [medications]);
   const summaryMedications = useMemo(() => uniqueActiveMedications(medicationSummarySource), [medicationSummarySource]);
   const hasAnyMedication = medicationGroups.some((group) => group.medications.length > 0);
@@ -274,13 +278,17 @@ export default function MedicationView({
   }
 
   async function handleSlotStatus(group, status) {
-    if (!group.medicationIds.length) return;
+    if (!group.medicationIds.length || !onTaken || !canCompleteMedication || readOnly) return;
     setSavingSlot(`${group.slot}-${status}`);
+    setSlotFeedback((current) => ({ ...current, [group.slot]: "" }));
     try {
       await onTaken?.(group, status);
       if (status === "taken") {
         setLocallyTakenSlots((prev) => new Set(prev).add(`${todayDate}:${group.slot}`));
       }
+      setSlotFeedback((current) => ({ ...current, [group.slot]: "本次服用已記錄。" }));
+    } catch (error) {
+      setSlotFeedback((current) => ({ ...current, [group.slot]: medicationMutationErrorMessage(error) }));
     } finally {
       setSavingSlot(null);
     }
@@ -310,13 +318,18 @@ export default function MedicationView({
               {group.medications.length > 0 && isSlotDone(group) && (
                 <span className="medicine-slot-status is-done">{formatDateLabel(todayDate)} 已記錄</span>
               )}
-              {group.medications.length > 0 && !isSlotDone(group) && (
+              {group.medications.length > 0 && !isSlotDone(group) && canCompleteMedication && !readOnly && (
                 <button type="button" className="primary-action compact-action" onClick={() => handleSlotStatus(group, "taken")} disabled={savingSlot === `${group.slot}-taken`}>
                   {savingSlot === `${group.slot}-taken` ? "記錄中…" : "我已吃完"}
                 </button>
               )}
             </div>
           </div>
+          {slotFeedback[group.slot] && (
+            <p className={slotFeedback[group.slot].includes("沒有記錄") ? "error-msg" : "success-msg"} role="status">
+              {slotFeedback[group.slot]}
+            </p>
+          )}
           {group.medications.length ? <div className="medicine-chip-list">
             {group.medications.map((med) => {
               const isExpanded = expandedMedicationId === med.id;

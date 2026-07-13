@@ -15,16 +15,23 @@ function safeNextPath(value = "/app") {
   return "/app";
 }
 
-function decodeJwtPayload(token = "") {
+export function decodeJwtPayload(token = "") {
   try {
     const [, payload] = String(token).split(".");
     if (!payload) return {};
     const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
     const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
-    return JSON.parse(window.atob(padded));
+    const binary = globalThis.atob(padded);
+    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+    return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
   } catch {
     return {};
   }
+}
+
+export function resolveSupabaseAuthProvider(payload = {}) {
+  const provider = payload?.app_metadata?.provider || payload?.user_metadata?.provider;
+  return typeof provider === "string" && provider.trim() ? provider.trim().toLowerCase() : "supabase";
 }
 
 export function hasSupabaseAuthConfig() {
@@ -67,6 +74,7 @@ export function getStoredSupabaseIdentity() {
   const payload = decodeJwtPayload(accessToken);
   const profile = {
     provider: "supabase",
+    authProvider: resolveSupabaseAuthProvider(payload),
     authUserId: payload.sub || null,
     email: payload.email || null,
     displayName: payload.user_metadata?.full_name || payload.user_metadata?.name || payload.email || "Google 帳號",

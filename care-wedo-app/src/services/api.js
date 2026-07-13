@@ -273,7 +273,9 @@ export function isAuthFailureMessage(message = "") {
 
 function createApiError(message, status) {
   const error = new Error(message);
+  error.status = status;
   if (status === 401 || isAuthFailureMessage(message)) error.code = "AUTH_REQUIRED";
+  if (status === 403) error.code = "FORBIDDEN";
   return error;
 }
 
@@ -661,19 +663,32 @@ export async function updateMembership({ idToken, groupId, updates }) {
   return resp.json();
 }
 
-export async function updateFamilyNotes({ idToken, groupId, notes }) {
-  const resp = await fetch(`${API_BASE}/groups`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-    },
-    body: JSON.stringify({
-      action: "update_family_notes",
-      group_id: groupId,
-      notes,
-    }),
-  });
+export async function updateFamilyNotes({ idToken, groupId, notes, fetchImpl = fetch, timeoutMs = 10000 }) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  let resp;
+  try {
+    resp = await fetchImpl(`${API_BASE}/groups`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+      },
+      body: JSON.stringify({
+        action: "update_family_notes",
+        group_id: groupId,
+        notes,
+      }),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw createApiError("家庭提醒儲存逾時，請再試一次。", 408);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
     throw createApiError(err.error || "更新家庭提醒失敗", resp.status);
@@ -860,20 +875,33 @@ export async function patchMedication(id, updates, { idToken }) {
   return response.json();
 }
 
-export async function markMedicationSlotStatus({ medicationIds, status, idToken, takenDate, timeSlot } = {}) {
+export async function markMedicationSlotStatus({ medicationIds, status, idToken, takenDate, timeSlot, fetchImpl = fetch, timeoutMs = 10000 } = {}) {
   const headers = { "Content-Type": "application/json" };
   if (idToken) headers.Authorization = `Bearer ${idToken}`;
 
-  const response = await fetch(`${API_BASE}/medications/taken`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      medication_ids: medicationIds,
-      status,
-      taken_date: takenDate,
-      time_slot: timeSlot,
-    }),
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  let response;
+  try {
+    response = await fetchImpl(`${API_BASE}/medications/taken`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        medication_ids: medicationIds,
+        status,
+        taken_date: takenDate,
+        time_slot: timeSlot,
+      }),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw createApiError("用藥紀錄儲存逾時，請確認網路後再試一次。", 408);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
   if (!response.ok) {
     const error = await response.json().catch(async () => ({ error: await response.text() }));
     throw createApiError(error.error || "無法記錄吃藥狀態", response.status);

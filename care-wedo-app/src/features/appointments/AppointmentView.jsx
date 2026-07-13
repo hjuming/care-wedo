@@ -419,9 +419,11 @@ export function CalendarView({ appointments, careName = "", onUpload, onAddToCal
       </section>
 
       <section className="event-list" aria-label="看診和領藥清單">
-        <div className="inline-action-row event-list-actions">
-          <button type="button" className="primary-action" onClick={onUpload}>拍照新增照護資料</button>
-        </div>
+        {onUpload && (
+          <div className="inline-action-row event-list-actions">
+            <button type="button" className="primary-action" onClick={onUpload}>拍照新增照護資料</button>
+          </div>
+        )}
         {futureAppointments.length ? futureAppointments.map((apt) => (
           <article key={apt.id} id={`event-${apt.date}`} className="event-row">
             <div className="event-card-actions">
@@ -437,17 +439,19 @@ export function CalendarView({ appointments, careName = "", onUpload, onAddToCal
               {apt.location && <p className="location-line">地點：{apt.location}</p>}
               {apt.notes && <p className="soft-note">{apt.notes}</p>}
             </div>
-            <div className="event-card-edit-actions">
-              <button type="button" className="card-corner-edit" onClick={() => onEditAppointment?.(apt)} aria-label={`編輯 ${apt.title || apt.department || "提醒"}`}>
-                編輯
-              </button>
-            </div>
+            {onEditAppointment && (
+              <div className="event-card-edit-actions">
+                <button type="button" className="card-corner-edit" onClick={() => onEditAppointment?.(apt)} aria-label={`編輯 ${apt.title || apt.department || "提醒"}`}>
+                  編輯
+                </button>
+              </div>
+            )}
           </article>
         )) : (
           <EmptyGuide
             title="目前還沒有看診提醒。"
             description="可以先拍掛號單、處方箋或提醒單，Care WEDO 會幫你整理下一次回診、檢查或領藥時間。"
-            primaryLabel="拍照新增照護資料"
+            primaryLabel={onUpload ? "拍照新增照護資料" : undefined}
             onPrimary={onUpload}
           />
         )}

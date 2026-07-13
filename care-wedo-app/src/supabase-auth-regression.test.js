@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { decodeJwtPayload, resolveSupabaseAuthProvider } from "./services/supabaseAuth.js";
 
 const root = resolve(import.meta.dirname, "../..");
 
@@ -81,6 +82,21 @@ test("Frontend exposes Google OAuth login and callback without storing service-r
   assert.match(routing, /normalized === "\/auth\/callback"/);
   assert.match(envExample, /VITE_SUPABASE_URL=/);
   assert.match(envExample, /VITE_SUPABASE_PUBLISHABLE_KEY=/);
+});
+
+test("Supabase JWT payload decodes UTF-8 display names without mojibake", () => {
+  const bytes = new TextEncoder().encode(JSON.stringify({ user_metadata: { full_name: "林怡君" } }));
+  const base64 = globalThis.btoa(String.fromCharCode(...bytes));
+  const payload = base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  const token = `header.${payload}.signature`;
+
+  assert.deepEqual(decodeJwtPayload(token), { user_metadata: { full_name: "林怡君" } });
+});
+
+test("Supabase Auth provider label distinguishes email test accounts from Google", () => {
+  assert.equal(resolveSupabaseAuthProvider({ app_metadata: { provider: "email" } }), "email");
+  assert.equal(resolveSupabaseAuthProvider({ app_metadata: { provider: "google" } }), "google");
+  assert.equal(resolveSupabaseAuthProvider({}), "supabase");
 });
 
 test("Google protected write staging smoke covers the three P0 write paths without logging tokens", () => {

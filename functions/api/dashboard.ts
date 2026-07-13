@@ -7,6 +7,7 @@ import {
   getBearerToken,
   getUserActiveProfileId,
   getUserGroups,
+  UserFamilyGroupRow,
   serializeCareProfile,
   serializeAppointment,
   serializeCareDocument,
@@ -23,6 +24,7 @@ import {
   hasUserFeatureFlag,
 } from "../_shared/billing";
 import { getRequestUser } from "../_shared/auth_context";
+import { canManageMembership } from "../_shared/group_permissions";
 
 type Env = {
   SUPABASE_URL: string;
@@ -150,6 +152,41 @@ const STATIC_DEMO_DASHBOARD = {
   needs_setup: false,
   needs_profile_setup: false,
 };
+
+type DashboardMembership = {
+  user_id: number;
+  group_id: number;
+  role: string;
+  can_manage: boolean;
+  can_pay: boolean;
+};
+
+function buildActiveMembership(
+  memberships: UserFamilyGroupRow[],
+  userId: number,
+  groupId: number | null,
+): DashboardMembership | null {
+  if (!groupId) return null;
+  const membership = memberships.find((row) => row.group_id === groupId);
+  if (!membership) return null;
+  return {
+    user_id: userId,
+    group_id: groupId,
+    role: membership.role || "member",
+    can_manage: membership.can_manage === true,
+    can_pay: membership.can_pay === true,
+  };
+}
+
+function buildDashboardCapabilities(membership: DashboardMembership | null) {
+  const canManageCare = membership
+    ? canManageMembership(membership)
+    : false;
+  return {
+    can_manage_care: canManageCare,
+    can_complete_medication: canManageCare,
+  };
+}
 
 function parseProfileId(request: Request): number | null {
   const value = new URL(request.url).searchParams.get("profile_id");
@@ -405,9 +442,9 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
     const requestedGroupId = parseGroupId(request);
 
     // Step 1: Resolve groups
-    const memberships = await supabaseFetch<Array<{ group_id: number }>>(
+    const memberships = await supabaseFetch<UserFamilyGroupRow[]>(
       env,
-      `user_family_groups?user_id=eq.${userId}&select=group_id`,
+      `user_family_groups?user_id=eq.${userId}&select=group_id,role,can_manage,can_pay`,
     );
 
     if (memberships.length === 0) {
@@ -424,6 +461,8 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
         groups: [],
         active_group_id: null,
         active_group_name: null,
+        active_membership: null,
+        capabilities: buildDashboardCapabilities(null),
         family_notes: [],
         line_push_audit: [],
         care_profiles: [],
@@ -458,6 +497,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
         hasUserFeatureFlag(env, userId, MULTIPLE_FAMILY_GROUPS_FEATURE),
       ]);
       const recipientCount = profiles.filter((profile) => profile.group_id === groupId).length || 1;
+      const activeMembership = buildActiveMembership(memberships, userId, groupId);
       return Response.json({
         ...STATIC_DEMO_DASHBOARD,
         mode: "personal",
@@ -470,6 +510,8 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
         groups,
         active_group_id: groupId,
         active_group_name: activeGroup?.name || "家庭群組",
+        active_membership: activeMembership,
+        capabilities: buildDashboardCapabilities(activeMembership),
         family_notes: [],
         line_push_audit: await fetchLinePushAuditLogs(env, groupId),
         care_profiles: profiles.map(serializeCareProfile),
@@ -483,6 +525,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
     const activeGroupId = selectedProfile.group_id;
     const activeProfileId = selectedProfile.id;
     const activeGroup = groups.find((group) => group.id === activeGroupId) || null;
+    const activeMembership = buildActiveMembership(memberships, userId, activeGroupId);
     const activeGroupProfileCount = profiles.filter((profile) => profile.group_id === activeGroupId).length || 1;
 
     // Step 3: Fetch group plan first so free accounts never receive hidden history in the client payload.
@@ -525,6 +568,8 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       groups,
       active_group_id: activeGroupId,
       active_group_name: activeGroup?.name || "家庭群組",
+      active_membership: activeMembership,
+      capabilities: buildDashboardCapabilities(activeMembership),
       family_notes: familyNotes,
       line_push_audit: linePushAuditLogs,
       active_profile_id: activeProfileId,

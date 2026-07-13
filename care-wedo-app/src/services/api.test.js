@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildAppointmentCalendarRequest, buildDashboardRequest, buildGoogleCalendarEventUrl, buildLocalAppointmentCalendarFile, buildSessionHandoffRequest, buildSessionRequest, isAuthFailureMessage } from "./api.js";
+import { buildAppointmentCalendarRequest, buildDashboardRequest, buildGoogleCalendarEventUrl, buildLocalAppointmentCalendarFile, buildSessionHandoffRequest, buildSessionRequest, isAuthFailureMessage, markMedicationSlotStatus, updateFamilyNotes } from "./api.js";
 
 test("buildDashboardRequest returns the dashboard endpoint without identity data in demo mode", () => {
   assert.deepEqual(buildDashboardRequest("/api"), {
@@ -129,4 +129,41 @@ test("isAuthFailureMessage detects stale login and token failures", () => {
   assert.equal(isAuthFailureMessage("idToken expired"), true);
   assert.equal(isAuthFailureMessage("請先登入"), true);
   assert.equal(isAuthFailureMessage("Supabase request failed"), false);
+});
+
+test("family reminder save aborts a hanging request with an actionable timeout", async () => {
+  await assert.rejects(
+    updateFamilyNotes({
+      groupId: 7,
+      notes: ["回診前帶健保卡"],
+      timeoutMs: 5,
+      fetchImpl: (_url, { signal }) => new Promise((_, reject) => {
+        signal.addEventListener("abort", () => {
+          const error = new Error("aborted");
+          error.name = "AbortError";
+          reject(error);
+        }, { once: true });
+      }),
+    }),
+    /家庭提醒儲存逾時/,
+  );
+});
+
+test("medication status save aborts a hanging request with an actionable timeout", async () => {
+  await assert.rejects(
+    markMedicationSlotStatus({
+      medicationIds: [11],
+      status: "taken",
+      timeSlot: "morning",
+      timeoutMs: 5,
+      fetchImpl: (_url, { signal }) => new Promise((_, reject) => {
+        signal.addEventListener("abort", () => {
+          const error = new Error("aborted");
+          error.name = "AbortError";
+          reject(error);
+        }, { once: true });
+      }),
+    }),
+    /用藥紀錄儲存逾時/,
+  );
 });
