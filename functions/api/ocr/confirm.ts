@@ -6,6 +6,7 @@ import {
   supabaseFetch,
 } from "../../_shared/supabase";
 import { getRequestUser } from "../../_shared/auth_context";
+import { requireGroupWriteAccess } from "../../_shared/group_permissions";
 import {
   isMissingMedicationIdentityColumn,
   stripMedicationIdentityPayload,
@@ -189,6 +190,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     if (!document || !userContext.groupIds.includes(document.group_id)) {
       return Response.json({ error: "找不到文件或沒有確認權限" }, { status: 403 });
     }
+    await requireGroupWriteAccess(env, userContext.userId, document.group_id);
 
     const confirmedDocuments = await supabaseFetch<Array<{ id: number }>>(
       env,
@@ -221,7 +223,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   } catch (error) {
     return Response.json(
       { error: error instanceof Error ? error.message : "無法確認文件" },
-      { status: 500 },
+      { status: error instanceof Error && error.message.includes("沒有修改權限") ? 403 : 500 },
     );
   }
 };

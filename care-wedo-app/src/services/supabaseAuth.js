@@ -109,3 +109,30 @@ export function completeSupabaseOAuthCallback(locationLike = window.location) {
 export function loginWithGoogle({ next = "/app" } = {}) {
   window.location.assign(buildSupabaseGoogleOAuthUrl({ next }));
 }
+
+export async function signInWithSupabasePassword({
+  email,
+  password,
+  supabaseUrl = SUPABASE_URL,
+  publishableKey = SUPABASE_PUBLISHABLE_KEY,
+  fetchImpl = fetch,
+  storeSession = storeSupabaseAuthSession,
+} = {}) {
+  const baseUrl = normalizeSupabaseUrl(supabaseUrl);
+  if (!baseUrl || !publishableKey) throw new Error("測試登入尚未設定。");
+  if (!String(email || "").trim() || !password) throw new Error("請輸入 Email 與密碼。");
+
+  const response = await fetchImpl(`${baseUrl}/auth/v1/token?grant_type=password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", apikey: publishableKey },
+    body: JSON.stringify({ email: String(email).trim(), password }),
+  });
+  if (!response.ok) throw new Error("登入資料不正確，請重新確認。");
+  const session = await response.json();
+  if (!session?.access_token) throw new Error("登入未回傳有效 session，請重試。");
+  return storeSession({
+    accessToken: session.access_token,
+    refreshToken: session.refresh_token,
+    expiresIn: session.expires_in,
+  });
+}

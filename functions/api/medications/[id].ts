@@ -8,12 +8,13 @@ import {
   serializeMedication,
 } from "../../_shared/supabase";
 import { getRequestUser } from "../../_shared/auth_context";
+import { manageableGroupIds } from "../../_shared/group_permissions";
 
 async function getIdentityAndGroups(context: { request: Request; env: Env; data?: any }) {
   const { env } = context;
   const { userId } = await getRequestUser(context);
   const memberships = await getUserMemberships(env, userId);
-  const groupIds = memberships.map((m) => m.group_id);
+  const groupIds = manageableGroupIds(memberships);
   return { userId, groupIds };
 }
 

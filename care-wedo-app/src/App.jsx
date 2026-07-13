@@ -11,7 +11,8 @@ import { formatDateLabel, isDateTodayOrFuture, normalizeDateInput, todayInTaipei
 import { patientData, medicines, timeline as initialTimeline } from "./data/patient";
 import { confirmOcrDocument, createAppointment, deleteAppointment, deleteCareDocument, downloadAppointmentCalendarFile, downloadLocalAppointmentCalendarFile, fetchDashboard, fetchDocumentDetail, fetchDocumentFileUrl, fetchSessionIdentity, joinGroup, markMedicationSlotStatus, ocrAnalyze, ocrAnalyzeText, patchAppointment, patchMedication, updateActiveProfilePreference, updateFamilyNotes, updateProfile, updateProfileOrder, uploadCareDocument } from "./services/api";
 import { buildExternalAppUrl, buildLiffEntryUrl, buildLineAppLiffFallbackUrl, initLineIdentity, isLineInAppBrowser, loginWithLine, logoutLineIdentity, openDashboardInExternalBrowserAfterLineCallback, openUrlInExternalBrowser, resetCareWedoSessionAndReturnHome, shouldOpenLiffEntryUrl } from "./services/liff";
-import { completeSupabaseOAuthCallback, hasSupabaseAuthConfig, loginWithGoogle } from "./services/supabaseAuth";
+import { completeSupabaseOAuthCallback, hasSupabaseAuthConfig, loginWithGoogle, signInWithSupabasePassword } from "./services/supabaseAuth";
+import { safeReviewLoginEnabled } from "./services/safeReviewLogin";
 import { trackError, trackEvent } from "./services/telemetry";
 import { buildTodayTasks, formatTaipeiTodayLabel, hasSameDayTasks } from "./services/todayTasks";
 import { buildSearchSuggestions, matchSearch } from "./services/search";
@@ -1230,6 +1231,10 @@ function LoginPage() {
   const [loginError, setLoginError] = useState(null);
   const inviteCode = new URLSearchParams(window.location.search).get("invite_code");
   const googleAuthReady = hasSupabaseAuthConfig();
+  const reviewLoginReady = safeReviewLoginEnabled();
+  const [reviewEmail, setReviewEmail] = useState("");
+  const [reviewPassword, setReviewPassword] = useState("");
+  const [reviewLoggingIn, setReviewLoggingIn] = useState(false);
 
   useEffect(() => {
     if (inviteCode) {
@@ -1256,6 +1261,19 @@ function LoginPage() {
     } catch (err) {
       setLoginError(err instanceof Error ? err.message : "Google 登入尚未設定，請稍後再試。");
       setGoogleLoggingIn(false);
+    }
+  }
+
+  async function handleReviewLogin(event) {
+    event.preventDefault();
+    setReviewLoggingIn(true);
+    setLoginError(null);
+    try {
+      await signInWithSupabasePassword({ email: reviewEmail, password: reviewPassword });
+      window.location.assign("/app");
+    } catch (err) {
+      setLoginError(err instanceof Error ? err.message : "登入資料不正確，請重新確認。");
+      setReviewLoggingIn(false);
     }
   }
 
@@ -1298,6 +1316,23 @@ function LoginPage() {
             >
               還沒加入照護小管家？先加入 →
             </a>
+            {reviewLoginReady && (
+              <form className="review-login-form" aria-label="安全測試登入" onSubmit={handleReviewLogin}>
+                <strong>安全測試入口</strong>
+                <p className="login-support-note">僅限指定測試站；請使用配發的獨立測試帳號。</p>
+                <label>
+                  Email
+                  <input type="email" autoComplete="username" value={reviewEmail} onChange={(event) => setReviewEmail(event.target.value)} required />
+                </label>
+                <label>
+                  密碼
+                  <input type="password" autoComplete="current-password" value={reviewPassword} onChange={(event) => setReviewPassword(event.target.value)} required />
+                </label>
+                <button className="secondary-action" type="submit" disabled={reviewLoggingIn}>
+                  {reviewLoggingIn ? "正在登入…" : "登入測試家庭"}
+                </button>
+              </form>
+            )}
           </div>
         </div>
 

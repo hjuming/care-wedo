@@ -1,5 +1,24 @@
 # 任務執行控制日誌
 
+## 2026-07-11｜安全測試登入入口
+
+- 目標：讓三位 persona 審查員在隔離的 staging 測試家庭中，以主要照護者、家屬協作者、長輩三種角色完成登入與協作驗收。
+- 非目標：不新增 production 公開後門、共用 master password 或測試 token；不讀寫 secrets、不建立線上帳號、不改 schema、不部署。
+- 使用者明確確認：2026-07-11 回覆「確認執行」，授權修改本機 auth 與角色權限程式。
+- 成功標準：測試入口只在精確 staging host + build flag 同時成立時顯示；production fail closed；登入沿用 Supabase Email/Password；所有醫療資料寫入由後端要求 `can_manage === true`；長輩角色唯讀；測試先紅後綠，lint/typecheck/test/build 通過。
+- 高風險 gate：本機 auth/permissions 修改已取得確認；schema、secrets、staging/production 帳號建立與部署仍未授權，若需要必須再次暫停。
+- AI 決定：採獨立 staging Supabase + 正常 Auth 帳號，不做 bypass API；理由是能沿用既有 session/tenant 邊界，且 production 可雙重 fail closed。
+- 回滾：本輪只改 repo 檔案，可逐檔還原或對未來 commit 使用 `git revert`；沒有外部資料回滾需求。
+- 實際修改：`App.jsx`、`supabaseAuth.js`、`safeReviewLogin.js`、`.env.example`；新增共用 `group_permissions.ts`，套用 appointments、medications、groups、profiles、documents、OCR 寫入端點；同步更新兩份測試。
+- RED 證據：`node --test care-wedo-app/src/safe-review-login.test.js` 因 `safeReviewLogin.js` 尚不存在而 `ERR_MODULE_NOT_FOUND`；functions 初次 `npx tsx --test` 因 sandbox IPC `EPERM`，改以無 IPC 的 `node --import tsx --test` 執行。
+- GREEN 證據：focused login 2/2、role helper 1/1、functions 42/42、frontend 177/177、typecheck、ESLint、Stylelint、Vite build、`git diff --check` 全數通過。
+- Fresh-context 修正：真 handler RED 證明唯讀成員可經 `DELETE /api/me` 進入刪除流程；現改為只要存在非 admin membership 即在任何 DELETE 前 403。另補 documents/OCR/profiles/groups mutation 拒絕與唯讀 GET 200 證據。
+- 第二次複驗修正（取代上一點的 me DELETE 語意）：僅檢查目前角色仍無法排除 memberships 空白或歷史 owner 資料。`DELETE /api/me` 最終採 identity-only：只移除本人 membership 與 app user，不刪 appointments、medications、care_profiles、family_groups 或其他家庭共享資料。隱私頁同步明示家庭資料保留。
+- 第二次 RED/GREEN：memberships=[] 與 admin membership 兩個真 handler 測試先都因偵測到 shared DELETE 而失敗；最小修正後連同 read-only case 3/3 pass，完整 functions 42/42 pass。
+- 未驗證：尚未建立三個 staging Auth 帳號／fixture family，未改 secrets，未部署，未跑三瀏覽器 live E2E；production bundle 只驗 build，未驗線上網域。
+- 回滾：還原本節列出的產品／測試檔即可；本輪沒有外部資料或設定變更。
+- 驗證狀態：⚠️ 本機 GREEN；staging/live 尚未驗證。
+
 > 這份文件用來管理 AI 協作開發。請在任務進行中持續更新，不把未驗證事項包裝成完成。
 
 ## 0. 語言與讀者設定

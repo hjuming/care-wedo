@@ -24,6 +24,7 @@ import {
 import { saveParsedDataToProfile } from "../../_shared/medical_ocr";
 import { logError, logEvent } from "../../_shared/logger";
 import { sendProductionAlert } from "../../_shared/alerts";
+import { requireGroupWriteAccess } from "../../_shared/group_permissions";
 
 type Env = SupabaseEnv & {
   GOOGLE_API_KEY: string;
@@ -170,6 +171,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     if (!profile?.group_id) {
       return Response.json({ error: "請先選擇照護對象" }, { status: 400 });
     }
+    await requireGroupWriteAccess(env, documentContext.userId, profile.group_id);
 
     const bytes = new Uint8Array(await file.arrayBuffer());
     validateCareDocumentFile(file, bytes);

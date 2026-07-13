@@ -6,6 +6,7 @@ import {
   supabaseFetch,
 } from "../../_shared/supabase";
 import { getRequestUser } from "../../_shared/auth_context";
+import { manageableGroupIds } from "../../_shared/group_permissions";
 
 type MedicationScopeRow = {
   id: number;
@@ -40,7 +41,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
 
     const { userId } = await getRequestUser(context);
     const memberships = await getUserMemberships(env, userId);
-    const groupIds = memberships.map((membership) => membership.group_id);
+    const groupIds = manageableGroupIds(memberships);
 
     const body = await readJsonBody<{
       medication_ids?: unknown;
@@ -68,7 +69,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     );
     if (
       medications.length !== medicationIds.length
-      || medications.some((medication) => medication.user_id !== userId && (!medication.group_id || !groupIds.includes(medication.group_id)))
+      || medications.some((medication) => !medication.group_id || !groupIds.includes(medication.group_id))
     ) {
       return Response.json({ error: "找不到藥物或沒有確認權限" }, { status: 403 });
     }

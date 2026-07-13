@@ -40,7 +40,7 @@ export default function PrivacyPage() {
         <h2>3. 資料儲存與保留</h2>
         <p>您的個人化資料儲存於 Supabase（PostgreSQL）資料庫，伺服器位於雲端。</p>
         <ul className="legal-list">
-          <li><strong>測試期間</strong>：全功能免費開放，照護紀錄與您選擇保存的原始文件保留至您主動刪除帳號或申請刪除為止。</li>
+          <li><strong>測試期間</strong>：全功能免費開放。家庭照護紀錄與原始文件屬共享資料，不會因單一成員刪除帳號而一併刪除。</li>
           <li><strong>Free</strong>：正式版會保留最近 30 天資料，但不開放用戶查詢、觀看歷史資料。</li>
           <li><strong>照護圈升級</strong>：提供完整歷史查詢與長期保存；每位照護對象每月 100 筆 AI 整理額度。</li>
         </ul>
@@ -62,7 +62,7 @@ export default function PrivacyPage() {
         <ul className="legal-list">
           <li><strong>查詢資料</strong>：登入後台即可查看您的全部照護紀錄。</li>
           <li><strong>修改資料</strong>：在後台直接編輯照護對象資訊與就診紀錄。</li>
-          <li><strong>刪除資料</strong>：在「家人設定」頁面申請刪除帳號，系統將刪除您所有關聯的個人資料。或寄信至 <a href="mailto:care@wedopr.com">care@wedopr.com</a> 申請。</li>
+          <li><strong>刪除資料</strong>：在「家人設定」刪除帳號時，系統會移除您的個人帳號與家庭成員資格，家庭共享照護資料會保留。如需刪除家庭資料，請由家庭管理者聯絡 <a href="mailto:care@wedopr.com">care@wedopr.com</a> 申請。</li>
         </ul>
       </section>
 

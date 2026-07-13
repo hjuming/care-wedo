@@ -10,6 +10,12 @@ import { onRequestPatch as patchAppointment } from "../api/appointments/[id]";
 import { onRequestPatch as patchMedication } from "../api/medications/[id]";
 import { onRequestPost as markMedicationsTaken } from "../api/medications/taken";
 import { onRequestPatch as patchProfile } from "../api/profiles/[id]";
+import { onRequestDelete as deleteMe } from "../api/me";
+import { onRequestPatch as orderProfiles } from "../api/profiles/order";
+import { onRequestPost as mutateGroups } from "../api/groups";
+import { onRequestPost as uploadDocument } from "../api/documents/upload";
+import { onRequestPost as confirmOcr } from "../api/ocr/confirm";
+import { onRequestPost as runOcr } from "../api/ocr/[[path]]";
 import { buildStoragePath } from "../_shared/care_documents";
 
 /**
@@ -61,7 +67,7 @@ function baseRoutes(url: string): Response | null {
     return json([{ id: ATTACKER_USER_ID, name: "Attacker", picture_url: null }]);
   }
   if (url.includes(`/rest/v1/user_family_groups?user_id=eq.${ATTACKER_USER_ID}`)) {
-    return json([{ id: 10, user_id: ATTACKER_USER_ID, group_id: ATTACKER_GROUP_ID, role: "owner" }]);
+    return json([{ id: 10, user_id: ATTACKER_USER_ID, group_id: ATTACKER_GROUP_ID, role: "admin", can_manage: true }]);
   }
   if (
     url.includes(`/rest/v1/user_feature_flags?user_id=eq.${ATTACKER_USER_ID}`)
@@ -240,7 +246,7 @@ test("rejects PATCH on a medication owned by another tenant's group (403)", asyn
 
     // Ownership check: PostgREST or-filter is scoped to the attacker's
     // user_id / group_ids, so a victim-owned row matches nothing.
-    if (url.includes(`/rest/v1/medications?id=eq.${VICTIM_MED_ID}`) && url.includes("or=(")) {
+    if (url.includes(`/rest/v1/medications?id=eq.${VICTIM_MED_ID}`) && url.includes(`group_id=in.(${ATTACKER_GROUP_ID})`)) {
       return json([]); // not owned -> patchMedication throws -> 403
     }
     // Any actual PATCH write must never be reached for a foreign record.
@@ -269,7 +275,7 @@ test("allows PATCH on a medication the user's group owns (200)", async () => {
     const base = baseRoutes(url);
     if (base) return base;
 
-    if (url.includes(`/rest/v1/medications?id=eq.${OWNED_MED_ID}`) && url.includes("or=(")) {
+    if (url.includes(`/rest/v1/medications?id=eq.${OWNED_MED_ID}`) && url.includes(`group_id=in.(${ATTACKER_GROUP_ID})`)) {
       return json([{ id: OWNED_MED_ID }]); // owned
     }
     if (url.includes(`/rest/v1/medications?id=eq.${OWNED_MED_ID}`) && init?.method === "PATCH") {
@@ -289,6 +295,177 @@ test("allows PATCH on a medication the user's group owns (200)", async () => {
   });
 });
 
+test("rejects medication and appointment PATCH for a read-only family member", async () => {
+  let writeAttempted = false;
+  await withMockedFetch((url, init) => {
+    if (url.includes(`/rest/v1/user_family_groups?user_id=eq.${ATTACKER_USER_ID}`)) {
+      return json([{ user_id: ATTACKER_USER_ID, group_id: ATTACKER_GROUP_ID, role: "member", can_manage: false }]);
+    }
+    const base = baseRoutes(url);
+    if (base) return base;
+    if (init?.method === "PATCH") writeAttempted = true;
+    throw new Error(`unexpected fetch: ${url}`);
+  }, async () => {
+    const medicationResponse = await patchMedication({
+      request: makePatchRequest("medications", 888, { active: false }),
+      env: ENV,
+      params: { id: "888" },
+    } as any);
+    const appointmentResponse = await patchAppointment({
+      request: makePatchRequest("appointments", 887, { title: "不應寫入" }),
+      env: ENV,
+      params: { id: "887" },
+    } as any);
+    assert.equal(medicationResponse.status, 403);
+    assert.equal(appointmentResponse.status, 403);
+    assert.equal(writeAttempted, false);
+  });
+});
+
+test("read-only family member cannot delete shared care data through account deletion", async () => {
+  let sharedDeleteAttempted = false;
+  await withMockedFetch((url, init) => {
+    if (url.includes(`/rest/v1/user_family_groups?user_id=eq.${ATTACKER_USER_ID}`)) {
+      return json([{ user_id: ATTACKER_USER_ID, group_id: ATTACKER_GROUP_ID, role: "member", can_manage: false }]);
+    }
+    const base = baseRoutes(url);
+    if (base) return base;
+    if (init?.method === "DELETE") {
+      if (/appointments|medications|care_profiles|family_groups\?id=/.test(url)) sharedDeleteAttempted = true;
+      return json([]);
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  }, async () => {
+    const response = await deleteMe({
+      request: makeDeleteRequest("/api/me"),
+      env: ENV,
+      params: {},
+    } as any);
+    assert.equal(response.status, 200);
+    assert.equal(sharedDeleteAttempted, false, "read-only account deletion must retain shared family data");
+  });
+});
+
+for (const accountCase of [
+  { name: "without current memberships", memberships: [] },
+  { name: "with an admin membership", memberships: [{ user_id: ATTACKER_USER_ID, group_id: ATTACKER_GROUP_ID, role: "admin", can_manage: true }] },
+]) {
+  test(`account deletion ${accountCase.name} never deletes family-shared care data`, async () => {
+    const deleteUrls: string[] = [];
+    await withMockedFetch((url, init) => {
+      if (url.includes(`/rest/v1/user_family_groups?user_id=eq.${ATTACKER_USER_ID}`) && init?.method !== "DELETE") {
+        return json(accountCase.memberships);
+      }
+      const base = baseRoutes(url);
+      if (base) return base;
+      if (url.includes(`/rest/v1/user_family_groups?user_id=eq.${ATTACKER_USER_ID}`) && init?.method === "DELETE") {
+        deleteUrls.push(url);
+        return json([]);
+      }
+      if (url.includes(`/rest/v1/users?id=eq.${ATTACKER_USER_ID}`) && init?.method === "DELETE") {
+        deleteUrls.push(url);
+        return json([]);
+      }
+      if (url.includes(`/rest/v1/user_family_groups?group_id=eq.${ATTACKER_GROUP_ID}`)) {
+        return json([{ user_id: ATTACKER_USER_ID, role: "admin" }]);
+      }
+      if (init?.method === "DELETE") {
+        deleteUrls.push(url);
+        return json([]);
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    }, async () => {
+      const response = await deleteMe({ request: makeDeleteRequest("/api/me"), env: ENV, params: {} } as any);
+      assert.equal(response.status, 200);
+      assert.equal(deleteUrls.some((url) => /appointments|medications|care_profiles|family_groups\?id=/.test(url)), false);
+    });
+  });
+}
+
+test("read-only member is rejected by remaining shared-care mutation handlers", async () => {
+  let writeAttempted = false;
+  const document = {
+    id: 700,
+    group_id: ATTACKER_GROUP_ID,
+    profile_id: 501,
+    status: "processing",
+    storage_bucket: null,
+    storage_path: null,
+  };
+
+  await withMockedFetch((url, init) => {
+    if (url.includes(`/rest/v1/user_family_groups?user_id=eq.${ATTACKER_USER_ID}`)) {
+      return json([{ user_id: ATTACKER_USER_ID, group_id: ATTACKER_GROUP_ID, role: "member", can_manage: false }]);
+    }
+    const base = baseRoutes(url);
+    if (base) return base;
+    if (url.includes(`/rest/v1/care_profiles?group_id=in.(${ATTACKER_GROUP_ID})`)) return json([careProfileRow(501)]);
+    if (url.includes(`/rest/v1/care_profiles?group_id=eq.${ATTACKER_GROUP_ID}`)) return json([careProfileRow(501)]);
+    if (url.includes("/rest/v1/family_groups?id=in.(100)")) return json([groupRow()]);
+    if (url.includes("/rest/v1/care_documents?id=eq.700")) return json([document]);
+    if (init?.method && init.method !== "GET") {
+      writeAttempted = true;
+      return json([]);
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  }, async () => {
+    const contexts: Array<Response | Promise<Response>> = [
+      patchDocument({ request: makePatchRequest("documents", 700, { document_title: "不可改" }), env: ENV, params: { id: "700" } } as any),
+      deleteDocument({ request: makeDeleteRequest("/api/documents/700"), env: ENV, params: { id: "700" } } as any),
+      patchProfile({ request: makePatchRequest("profiles", 501, { display_name: "不可改" }), env: ENV, params: { id: "501" } } as any),
+      orderProfiles({ request: makePatchRequest("profiles/order", 0, { profile_ids: [501] }), env: ENV, params: {} } as any),
+      mutateGroups({ request: makePostRequest("/api/groups", { action: "create_profile", group_id: ATTACKER_GROUP_ID, display_name: "不可建" }), env: ENV, params: {} } as any),
+      mutateGroups({ request: makePostRequest("/api/groups", { action: "update_family_notes", group_id: ATTACKER_GROUP_ID, notes: ["不可改"] }), env: ENV, params: {} } as any),
+      confirmOcr({ request: makePostRequest("/api/ocr/confirm", { document_id: 700 }), env: ENV, params: {} } as any),
+    ];
+
+    const uploadForm = new FormData();
+    uploadForm.set("profile_id", "501");
+    uploadForm.set("file", new File(["fake"], "fake.txt", { type: "text/plain" }));
+    contexts.push(uploadDocument({
+      request: new Request("https://care.example/api/documents/upload", { method: "POST", headers: { Authorization: "Bearer line-attacker-id-token" }, body: uploadForm }),
+      env: ENV,
+      params: {},
+    } as any));
+
+    const ocrForm = new FormData();
+    ocrForm.set("profile_id", "501");
+    ocrForm.set("medical_text", "測試藥單");
+    contexts.push(runOcr({
+      request: new Request("https://care.example/api/ocr", { method: "POST", headers: { Authorization: "Bearer line-attacker-id-token" }, body: ocrForm }),
+      env: ENV,
+      params: {},
+    } as any));
+
+    const responses = await Promise.all(contexts);
+    responses.forEach((response) => assert.equal(response.status, 403));
+    assert.equal(writeAttempted, false, "read-only mutations must stop before any write request");
+  });
+});
+
+test("read-only family member can still read family documents", async () => {
+  await withMockedFetch((url) => {
+    if (url.includes(`/rest/v1/user_family_groups?user_id=eq.${ATTACKER_USER_ID}`)) {
+      return json([{ user_id: ATTACKER_USER_ID, group_id: ATTACKER_GROUP_ID, role: "member", can_manage: false }]);
+    }
+    const base = baseRoutes(url);
+    if (base) return base;
+    if (url.includes(`/rest/v1/care_profiles?group_id=in.(${ATTACKER_GROUP_ID})`)) return json([careProfileRow(501)]);
+    if (url.includes("/rest/v1/care_documents?") && url.includes(`group_id=in.(${ATTACKER_GROUP_ID})`)) {
+      return json([]);
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  }, async () => {
+    const response = await listDocuments({
+      request: makeGetRequest("/api/documents"),
+      env: ENV,
+      params: {},
+    } as any);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { documents: [] });
+  });
+});
+
 test("rejects PATCH on an appointment owned by another tenant's group (403)", async () => {
   const VICTIM_APPOINTMENT_ID = 997;
   let patchAttempted = false;
@@ -297,7 +474,7 @@ test("rejects PATCH on an appointment owned by another tenant's group (403)", as
     const base = baseRoutes(url);
     if (base) return base;
 
-    if (url.includes(`/rest/v1/appointments?id=eq.${VICTIM_APPOINTMENT_ID}`) && url.includes("or=(")) {
+    if (url.includes(`/rest/v1/appointments?id=eq.${VICTIM_APPOINTMENT_ID}`) && url.includes(`group_id=in.(${ATTACKER_GROUP_ID})`)) {
       return json([]);
     }
     if (url.includes(`/rest/v1/appointments?id=eq.${VICTIM_APPOINTMENT_ID}`) && init?.method === "PATCH") {
@@ -325,7 +502,7 @@ test("allows PATCH on an appointment the user's group owns (200)", async () => {
     const base = baseRoutes(url);
     if (base) return base;
 
-    if (url.includes(`/rest/v1/appointments?id=eq.${OWNED_APPOINTMENT_ID}`) && url.includes("or=(")) {
+    if (url.includes(`/rest/v1/appointments?id=eq.${OWNED_APPOINTMENT_ID}`) && url.includes(`group_id=in.(${ATTACKER_GROUP_ID})`)) {
       return json([{ id: OWNED_APPOINTMENT_ID }]);
     }
     if (url.includes(`/rest/v1/appointments?id=eq.${OWNED_APPOINTMENT_ID}`) && init?.method === "PATCH") {

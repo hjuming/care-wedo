@@ -1,5 +1,6 @@
 import { getRequestUser } from "../../_shared/auth_context";
 import { Env, getAccessibleProfiles, getBearerToken, supabaseFetch } from "../../_shared/supabase";
+import { requireGroupWriteAccess } from "../../_shared/group_permissions";
 
 export const onRequestPatch: PagesFunction<Env> = async (context) => {
   const { env, request, params } = context;
@@ -17,10 +18,12 @@ export const onRequestPatch: PagesFunction<Env> = async (context) => {
     const { userId } = await getRequestUser(context);
 
     const accessibleProfiles = await getAccessibleProfiles(env, userId);
-    const canManageProfile = accessibleProfiles.some((profile) => String(profile.id) === String(profileId));
-    if (!canManageProfile) {
+    const profile = accessibleProfiles.find((item) => String(item.id) === String(profileId));
+    if (!profile) {
       return Response.json({ error: "請先使用 LINE 登入並建立照護對象後再儲存。" }, { status: 403 });
     }
+    if (!profile.group_id) return Response.json({ error: "照護對象尚未加入家庭群組" }, { status: 409 });
+    await requireGroupWriteAccess(env, userId, profile.group_id);
 
     const updates = await request.json<any>();
     
@@ -62,7 +65,8 @@ export const onRequestPatch: PagesFunction<Env> = async (context) => {
       headers: { "Content-Type": "application/json" },
     });
   } catch (err: any) {
-    const status = String(err?.message || "").includes("請先登入") ? 401 : 500;
+    const message = String(err?.message || "");
+    const status = message.includes("請先登入") ? 401 : message.includes("沒有修改權限") ? 403 : 500;
     return new Response(JSON.stringify({ error: err.message }), {
       status,
       headers: { "Content-Type": "application/json" },

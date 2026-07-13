@@ -8,6 +8,7 @@ import {
   supabaseFetch,
 } from "../../_shared/supabase";
 import { getRequestUser } from "../../_shared/auth_context";
+import { requireGroupWriteAccess } from "../../_shared/group_permissions";
 
 export const onRequestPatch: PagesFunction<Env> = async (context) => {
   const { request, env } = context;
@@ -39,6 +40,8 @@ export const onRequestPatch: PagesFunction<Env> = async (context) => {
     if (targetProfiles.some((profile) => profile?.group_id !== groupId)) {
       return Response.json({ error: "一次只能調整同一個家庭群組內的排序" }, { status: 400 });
     }
+    if (!groupId) return Response.json({ error: "找不到家庭群組" }, { status: 400 });
+    await requireGroupWriteAccess(env, userId, groupId);
 
     let updatedProfiles: any[];
     try {
@@ -67,7 +70,7 @@ export const onRequestPatch: PagesFunction<Env> = async (context) => {
     const missingAuth = message.includes("請先登入");
     return Response.json(
       { error: missingSortOrder ? "排序欄位尚未啟用，請先套用最新資料庫 migration。" : message },
-      { status: missingAuth ? 401 : missingSortOrder ? 409 : 500 },
+      { status: missingAuth ? 401 : message.includes("沒有修改權限") ? 403 : missingSortOrder ? 409 : 500 },
     );
   }
 };

@@ -622,16 +622,14 @@ export type MedicationUpdateFields = Partial<Pick<MedicationRow,
 export async function patchAppointment(
   env: Env,
   id: number,
-  userId: number,
+  _userId: number,
   groupIds: number[],
   updates: AppointmentUpdateFields,
 ): Promise<AppointmentRow> {
-  // Verify ownership: appointment must belong to this user or one of their groups
-  const filters = [`user_id.eq.${userId}`];
-  if (groupIds.length > 0) filters.push(`group_id.in.(${groupIds.join(",")})`);
+  if (groupIds.length === 0) throw new Error("找不到該預約或您沒有修改權限");
   const owned = await supabaseFetch<AppointmentRow[]>(
     env,
-    `appointments?id=eq.${id}&or=(${filters.join(",")})&select=id&limit=1`,
+    `appointments?id=eq.${id}&group_id=in.(${groupIds.join(",")})&select=id&limit=1`,
   );
   if (owned.length === 0) throw new Error("找不到該預約或您沒有修改權限");
 
@@ -672,16 +670,14 @@ export async function patchAppointment(
 export async function patchMedication(
   env: Env,
   id: number,
-  userId: number,
+  _userId: number,
   groupIds: number[],
   updates: MedicationUpdateFields,
 ): Promise<MedicationRow> {
-  // Verify ownership
-  const filters = [`user_id.eq.${userId}`];
-  if (groupIds.length > 0) filters.push(`group_id.in.(${groupIds.join(",")})`);
+  if (groupIds.length === 0) throw new Error("找不到該藥物或您沒有修改權限");
   const owned = await supabaseFetch<MedicationRow[]>(
     env,
-    `medications?id=eq.${id}&or=(${filters.join(",")})&select=id&limit=1`,
+    `medications?id=eq.${id}&group_id=in.(${groupIds.join(",")})&select=id&limit=1`,
   );
   if (owned.length === 0) throw new Error("找不到該藥物或您沒有修改權限");
 

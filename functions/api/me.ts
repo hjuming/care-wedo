@@ -94,33 +94,12 @@ export const onRequestDelete: PagesFunction<Env> = async (context) => {
   const { env } = context;
   try {
     const { userId } = await getRequestUser(context);
-
-    // Delete in dependency order: appointments → medications → care_profiles → user_family_groups → users
-    await supabaseFetch(env, `appointments?user_id=eq.${userId}`, { method: "DELETE" });
-    await supabaseFetch(env, `medications?user_id=eq.${userId}`, { method: "DELETE" });
-
-    // Delete care profiles where this user is the primary user
-    await supabaseFetch(env, `care_profiles?primary_user_id=eq.${userId}`, { method: "DELETE" });
-
-    // Remove from all groups (membership)
-    const memberships = await getUserMemberships(env, userId);
-    for (const m of memberships) {
-      // If user is the only admin, delete the group entirely
-      const groupMembers = await supabaseFetch<Array<{ user_id: number; role: string }>>(
-        env,
-        `user_family_groups?group_id=eq.${m.group_id}&select=user_id,role`,
-      );
-      const otherAdmins = groupMembers.filter((gm) => gm.user_id !== userId && gm.role === "admin");
-      if (otherAdmins.length === 0 && groupMembers.length === 1) {
-        // Only member in the group — delete the group (cascades care_profiles)
-        await supabaseFetch(env, `family_groups?id=eq.${m.group_id}`, { method: "DELETE" });
-      }
-    }
-
+    // Account self-deletion is identity-only. Family care records are shared data
+    // and must never be selected for deletion by historical user_id ownership.
     await supabaseFetch(env, `user_family_groups?user_id=eq.${userId}`, { method: "DELETE" });
     await supabaseFetch(env, `users?id=eq.${userId}`, { method: "DELETE" });
 
-    return Response.json({ success: true, message: "帳號與所有相關資料已刪除。" });
+    return Response.json({ success: true, message: "個人帳號資料已刪除；家庭照護資料會保留。" });
   } catch (error) {
     const message = error instanceof Error ? error.message : "刪除帳號失敗";
     return Response.json(

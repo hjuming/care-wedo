@@ -20,6 +20,7 @@ import {
   resolveGroupBillingEntitlement,
 } from "../_shared/billing";
 import { getRequestUser } from "../_shared/auth_context";
+import { assertGroupWriteAccess, requireGroupWriteAccess } from "../_shared/group_permissions";
 
 type Env = {
   SUPABASE_URL: string;
@@ -199,6 +200,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       const userGroups = await getUserGroups(env, userId);
       const canUseGroup = userGroups.some((group) => group.id === body.group_id);
       if (!canUseGroup) return Response.json({ error: "您還沒有這個群組的權限" }, { status: 403 });
+      await requireGroupWriteAccess(env, userId, body.group_id);
 
       const recipientCheck = await checkGroupRecipientLimit(env, body.group_id);
       if (!recipientCheck.ok) {
@@ -244,6 +246,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       const memberships = await getUserMemberships(env, userId);
       const isMember = memberships.some((m) => m.group_id === body.group_id);
       if (!isMember) return Response.json({ error: "您不是此群組成員" }, { status: 403 });
+      assertGroupWriteAccess(memberships, body.group_id);
 
       const rawNotes = Array.isArray(body.notes)
         ? body.notes
@@ -338,7 +341,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     return Response.json({ error: "不支援的操作" }, { status: 400 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Groups API failed";
-    const status = message.includes("請先登入") ? 401 : message.includes("管理者") ? 403 : 500;
+    const status = message.includes("請先登入") ? 401 : /管理者|修改.*權限/.test(message) ? 403 : 500;
     return Response.json({ error: message }, { status });
   }
 };

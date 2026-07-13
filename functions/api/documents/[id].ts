@@ -13,6 +13,7 @@ import {
   serializeCareDocument,
   supabaseFetch,
 } from "../../_shared/supabase";
+import { requireGroupWriteAccess } from "../../_shared/group_permissions";
 
 function parseDocumentId(params: Record<string, string | string[]>) {
   const id = Number(params.id);
@@ -46,6 +47,7 @@ export const onRequestPatch: PagesFunction<Env> = async (context) => {
     const documentContext = await getCurrentUserDocumentContext(context);
     const document = await fetchAccessibleDocument(env, id, documentContext.groupIds);
     if (!document) return Response.json({ error: "找不到文件或沒有修改權限" }, { status: 404 });
+    await requireGroupWriteAccess(env, documentContext.userId, document.group_id);
 
     const body = await readJsonBody<any>(request);
     const updates: Record<string, unknown> = {};
@@ -67,7 +69,7 @@ export const onRequestPatch: PagesFunction<Env> = async (context) => {
     return Response.json({ success: true, document: serializeCareDocument(rows[0]) });
   } catch (error) {
     const message = error instanceof Error ? error.message : "無法更新文件";
-    const status = message.includes("請先登入") ? 401 : 500;
+    const status = message.includes("請先登入") ? 401 : message.includes("沒有修改權限") ? 403 : 500;
     return Response.json({ error: message }, { status });
   }
 };
@@ -81,6 +83,7 @@ export const onRequestDelete: PagesFunction<Env> = async (context) => {
     const documentContext = await getCurrentUserDocumentContext(context);
     const document = await fetchAccessibleDocument(env, id, documentContext.groupIds);
     if (!document) return Response.json({ error: "找不到文件或沒有刪除權限" }, { status: 404 });
+    await requireGroupWriteAccess(env, documentContext.userId, document.group_id);
 
     if (document.storage_bucket && document.storage_path) {
       await deleteCareDocumentObject(env, document.storage_bucket, document.storage_path);
@@ -100,7 +103,7 @@ export const onRequestDelete: PagesFunction<Env> = async (context) => {
     return Response.json({ success: true, document: serializeCareDocument(rows[0]) });
   } catch (error) {
     const message = error instanceof Error ? error.message : "無法刪除文件";
-    const status = message.includes("請先登入") ? 401 : 500;
+    const status = message.includes("請先登入") ? 401 : message.includes("沒有修改權限") ? 403 : 500;
     return Response.json({ error: message }, { status });
   }
 };

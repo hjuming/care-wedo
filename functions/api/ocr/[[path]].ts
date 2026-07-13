@@ -11,6 +11,7 @@ import {
 import { getRequestUser } from "../../_shared/auth_context";
 import { logError, logEvent } from "../../_shared/logger";
 import { sendProductionAlert } from "../../_shared/alerts";
+import { requireGroupWriteAccess } from "../../_shared/group_permissions";
 import {
   buildMedicationIdentity,
   findMedicationIdentityMatch,
@@ -387,6 +388,8 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     // Resolve group + profile context before quota check
     const careContext = await resolveCareContext(env, userId, requestedProfileId);
     const { groupId: activeGroupId, profileId: activeProfileId } = careContext;
+    if (!activeGroupId) return Response.json({ error: "請先選擇家庭群組" }, { status: 400 });
+    await requireGroupWriteAccess(env, userId, activeGroupId);
 
     if (!activeGroupId || !activeProfileId) {
       logEvent("ocr.validation_failed", { reason: "missing_care_context", user_id: userId });
@@ -446,7 +449,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     });
     return Response.json(
       { error: error instanceof Error ? error.message : "OCR API failed" },
-      { status: 500 },
+      { status: error instanceof Error && error.message.includes("沒有修改權限") ? 403 : 500 },
     );
   }
 };

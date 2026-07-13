@@ -7,6 +7,7 @@ import {
   supabaseFetch,
 } from "../_shared/supabase";
 import { getRequestUser } from "../_shared/auth_context";
+import { requireGroupWriteAccess } from "../_shared/group_permissions";
 
 const ALLOWED_TYPES = new Set([
   "reminder",
@@ -46,6 +47,8 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     if (!profile) {
       return Response.json({ error: "沒有此照護對象的新增權限" }, { status: 403 });
     }
+    if (!profile.group_id) return Response.json({ error: "照護對象尚未加入家庭群組" }, { status: 409 });
+    await requireGroupWriteAccess(env, userId, profile.group_id);
 
     const type = ALLOWED_TYPES.has(body.type) ? body.type : "reminder";
     const date = cleanString(body.date);
@@ -109,7 +112,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     const message = error instanceof Error ? error.message : "新增排程失敗";
     return Response.json(
       { error: message },
-      { status: message.includes("請先登入") ? 401 : 500 },
+      { status: message.includes("請先登入") ? 401 : message.includes("沒有修改權限") ? 403 : 500 },
     );
   }
 };
