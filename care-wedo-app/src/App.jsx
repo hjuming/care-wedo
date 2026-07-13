@@ -1845,9 +1845,11 @@ function DashboardApp() {
       setFamilyNotes(nextNotes);
       return;
     }
-    await updateFamilyNotes({ idToken: identity.idToken, groupId: activeGroupId, notes: nextNotes });
-    setFamilyNotes(nextNotes);
+    const result = await updateFamilyNotes({ idToken: identity.idToken, groupId: activeGroupId, notes: nextNotes });
+    const persistedNotes = Array.isArray(result?.notes) ? result.notes : nextNotes;
+    setFamilyNotes(persistedNotes);
     await loadDashboard(identity, activeProfileId, activeGroupId);
+    return result;
   }
 
   function handleMobileNavChange(sectionId) {

@@ -241,12 +241,13 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     }
 
     if (body.action === "update_family_notes") {
-      if (!body.group_id) return Response.json({ error: "請提供群組 ID" }, { status: 400 });
+      const groupId = Number(body.group_id);
+      if (!Number.isInteger(groupId) || groupId <= 0) return Response.json({ error: "請提供有效的群組 ID" }, { status: 400 });
 
       const memberships = await getUserMemberships(env, userId);
-      const isMember = memberships.some((m) => m.group_id === body.group_id);
+      const isMember = memberships.some((m) => m.group_id === groupId);
       if (!isMember) return Response.json({ error: "您不是此群組成員" }, { status: 403 });
-      assertGroupWriteAccess(memberships, body.group_id);
+      assertGroupWriteAccess(memberships, groupId);
 
       const rawNotes = Array.isArray(body.notes)
         ? body.notes
@@ -256,16 +257,25 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
         .filter(Boolean)
         .slice(0, 12);
 
-      await supabaseFetch(
+      const existing = await supabaseFetch<Array<{ id: number }>>(
         env,
-        `appointments?group_id=eq.${body.group_id}&profile_id=is.null&type=eq.family_note&status=eq.upcoming`,
-        {
-          method: "PATCH",
-          body: JSON.stringify({ status: "deleted" }),
-        },
+        `appointments?group_id=eq.${groupId}&profile_id=is.null&type=eq.family_note&status=eq.upcoming&select=id`,
       );
+      const existingIds = existing.map((row) => Number(row.id)).filter((id) => Number.isInteger(id) && id > 0);
 
       if (notes.length === 0) {
+        if (existingIds.length > 0) {
+          await supabaseFetch(
+            env,
+            `appointments?id=in.(${existingIds.join(",")})`,
+            { method: "PATCH", body: JSON.stringify({ status: "deleted" }) },
+          );
+        }
+        const readback = await supabaseFetch<Array<{ reminder_text: string | null }>>(
+          env,
+          `appointments?group_id=eq.${groupId}&profile_id=is.null&type=eq.family_note&status=eq.upcoming&select=reminder_text`,
+        );
+        if (readback.length > 0) throw new Error("家庭提醒清除後仍有未封存資料");
         return Response.json({ success: true, notes: [] });
       }
 
@@ -277,7 +287,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
           headers: { Prefer: "return=representation" },
           body: JSON.stringify(notes.map((note) => ({
             user_id: userId,
-            group_id: body.group_id,
+            group_id: groupId,
             profile_id: null,
             created_by_user_id: userId,
             type: "family_note",
@@ -292,7 +302,53 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
         },
       );
 
-      return Response.json({ success: true, notes: rows.map((row) => row.reminder_text).filter(Boolean) });
+      const createdIds = rows.map((row) => Number(row.id)).filter((id) => Number.isInteger(id) && id > 0);
+      try {
+        if (existingIds.length > 0) {
+          await supabaseFetch(
+            env,
+            `appointments?id=in.(${existingIds.join(",")})`,
+            { method: "PATCH", body: JSON.stringify({ status: "deleted" }) },
+          );
+        }
+      } catch (archiveError) {
+        if (createdIds.length > 0) {
+          await supabaseFetch(
+            env,
+            `appointments?id=in.(${createdIds.join(",")})`,
+            { method: "PATCH", body: JSON.stringify({ status: "deleted" }) },
+          ).catch(() => undefined);
+        }
+        throw archiveError;
+      }
+
+      let persistedNotes: string[];
+      try {
+        const readback = await supabaseFetch<Array<{ reminder_text: string | null }>>(
+          env,
+          `appointments?group_id=eq.${groupId}&profile_id=is.null&type=eq.family_note&status=eq.upcoming&select=reminder_text&order=created_at.asc`,
+        );
+        persistedNotes = readback.map((row) => row.reminder_text).filter((note): note is string => Boolean(note));
+        if (persistedNotes.length !== notes.length || persistedNotes.some((note, index) => note !== notes[index])) {
+          throw new Error("家庭提醒儲存後讀回內容不一致，請再試一次");
+        }
+      } catch (readbackError) {
+        if (createdIds.length > 0) {
+          await supabaseFetch(
+            env,
+            `appointments?id=in.(${createdIds.join(",")})`,
+            { method: "PATCH", body: JSON.stringify({ status: "deleted" }) },
+          ).catch(() => undefined);
+        }
+        throw readbackError;
+      }
+
+      return Response.json({
+        success: true,
+        notes: persistedNotes,
+        saved_at: new Date().toISOString(),
+        saved_by_user_id: userId,
+      });
     }
 
     if (body.action === "get_members") {

@@ -149,6 +149,22 @@ test("family reminder save aborts a hanging request with an actionable timeout",
   );
 });
 
+test("family reminder save returns server read-back metadata", async () => {
+  const result = await updateFamilyNotes({
+    groupId: 7,
+    notes: ["回診前帶健保卡"],
+    fetchImpl: async () => new Response(JSON.stringify({
+      success: true,
+      notes: ["回診前帶健保卡"],
+      saved_at: "2026-07-14T00:00:00.000Z",
+      saved_by_user_id: 12,
+    }), { status: 200 }),
+  });
+
+  assert.deepEqual(result.notes, ["回診前帶健保卡"]);
+  assert.equal(result.saved_by_user_id, 12);
+});
+
 test("medication status save aborts a hanging request with an actionable timeout", async () => {
   await assert.rejects(
     markMedicationSlotStatus({

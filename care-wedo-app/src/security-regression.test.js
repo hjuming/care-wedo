@@ -65,7 +65,7 @@ test("Family notes are stored as group-scoped reminders", () => {
   const app = readProjectFile("care-wedo-app/src/App.jsx");
   const css = readProjectFile("care-wedo-app/src/index.css");
   assert.match(groupsApi, /update_family_notes/);
-  assert.match(groupsApi, /group_id:\s*body\.group_id/);
+  assert.match(groupsApi, /group_id:\s*groupId/);
   assert.match(groupsApi, /type:\s*"family_note"/);
   assert.match(groupsApi, /profile_id:\s*null/);
   assert.match(dashboard, /parseGroupId/);

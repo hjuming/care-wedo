@@ -414,6 +414,7 @@ CI/CD gate：
 - GitHub Actions runtime 已升級到 Node 24 系列 action：`actions/checkout@v7`、`actions/setup-node@v6`；專案 build/test 的 `node-version` 維持 `22`。
 - 前端與 functions 測試在 CI 設定 `TZ=Asia/Taipei`，避免 GitHub runner 預設 UTC 造成 todayTasks 類日期斷言偏一天。
 - 資料圍堵明文採短期 service-role-only + app-layer ownership filters，細節見 `DATA_CONTAINMENT_CONTRACT.md`；staging smoke 前先跑 `npm run staging:smoke:ready` 檢查必要 env，Google protected write staging 驗收見 `GOOGLE_PROTECTED_WRITE_SMOKE_RUNBOOK.md` 與 `npm run google:protected-write:smoke`；Storage policy staging 驗收見 `STORAGE_POLICY_SMOKE_RUNBOOK.md` 與 `npm run storage:policy:smoke`。
+- Phase 0 乾淨家庭 fixture 使用 `npm run staging:fixture:dry` 預覽；只有確認 `SUPABASE_URL`、`CARE_WEDO_STAGING_BASE_URL`、三組測試帳密與 staging service-role secret 均指向受控 staging 後，才可執行 `npm run staging:fixture:apply`。工具固定 staging project ref／host、以穩定 fixture key 重用群組／照護對象／單一行程，絕不把密碼或 secret 寫入報告。
 
 本機交付前建議：
 
