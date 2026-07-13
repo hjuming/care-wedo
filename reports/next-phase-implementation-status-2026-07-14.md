@@ -23,10 +23,11 @@
 - staging tooling 測試：6/6 通過（fixture 3、migration check 3）。
 - TypeScript、ESLint、Vite build、`git diff --check` 通過。
 - 完整 `npm run verify` 通過：lint、stylelint、前端／Functions、typecheck、env example、contrast、RLS policy sync、10-case receipt pack。
-- Git：最新實作 `dc3c54f` 已推送 `origin/main`；包含提醒 persistence、行程 fail-closed 去重與 staging readiness checks。
-- staging deployment：`https://40eab9b7.care-wedo-staging.pages.dev`，alias `https://main.care-wedo-staging.pages.dev`。
+- Git：最新實作 `c49cdbb` 已推送 `origin/main`；包含提醒 persistence、行程 fail-closed 去重、服藥紀錄 fail-closed 與 staging readiness checks。
+- staging deployment：`https://b28d8777.care-wedo-staging.pages.dev`，alias `https://main.care-wedo-staging.pages.dev`。
 - staging 首頁：HTTP 200。
 - staging `/api/health`：HTTP 503、`env_ready:false`；符合「未就緒不得誤報 production-ready」的 gate。
+- staging smoke readiness report：`ready:false`；尚缺 fresh-context 操作所需的去識別化 fixture IDs／token 與 storage smoke 路徑，未執行寫入型 smoke。
 - 行程去重查詢若暫時不可用會回 503 並拒絕新增，避免「查不到就寫入」造成重複資料。
 - 批次與單筆服藥紀錄若 `medication_logs` 寫入失敗會回 503，不再回傳假成功。
 
