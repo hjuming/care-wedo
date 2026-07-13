@@ -91,6 +91,38 @@ async function loginRole(context, baseUrl, persona, artifactDir, env) {
   return page;
 }
 
+async function checkFontScale(page) {
+  return page.evaluate(async () => {
+    const root = document.documentElement;
+    const previous = root.style.fontSize;
+    const checks = {};
+    try {
+      for (const scale of [130, 150]) {
+        root.style.fontSize = `${scale}%`;
+        await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+        const visibleControls = Array.from(document.querySelectorAll("button, a, input, select, textarea"))
+          .filter((element) => {
+            const style = window.getComputedStyle(element);
+            const rect = element.getBoundingClientRect();
+            return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
+          });
+        const offscreenControl = visibleControls.some((element) => {
+          const rect = element.getBoundingClientRect();
+          return rect.left < -1 || rect.right > window.innerWidth + 1;
+        });
+        checks[`${scale}%`] = {
+          horizontal_overflow: document.documentElement.scrollWidth > window.innerWidth + 1
+            || document.body.scrollWidth > window.innerWidth + 1,
+          offscreen_control: offscreenControl,
+        };
+      }
+    } finally {
+      root.style.fontSize = previous;
+    }
+    return checks;
+  });
+}
+
 async function callApi(page, path, init = {}) {
   return page.evaluate(async ({ path: requestPath, init: requestInit }) => {
     const token = localStorage.getItem("care_wedo_supabase_access_token");
@@ -150,7 +182,11 @@ export async function runRoleE2E({ env = process.env, browserType = chromium } =
       const context = await browser.newContext({ viewport: { width: 412, height: 915 }, deviceScaleFactor: 1 });
       contexts.set(persona.key, context);
       pages.set(persona.key, await loginRole(context, baseUrl, persona, artifactDir, env));
-      result.personas[persona.key] = { logged_in: true, fresh_context: true };
+      const fontScale = await checkFontScale(pages.get(persona.key));
+      result.personas[persona.key] = { logged_in: true, fresh_context: true, font_scale: fontScale };
+      if (Object.values(fontScale).some((check) => check.horizontal_overflow || check.offscreen_control)) {
+        throw new Error(`${persona.key} 412px 在 130%/150% 字級出現溢出或不可見控制項`);
+      }
     }
 
     const primary = pages.get("primary");
