@@ -168,6 +168,7 @@ create table if not exists public.appointments (
   profile_id bigint references public.care_profiles(id) on delete set null,
   source_document_id bigint,  -- fk to care_documents added after that table is created
   created_by_user_id bigint references public.users(id) on delete set null,
+  idempotency_key text,
   type text,
   date text,
   time text,
@@ -218,7 +219,8 @@ alter table public.appointments
 
 alter table public.appointments
   add column if not exists group_id bigint references public.family_groups(id) on delete cascade,
-  add column if not exists profile_id bigint references public.care_profiles(id) on delete set null;
+  add column if not exists profile_id bigint references public.care_profiles(id) on delete set null,
+  add column if not exists idempotency_key text;
 
 alter table public.medications
   add column if not exists group_id bigint references public.family_groups(id) on delete cascade,
@@ -505,6 +507,10 @@ create index if not exists appointments_source_document_idx
 
 create index if not exists appointments_created_by_idx
   on public.appointments (created_by_user_id);
+
+create unique index if not exists appointments_group_idempotency_key_uidx
+  on public.appointments (group_id, idempotency_key)
+  where idempotency_key is not null and status <> 'deleted';
 
 create index if not exists medications_source_document_idx
   on public.medications (source_document_id);

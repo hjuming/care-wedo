@@ -245,7 +245,6 @@ test("Version A pricing is visible without wiring live payments", () => {
   assert.match(app, /collaboratorMonthly:\s*10/);
   assert.match(app, /maxCareProfiles:\s*4/);
   assert.match(app, /maxPaidCollaborators:\s*5/);
-  assert.match(app, /estimateCareCirclePrice/);
   assert.match(app, /pricing-mode-panel/);
   assert.match(app, /目前為測試模式：不會實際扣款/);
   assert.match(groupSettings, /主帳號不列入協作者費用/);

@@ -436,6 +436,11 @@ export function CalendarView({ appointments, careName = "", onUpload, onAddToCal
               <p className="event-date">{formatDateLabel(apt.date, apt.time)}</p>
               <h3>{apt.title || apt.department}</h3>
               <p>{[apt.hospital, apt.doctor && `${apt.doctor}醫師`, apt.number && `${apt.number}號`].filter(Boolean).join(" ｜ ")}</p>
+              {apt.duplicate_count > 1 && (
+                <p className="duplicate-appointment-note" role="status">
+                  已將 {apt.duplicate_count} 筆相同資料合併顯示，原始紀錄未刪除。
+                </p>
+              )}
               {apt.location && <p className="location-line">地點：{apt.location}</p>}
               {apt.notes && <p className="soft-note">{apt.notes}</p>}
             </div>

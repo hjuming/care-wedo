@@ -9,6 +9,7 @@ import {
 } from "../services/api";
 import { buildCollaboratorContact } from "../services/contact";
 import { resetCareWedoSessionAndReturnHome } from "../services/liff";
+import { safeReviewLoginEnabled } from "../services/safeReviewLogin";
 
 const CARE_WEDO_LINE_URL = "https://lin.ee/xzbyyvf";
 const GROUP_LIMITS = {
@@ -219,6 +220,7 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
   const [copiedCode, setCopiedCode] = useState(null);
   const [pendingPaidAction, setPendingPaidAction] = useState(null);
   const [billingSubmitting, setBillingSubmitting] = useState(false);
+  const reviewMode = safeReviewLoginEnabled();
 
   const loadGroups = useCallback(async () => {
     if (!identity || (identity.status !== "demo" && !identity.idToken)) return;
@@ -617,18 +619,29 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
                 <div className="group-billing-panel" aria-label={`${group.name} 費用與付款`}>
                   <div>
                     <p className="group-billing-label">費用與付款</p>
-                    <strong>目前月費 ${billingSummary.estimatedMonthlyAmount}</strong>
-                    <span>
-                      已付款涵蓋 ${billingSummary.paidMonthlyAmount}
-                      {billingSummary.subscriptionStatus === "checkout_pending" ? "・付款同步中" : ""}
-                    </span>
+                    {reviewMode ? (
+                      <>
+                        <strong>STAGING 測試模式・不會實際扣款</strong>
+                        <span>正式計價與付款流程尚未在測試站啟用。</span>
+                      </>
+                    ) : (
+                      <>
+                        <strong>目前月費 ${billingSummary.estimatedMonthlyAmount}</strong>
+                        <span>
+                          已付款涵蓋 ${billingSummary.paidMonthlyAmount}
+                          {billingSummary.subscriptionStatus === "checkout_pending" ? "・付款同步中" : ""}
+                        </span>
+                      </>
+                    )}
                   </div>
                   <div className="group-billing-meta">
                     <span>照護對象 {careProfileCount}/{groupBillingConfig.maxCareProfiles}</span>
                     <span>協作者 {collaboratorCount}/{groupBillingConfig.maxPaidCollaborators}</span>
                     <span>首位照護對象測試期減免</span>
                   </div>
-                  {billingSummary.amountDue > 0 ? (
+                  {reviewMode ? (
+                    <p className="quota-note">測試資料不會扣款；正式環境會在付款前再次確認金額。</p>
+                  ) : billingSummary.amountDue > 0 ? (
                     canStartPayment ? (
                       <button
                         type="button"

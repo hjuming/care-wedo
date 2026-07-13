@@ -17,6 +17,7 @@ import { deriveCareCapabilities } from "./services/capabilities";
 import { trackError, trackEvent } from "./services/telemetry";
 import { buildTodayTasks, formatTaipeiTodayLabel, groupMedicationsBySchedule, hasSameDayTasks } from "./services/todayTasks";
 import { buildSearchSuggestions, matchSearch } from "./services/search";
+import { dedupeAppointments } from "./services/appointmentDedupe";
 import PrivacyPage from "./components/PrivacyPage";
 import TermsPage from "./components/TermsPage";
 import aiAvatar from "./assets/ai-avatar.png";
@@ -82,6 +83,9 @@ function normalizeAppointment(apt, index) {
     fasting_required: Boolean(apt.fasting_required || apt.urgent),
     fasting_hours: apt.fasting_hours || null,
     status: apt.status || "upcoming",
+    created_at: apt.created_at || "",
+    created_by_user_id: apt.created_by_user_id || null,
+    duplicate_count: apt.duplicate_count,
   };
 }
 
@@ -562,39 +566,6 @@ function PlanUpgradeModal({ reason = "quota", onClose, onViewPlans }) {
       </div>
     </div>
   );
-}
-
-function estimateCareCirclePrice({ careProfiles = [], collaborators = [] } = {}) {
-  const recipientCount = Math.max(careProfiles.length, 1);
-  const paidCollaboratorCount = Math.max(collaborators.length - 1, 0);
-  const chargeableRecipientCount = Math.max(recipientCount - CARE_WEDO_PRICING.includedCareProfilesDuringBeta, 0);
-  const recipientSubtotal = chargeableRecipientCount * CARE_WEDO_PRICING.recipientMonthly;
-  const collaboratorSubtotal = paidCollaboratorCount * CARE_WEDO_PRICING.collaboratorMonthly;
-  const total = recipientSubtotal + collaboratorSubtotal;
-
-  if (total <= 0) {
-    return {
-      recipientCount,
-      chargeableRecipientCount,
-      paidCollaboratorCount,
-      total: 0,
-      recipientSubtotal,
-      collaboratorSubtotal,
-      label: "目前可用 Free",
-      note: "開放測試期首位主要照護對象減免 $30/月；新增照護對象或協作者時才會收費。",
-    };
-  }
-
-  return {
-    recipientCount,
-    chargeableRecipientCount,
-    paidCollaboratorCount,
-    total,
-    recipientSubtotal,
-    collaboratorSubtotal,
-    label: `本月預估 $${total}`,
-    note: "收費週期：新增照護對象或協作者時收費；沒有退出或減少人數時，次月同一天會繼續扣款。",
-  };
 }
 
 async function sendFeedbackEmail(formData) {
@@ -1775,9 +1746,10 @@ function DashboardApp() {
     } else {
       source = dashboard?.appointments?.length ? dashboard.appointments : initialTimeline;
     }
-    return source
+    const normalized = source
       .filter((item) => !isPersonalMode || belongsToActiveCareScope(item, activeProfileId, activeGroupId))
       .map(normalizeAppointment);
+    return dedupeAppointments(normalized);
   }, [dashboard, isPersonalMode, activeProfileId, activeGroupId]);
 
   const appointments = useMemo(() => {
@@ -2530,6 +2502,7 @@ function DashboardApp() {
               onEditProfile={() => setShowEditProfile(true)}
               onAddReminder={() => setShowManualReminder(true)}
               linePushAudit={linePushAudit}
+              activityAudit={activityAudit}
               familyNotes={familyNotes}
               onFamilyNotesChange={handleFamilyNotesChange}
               onLogout={logoutLineIdentity}
@@ -3760,11 +3733,50 @@ function ReminderAuditPanel({ logs = [] }) {
   );
 }
 
+function activityAuditActionLabel(action = "") {
+  if (action === "appointment_created") return "新增行程";
+  if (action === "family_note_created") return "更新家庭提醒";
+  if (action === "medication_taken") return "確認本次服用";
+  if (action === "medication_forgotten") return "標記尚未服用";
+  return "照護資料異動";
+}
+
+function ActivityAuditPanel({ events = [] }) {
+  return (
+    <section className="summary-panel wide-panel activity-audit-panel" aria-label="照護共同紀錄">
+      <div className="panel-heading-row">
+        <div>
+          <p className="panel-eyebrow">共同紀錄</p>
+          <h3>誰在什麼時候做了什麼</h3>
+        </div>
+        <span>{events.length ? `${events.length} 筆` : "尚無紀錄"}</span>
+      </div>
+      {events.length ? (
+        <div className="activity-audit-list">
+          {events.map((event) => (
+            <article key={event.id} className="activity-audit-row">
+              <div>
+                <strong>{activityAuditActionLabel(event.action)}</strong>
+                <span>{event.summary || "照護資料"}</span>
+              </div>
+              <div>
+                <span className="activity-audit-actor">{event.actor_display_name || "家庭協作者"}</span>
+                <small>{reminderAuditTimeLabel(event.occurred_at)}・{event.status === "success" ? "已同步" : event.status || "待確認"}</small>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <p className="helper-copy">重要的行程、家庭提醒與用藥確認會在這裡留下操作者與同步時間。</p>
+      )}
+    </section>
+  );
+}
+
 function SettingsView({
   identity,
   isPersonalMode,
   careProfiles,
-  collaborators = [],
   selectedProfile,
   activeProfileId,
   onProfileChange,
@@ -3772,11 +3784,11 @@ function SettingsView({
   onEditProfile,
   onAddReminder,
   linePushAudit = [],
+  activityAudit = [],
   familyNotes,
   onFamilyNotesChange,
   onLogout,
 }) {
-  const priceEstimate = estimateCareCirclePrice({ careProfiles, collaborators });
   const reviewMode = safeReviewLoginEnabled();
   const accountProvider = identity.profile?.authProvider || identity.provider;
   const accountProviderLabel = accountProvider === "email"
@@ -3830,6 +3842,8 @@ function SettingsView({
       <div className="settings-section-label" role="heading" aria-level="2">提醒與通知</div>
       <ReminderAuditPanel logs={linePushAudit} />
 
+      <ActivityAuditPanel events={activityAudit} />
+
       <section className="summary-panel wide-panel">
         <p className="panel-eyebrow">家人要記得的事</p>
         <FamilyNotesEditor notes={familyNotes} onChange={onFamilyNotesChange} />
@@ -3862,48 +3876,6 @@ function SettingsView({
         <p className="panel-eyebrow">{reviewMode ? "STAGING 測試模式" : "正式方案"}</p>
         <h3>{reviewMode ? "測試環境不會實際扣款" : "方案與付款"}</h3>
         <p>{reviewMode ? CARE_WEDO_TEST_MODE_COPY : "首位照護對象 $0/月；新增照護對象每位 $30/月、協作者每位 $10/月，付款前會清楚確認。"}</p>
-      </section>
-      <section className="summary-panel wide-panel billing-estimate-panel">
-        <div>
-          <p className="panel-eyebrow">本月費用預估</p>
-          <h3>{priceEstimate.label}</h3>
-          <p>
-            這是目前帳號資料的粗估；實際付款請到上方每個家庭群組卡片的「費用與付款」處理。
-            每個家庭群組上限：主要照護對象 {CARE_WEDO_GROUP_LIMITS.maxCareProfiles} 位、
-            協作者 {CARE_WEDO_GROUP_LIMITS.maxPaidCollaborators} 位；主帳號不列入協作者費用。
-          </p>
-        </div>
-        <div className="billing-breakdown-list" aria-label="收費明細">
-          {priceEstimate.total > 0 ? (
-            <>
-              <div className="billing-line">
-                <span>主要照護對象</span>
-                <strong>${CARE_WEDO_PRICING.recipientMonthly} x {priceEstimate.chargeableRecipientCount} 位</strong>
-                <em>${priceEstimate.recipientSubtotal}</em>
-              </div>
-              <div className="billing-line">
-                <span>測試期減免</span>
-                <strong>首位主要照護對象</strong>
-                <em>$0</em>
-              </div>
-              {priceEstimate.paidCollaboratorCount > 0 && (
-                <div className="billing-line">
-                  <span>共同協作者</span>
-                  <strong>${CARE_WEDO_PRICING.collaboratorMonthly} x {priceEstimate.paidCollaboratorCount} 位</strong>
-                  <em>${priceEstimate.collaboratorSubtotal}</em>
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="billing-line">
-              <span>免費版</span>
-              <strong>1 位主要照護對象・沒有協作者</strong>
-              <em>$0</em>
-            </div>
-          )}
-        </div>
-        <p className="helper-copy">開放測試期：首位主要照護對象減免 $30/月；新增照護對象 $30/位/月、協作者 $10/人/月。{priceEstimate.note}</p>
-        <p className="helper-copy">超過上限時，請用其他協作者帳號另外開設家庭群組。付款與資料問題可聯絡 <a href={`mailto:${CARE_WEDO_SUPPORT_EMAIL}`}>{CARE_WEDO_SUPPORT_EMAIL}</a>。</p>
       </section>
 
       {isPersonalMode && onLogout && (

@@ -25,6 +25,7 @@ import {
 } from "../_shared/billing";
 import { getRequestUser } from "../_shared/auth_context";
 import { canManageMembership } from "../_shared/group_permissions";
+import { buildActivityAudit } from "../_shared/activity_audit";
 
 type Env = {
   SUPABASE_URL: string;
@@ -149,6 +150,7 @@ const STATIC_DEMO_DASHBOARD = {
   active_group_name: null,
   family_notes: [],
   line_push_audit: [],
+  activity_audit: [],
   needs_setup: false,
   needs_profile_setup: false,
 };
@@ -388,10 +390,14 @@ function todayInTaipei() {
 }
 
 type MedicationLogRow = {
+  id?: number;
   medication_id: number;
+  medication_name?: string | null;
   status: string | null;
   taken_date: string | null;
   time_slot: string | null;
+  confirmed_by_user_id?: number | null;
+  created_at?: string | null;
 };
 
 async function fetchTodayMedicationLogs(env: Env, medications: MedicationRow[]): Promise<Map<number, MedicationLogRow[]>> {
@@ -404,7 +410,7 @@ async function fetchTodayMedicationLogs(env: Env, medications: MedicationRow[]):
   try {
     rows = await supabaseFetch<MedicationLogRow[]>(
       env,
-      `medication_logs?medication_id=in.(${medicationIds.join(",")})${groupFilter}&taken_date=eq.${todayInTaipei()}&select=medication_id,status,taken_date,time_slot&order=created_at.desc`,
+      `medication_logs?medication_id=in.(${medicationIds.join(",")})${groupFilter}&taken_date=eq.${todayInTaipei()}&select=medication_id,status,taken_date,time_slot,confirmed_by_user_id,created_at&order=created_at.desc`,
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
@@ -424,6 +430,23 @@ async function fetchTodayMedicationLogs(env: Env, medications: MedicationRow[]):
     map.set(row.medication_id, current);
     return map;
   }, new Map<number, MedicationLogRow[]>());
+}
+
+async function fetchMedicationAuditLogs(env: Env, medications: MedicationRow[]): Promise<MedicationLogRow[]> {
+  const medicationIds = medications.map((medication) => medication.id).filter(Boolean);
+  if (medicationIds.length === 0) return [];
+  const groupIds = Array.from(new Set(medications.map((medication) => medication.group_id).filter(Boolean)));
+  const groupFilter = groupIds.length ? `&group_id=in.(${groupIds.join(",")})` : "";
+  try {
+    return await supabaseFetch<MedicationLogRow[]>(
+      env,
+      `medication_logs?medication_id=in.(${medicationIds.join(",")})${groupFilter}&select=id,medication_id,status,taken_date,time_slot,confirmed_by_user_id,created_at&order=created_at.desc&limit=24`,
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (/medication_logs|PGRST205|Could not find the table/i.test(message)) return [];
+    throw error;
+  }
 }
 
 export const onRequestGet: PagesFunction<Env> = async (context) => {
@@ -465,6 +488,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
         capabilities: buildDashboardCapabilities(null),
         family_notes: [],
         line_push_audit: [],
+        activity_audit: [],
         care_profiles: [],
         active_profile_id: null,
         permission_version: buildPermissionVersion(FREE_PLAN_DEMO, false),
@@ -514,6 +538,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
         capabilities: buildDashboardCapabilities(activeMembership),
         family_notes: [],
         line_push_audit: await fetchLinePushAuditLogs(env, groupId),
+        activity_audit: [],
         care_profiles: profiles.map(serializeCareProfile),
         active_profile_id: null,
         permission_version: buildPermissionVersion(groupPlan, hasUnlimitedAccess),
@@ -544,7 +569,23 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       fetchDashboardMembers(env, activeGroupId, userId),
       fetchLinePushAuditLogs(env, activeGroupId),
     ]);
-    const todayMedicationLogs = await fetchTodayMedicationLogs(env, medications);
+    const [todayMedicationLogs, medicationAuditLogs] = await Promise.all([
+      fetchTodayMedicationLogs(env, medications),
+      fetchMedicationAuditLogs(env, medications),
+    ]);
+    const userNames = new Map<number, string>([[userId, userDisplayName]]);
+    members.forEach((member) => {
+      if (member.id && member.display_name) userNames.set(member.id, member.display_name);
+    });
+    const medicationNames = new Map(medications.map((medication) => [medication.id, medication.name || "用藥"]));
+    const activityAudit = buildActivityAudit({
+      appointments,
+      medicationLogs: medicationAuditLogs.map((log) => ({
+        ...log,
+        medication_name: medicationNames.get(log.medication_id) || "用藥",
+      })),
+      userNames,
+    });
     const familyNotes = appointments
       .filter((appointment) => appointment.type === "family_note" && !appointment.profile_id)
       .map((appointment) => appointment.reminder_text || appointment.notes || appointment.department || "")
@@ -572,6 +613,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       capabilities: buildDashboardCapabilities(activeMembership),
       family_notes: familyNotes,
       line_push_audit: linePushAuditLogs,
+      activity_audit: activityAudit,
       active_profile_id: activeProfileId,
       permission_version: buildPermissionVersion(groupPlan, hasUnlimitedAccess),
       care_profiles: profiles.map(serializeCareProfile),
@@ -584,6 +626,9 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
           ...serializeMedication(medication),
           taken_status: takenLog?.status || "",
           taken_date: takenLog?.taken_date || null,
+          taken_at: takenLog?.created_at || null,
+          taken_by_user_id: takenLog?.confirmed_by_user_id || null,
+          taken_by_name: takenLog?.confirmed_by_user_id ? userNames.get(takenLog.confirmed_by_user_id) || "家庭協作者" : null,
           taken_slots: logs.filter((log) => log.status === "taken").map((log) => log.time_slot).filter(Boolean),
         };
       }),
