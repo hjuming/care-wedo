@@ -12,6 +12,7 @@
 | P0 家庭提醒 persistence | 已完成可靠性修正 | 先寫入、封存舊列、read-back、不一致回滾；`functions/_tests/family-notes.test.ts` |
 | P1 行程冪等與去重 | 已完成程式與測試 | `functions/api/appointments.ts`、`supabase/migration_phase61_appointment_idempotency.sql`、dedupe tests |
 | P1 協作 audit | 已完成 read-only UI/API | `functions/_shared/activity_audit.ts`、dashboard `activity_audit`、前端共同紀錄面板 |
+| P1 費用 SSOT／staging 顯示保護 | 已完成程式與回歸測試 | `functions/_shared/billing.ts` 的 `CARE_WEDO_PRICING` 回傳 dashboard；登入 staging 與公開 pricing 頁只顯示不扣款提示，不載入正式費用區塊 |
 | P1/P2 手機與長輩 IA | 已完成程式與 regression | 412px/safe-area/bottom-nav、今天用藥、四分區設定、服藥操作者／時間 |
 | Phase 0 clean fixture | 已建立安全工具 | `npm run staging:fixture:dry`；apply 預設關閉且鎖定 staging ref／host |
 | Phase 61 migration check | 已建立唯讀檢查 | `npm run staging:migration:check`；只讀欄位，不假設 unique index 已建立 |
@@ -24,13 +25,14 @@
 - staging tooling 測試：8/8 通過（fixture 3、migration check 3、role e2e plan 2）。
 - TypeScript、ESLint、Vite build、`git diff --check` 通過。
 - 完整 `npm run verify` 通過：lint、stylelint、前端／Functions、typecheck、env example、contrast、RLS policy sync、10-case receipt pack。
-- Git：最新實作 `0091350` 已推送 `origin/main`；包含提醒 persistence、行程／服藥 fail-closed、staging fixture medication 與三角色 fresh-context runner。
+- Git：最新實作 `9affe09` 已推送 `origin/main`；包含費用 SSOT、staging pricing gate、提醒 persistence、行程／服藥 fail-closed、staging fixture medication 與三角色 fresh-context runner。
 - staging deployment：`https://b28d8777.care-wedo-staging.pages.dev`，alias `https://main.care-wedo-staging.pages.dev`。
 - staging 首頁：HTTP 200。
 - staging `/api/health`：HTTP 503、`env_ready:false`；符合「未就緒不得誤報 production-ready」的 gate。
 - staging smoke readiness report：`ready:false`；尚缺 fresh-context 操作所需的去識別化 fixture IDs／token 與 storage smoke 路徑，未執行寫入型 smoke。
 - 行程去重查詢若暫時不可用會回 503 並拒絕新增，避免「查不到就寫入」造成重複資料。
 - 批次與單筆服藥紀錄若 `medication_logs` 寫入失敗會回 503，不再回傳假成功。
+- staging 費用頁在無 JavaScript 時仍保留可讀的正式內容；只在兩個明確 staging host 以最小 host allowlist script 移除正式費用區塊並顯示測試模式提示。
 
 ## 尚未達成的出口
 
