@@ -29,6 +29,11 @@ export const FIXTURE = Object.freeze({
   appointmentTime: "09:30",
   hospital: "Care WEDO 測試醫院",
   department: "神經內科",
+  medicationName: "測試用藥・安心錠",
+  medicationDosage: "1 顆",
+  medicationFrequency: "每日一次",
+  medicationTimeSlot: "morning",
+  medicationScheduledTime: "08:00",
 });
 
 export const PERSONAS = Object.freeze([
@@ -97,6 +102,13 @@ export function buildFixturePlan(env = process.env) {
         time: FIXTURE.appointmentTime,
         hospital: FIXTURE.hospital,
         department: FIXTURE.department,
+      },
+      medication: {
+        name: FIXTURE.medicationName,
+        dosage: FIXTURE.medicationDosage,
+        frequency: FIXTURE.medicationFrequency,
+        time_slot: FIXTURE.medicationTimeSlot,
+        scheduled_time: FIXTURE.medicationScheduledTime,
       },
     },
   };
@@ -256,6 +268,26 @@ async function ensureAppointment(db, groupId, profileId, primaryUserId) {
   return { ...created[0], created: true };
 }
 
+async function ensureMedication(db, groupId, profileId, primaryUserId) {
+  const marker = encodeURIComponent(FIXTURE.key);
+  const existing = await db.get(`medications?group_id=eq.${groupId}&profile_id=eq.${profileId}&reminder_text=eq.${marker}&select=id,group_id,profile_id,name,dosage,frequency,time_slot,scheduled_time&limit=1`);
+  if (existing[0]?.id) return { ...existing[0], created: false };
+  const created = await db.post("medications", {
+    user_id: primaryUserId,
+    group_id: groupId,
+    profile_id: profileId,
+    created_by_user_id: primaryUserId,
+    name: FIXTURE.medicationName,
+    dosage: FIXTURE.medicationDosage,
+    frequency: FIXTURE.medicationFrequency,
+    time_slot: FIXTURE.medicationTimeSlot,
+    scheduled_time: FIXTURE.medicationScheduledTime,
+    reminder_text: FIXTURE.key,
+    active: true,
+  });
+  return { ...created[0], created: true };
+}
+
 export async function applyFixture({ env = process.env } = {}) {
   const supabaseUrl = stripTrailingSlash(env.SUPABASE_URL);
   const serviceKey = env.SUPABASE_SERVICE_ROLE_KEY;
@@ -282,6 +314,7 @@ export async function applyFixture({ env = process.env } = {}) {
   for (const user of users) memberships.push(await ensureMembership(db, user.user_id, group.id, user));
   const profile = await ensureProfile(db, group.id, primary.user_id);
   const appointment = await ensureAppointment(db, group.id, profile.id, primary.user_id);
+  const medication = await ensureMedication(db, group.id, profile.id, primary.user_id);
   return {
     target: { project_ref: projectRef, base_host: target.actualBaseHost, supabase_host: target.actualSupabaseHost },
     fixture_key: FIXTURE.key,
@@ -290,6 +323,15 @@ export async function applyFixture({ env = process.env } = {}) {
     memberships: memberships.map(({ user_id, group_id, role, can_manage, created }) => ({ user_id, group_id, role, can_manage, created })),
     profile: { id: profile.id, display_name: profile.display_name, created: profile.created },
     appointment: { id: appointment.id, title: appointment.title, date: appointment.date, time: appointment.time, created: appointment.created },
+    medication: {
+      id: medication.id,
+      name: medication.name,
+      dosage: medication.dosage,
+      frequency: medication.frequency,
+      time_slot: medication.time_slot,
+      scheduled_time: medication.scheduled_time,
+      created: medication.created,
+    },
   };
 }
 

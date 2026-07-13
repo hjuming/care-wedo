@@ -15,12 +15,13 @@
 | P1/P2 手機與長輩 IA | 已完成程式與 regression | 412px/safe-area/bottom-nav、今天用藥、四分區設定、服藥操作者／時間 |
 | Phase 0 clean fixture | 已建立安全工具 | `npm run staging:fixture:dry`；apply 預設關閉且鎖定 staging ref／host |
 | Phase 61 migration check | 已建立唯讀檢查 | `npm run staging:migration:check`；只讀欄位，不假設 unique index 已建立 |
+| Phase 5 fresh-context runner | 已建立安全工具 | `npm run staging:role-e2e:plan`／`npm run staging:role-e2e`；三個隔離 browser context、行程冪等、家庭提醒 read-back、長輩兩條 403 |
 
 ## 驗證結果
 
 - 前端測試：193/193 通過。
 - Functions 測試：55/55 通過。
-- staging tooling 測試：6/6 通過（fixture 3、migration check 3）。
+- staging tooling 測試：8/8 通過（fixture 3、migration check 3、role e2e plan 2）。
 - TypeScript、ESLint、Vite build、`git diff --check` 通過。
 - 完整 `npm run verify` 通過：lint、stylelint、前端／Functions、typecheck、env example、contrast、RLS policy sync、10-case receipt pack。
 - Git：最新實作 `c49cdbb` 已推送 `origin/main`；包含提醒 persistence、行程 fail-closed 去重、服藥紀錄 fail-closed 與 staging readiness checks。
@@ -34,7 +35,7 @@
 ## 尚未達成的出口
 
 1. `migration_phase61_appointment_idempotency.sql` 尚未套用 staging；目前跨請求／並發唯一約束仍待資料庫 migration。
-2. 三組 fixture 帳密尚未在本輪重新取得，因此尚未執行 `staging:fixture:apply`、三角色 fresh-context、跨帳號提醒 read-back 與乾淨 fixture live 重跑。
+2. 三組 fixture 帳密與新 fixture IDs 尚未在本輪重新取得，因此尚未執行 `staging:fixture:apply`、`npm run staging:role-e2e`、跨帳號提醒 read-back 與乾淨 fixture live 重跑；runner 已可在注入受控環境變數後直接執行。
 3. staging Pages runtime 缺少 LINE、Google、billing 等必要整合設定；OCR、LINE、掛號、推播與 billing 仍維持另案範圍。
 4. 本機直接部署只更新 `care-wedo-staging`，未修改 production secrets；但 repo 的 `main` push workflow 目標是 `care-wedo` production，GitHub Actions 本輪狀態因 API 連線失敗尚未查證，不能宣稱 production 未部署。
 
@@ -43,8 +44,8 @@
 ## 下一個安全施工順序
 
 1. 由具備 staging DB 權限的人員先確認 migration history，再只套用 Phase 61 migration。
-2. 以私密環境變數提供三組 staging 測試帳密，執行 `npm run staging:fixture:apply`，保存去識別化 IDs。
-3. 以三個 fresh browser context 重跑建立一次／重登入／跨帳號讀取／長輩 403，保存 JSON、PNG、status code。
+2. 以私密環境變數提供三組 staging 測試帳密，執行 `npm run staging:fixture:apply`，保存去識別化 group/profile/medication IDs。
+3. 以 `npm run staging:role-e2e:plan` 檢查後執行 `npm run staging:role-e2e`，保存 runner 產出的 JSON、PNG、status code。
 4. 只有 Phase 1–3 出口與 Phase 5 evidence 全部回讀後，才進行產品與資安簽核；本報告不構成 production-ready 宣告。
 
 ## 部署安全提醒

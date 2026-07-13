@@ -41,6 +41,8 @@ test("dry-run plan exposes no credentials and keeps a stable appointment marker"
   assert.equal(plan.fixture.key, FIXTURE.key);
   assert.equal(plan.personas[0].email_configured, true);
   assert.equal(plan.personas[0].password_configured, true);
+  assert.equal(plan.fixture.medication.name, FIXTURE.medicationName);
+  assert.equal(plan.fixture.medication.time_slot, FIXTURE.medicationTimeSlot);
   assert.equal(JSON.stringify(plan).includes("[not printed]"), false);
   assert.equal(JSON.stringify(plan).includes("[not printed]"), false);
 });

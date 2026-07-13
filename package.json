@@ -21,6 +21,9 @@
     "staging:fixture:dry": "node scripts/staging-care-fixture.mjs",
     "staging:fixture:apply": "node scripts/staging-care-fixture.mjs --apply --confirm-staging",
     "staging:migration:check": "node scripts/staging-migration-check.mjs",
+    "staging:role-e2e:plan": "node scripts/staging-role-e2e.mjs",
+    "staging:role-e2e": "node scripts/staging-role-e2e.mjs --confirm-staging",
+    "test:staging:tooling": "node --test scripts/staging-care-fixture.test.mjs scripts/staging-migration-check.test.mjs scripts/staging-role-e2e.test.mjs",
     "rls:policy-sync": "node scripts/validate-phase59-policy-sync.mjs",
     "a11y:contrast": "node scripts/contrast-check.mjs",
     "manual:reminder": "tsx scripts/manual-reminder.ts",
@@ -30,7 +33,7 @@
     "env:check:example": "node scripts/check-env.mjs --example-sync",
     "smoke:e2e": "node scripts/e2e-smoke.mjs",
     "smoke:e2e:build": "node scripts/e2e-smoke.mjs --build",
-    "verify": "npm run lint --prefix care-wedo-app && npm run lint:css --prefix care-wedo-app && npm test --prefix care-wedo-app && npm run typecheck && npm run env:check:example && npm run test:functions && npm run a11y:contrast && npm run rls:policy-sync && npm run receipt-pack:check"
+    "verify": "npm run lint --prefix care-wedo-app && npm run lint:css --prefix care-wedo-app && npm test --prefix care-wedo-app && npm run typecheck && npm run env:check:example && npm run test:functions && npm run test:staging:tooling && npm run a11y:contrast && npm run rls:policy-sync && npm run receipt-pack:check"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260706.1",
