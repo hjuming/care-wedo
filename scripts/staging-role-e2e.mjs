@@ -138,6 +138,7 @@ export async function runRoleE2E({ env = process.env, browserType = chromium } =
     target_host: new URL(baseUrl).hostname,
     personas: {},
     appointment: { first_status: null, retry_status: null, deduplicated: false, same_id: false },
+    collaborator: { medication_status: null, medication_already_recorded: false, primary_readback_status: null, primary_readback_match: false },
     family_notes: { save_status: null, readback_status: null, readback_match: false },
     elder: { appointment_status: null, medication_status: null, management_controls_visible: null },
     artifact_dir: artifactDir,
@@ -185,6 +186,38 @@ export async function runRoleE2E({ env = process.env, browserType = chromium } =
     );
     if (collaboratorDashboard.result.status !== 200 || !collaboratorDashboard.matched) {
       throw new Error("collaborator 未讀到 primary 建立的行程");
+    }
+
+    const collaboratorMedicationDashboard = await dashboardContains(
+      collaborator,
+      groupId,
+      profileId,
+      (body) => (body.medications || []).some((item) => Number(item.id) === medicationId && item.taken_status === "taken"),
+    );
+    let medicationResult = { status: 200, alreadyRecorded: collaboratorMedicationDashboard.matched };
+    if (!collaboratorMedicationDashboard.matched) {
+      const recordedMedication = await callApi(
+        collaborator,
+        "/api/medications/taken",
+        jsonInit("POST", { medication_ids: [medicationId], status: "taken" }),
+      );
+      medicationResult = { status: recordedMedication.status, alreadyRecorded: false };
+    }
+    result.collaborator.medication_status = medicationResult.status;
+    result.collaborator.medication_already_recorded = medicationResult.alreadyRecorded;
+    if (medicationResult.status !== 200) {
+      throw new Error("collaborator 記錄服藥未通過");
+    }
+    const primaryMedicationReadback = await dashboardContains(
+      primary,
+      groupId,
+      profileId,
+      (body) => (body.medications || []).some((item) => Number(item.id) === medicationId && item.taken_status === "taken"),
+    );
+    result.collaborator.primary_readback_status = primaryMedicationReadback.result.status;
+    result.collaborator.primary_readback_match = primaryMedicationReadback.matched;
+    if (primaryMedicationReadback.result.status !== 200 || !primaryMedicationReadback.matched) {
+      throw new Error("primary 未讀回 collaborator 的服藥紀錄");
     }
 
     const savedNotes = await callApi(collaborator, "/api/groups", jsonInit("POST", {

@@ -16,7 +16,7 @@
 | P1/P2 手機與長輩 IA | 已完成程式與 regression | 412px/safe-area/bottom-nav、今天用藥、四分區設定、服藥操作者／時間 |
 | Phase 0 clean fixture | 已建立安全工具 | `npm run staging:fixture:dry`；apply 預設關閉且鎖定 staging ref／host |
 | Phase 61 migration check | 已建立唯讀檢查 | `npm run staging:migration:check`；只讀欄位，不假設 unique index 已建立 |
-| Phase 5 fresh-context runner | 已建立安全工具 | `npm run staging:role-e2e:plan`／`npm run staging:role-e2e`；三個隔離 browser context、行程冪等、家庭提醒 read-back、長輩兩條 403 |
+| Phase 5 fresh-context runner | 已建立安全工具 | `npm run staging:role-e2e:plan`／`npm run staging:role-e2e`；三個隔離 browser context、行程冪等、協作者記錄服藥與主要照護者 read-back、家庭提醒 read-back、長輩兩條 403 |
 
 ## 驗證結果
 
