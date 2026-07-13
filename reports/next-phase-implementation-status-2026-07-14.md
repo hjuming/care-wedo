@@ -17,7 +17,7 @@
 
 ## 驗證結果
 
-- 前端測試：192/192 通過。
+- 前端測試：193/193 通過。
 - Functions 測試：52/52 通過。
 - staging fixture 測試：3/3 通過。
 - TypeScript、ESLint、Vite build、`git diff --check` 通過。
