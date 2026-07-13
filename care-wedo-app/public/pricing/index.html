@@ -201,6 +201,18 @@
         font-size: 0.95rem;
       }
 
+      .staging-pricing-notice {
+        display: none;
+        border: 1px solid var(--brand);
+        border-radius: 14px;
+        background: var(--soft);
+        padding: 20px;
+      }
+
+      .care-wedo-staging .staging-pricing-notice {
+        display: block;
+      }
+
       @media (max-width: 720px) {
         main {
           width: min(100% - 24px, 560px);
@@ -281,7 +293,13 @@
         </div>
       </section>
 
-      <section class="section" aria-labelledby="plans-title">
+      <section class="section staging-pricing-notice" aria-label="staging 測試模式" hidden>
+        <p class="eyebrow">STAGING 測試模式</p>
+        <h2>目前不會實際扣款。</h2>
+        <p>本頁只驗證登入與家庭協作流程；正式費用與額度會在付款前清楚確認。</p>
+      </section>
+
+      <section class="section" aria-labelledby="plans-title" data-pricing-production>
         <p class="eyebrow">費用先講清楚</p>
         <h2 id="plans-title">Free 先試用，照護圈升級 $30/月起。</h2>
         <div class="plans">
@@ -298,7 +316,7 @@
         </div>
       </section>
 
-      <section class="section" aria-labelledby="calc-title">
+      <section class="section" aria-labelledby="calc-title" data-pricing-production>
         <h2 id="calc-title">正式收費算法</h2>
         <table>
           <thead>
@@ -338,5 +356,17 @@
         <p>Care WEDO｜讓照護資訊更清楚，讓家庭陪伴更安心。</p>
       </footer>
     </main>
+    <script>
+      (() => {
+        const stagingHosts = new Set([
+          "care-wedo-staging.pages.dev",
+          "main.care-wedo-staging.pages.dev",
+        ]);
+        if (!stagingHosts.has(window.location.hostname)) return;
+        document.documentElement.classList.add("care-wedo-staging");
+        document.querySelectorAll("[data-pricing-production]").forEach((node) => node.remove());
+        document.querySelector(".staging-pricing-notice")?.removeAttribute("hidden");
+      })();
+    </script>
   </body>
 </html>

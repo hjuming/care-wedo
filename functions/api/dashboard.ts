@@ -22,6 +22,7 @@ import {
   getGroupOcrUsage,
   getGroupPlan,
   hasUserFeatureFlag,
+  CARE_WEDO_PRICING,
 } from "../_shared/billing";
 import { getRequestUser } from "../_shared/auth_context";
 import { canManageMembership } from "../_shared/group_permissions";
@@ -73,6 +74,7 @@ function buildPlanUsage(plan: PlanRow, ocrUsed: number, recipientCount = 1, hasU
     usage: {
       ocr_upload: { used_count: ocrUsed, limit_count: monthlyLimit, remaining_count: remaining },
     },
+    pricing: CARE_WEDO_PRICING,
     // backward-compat aliases
     ocr_used: ocrUsed,
     ocr_limit: monthlyLimit,

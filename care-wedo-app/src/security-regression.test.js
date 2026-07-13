@@ -246,6 +246,7 @@ test("Version A pricing is visible without wiring live payments", () => {
   const app = readProjectFile("care-wedo-app/src/App.jsx");
   const groupSettings = readProjectFile("care-wedo-app/src/components/GroupSettings.jsx");
   const css = readProjectFile("care-wedo-app/src/index.css");
+  const staticPricing = readProjectFile("care-wedo-app/public/pricing/index.html");
 
   assert.match(app, /recipientMonthly:\s*30/);
   assert.match(app, /collaboratorMonthly:\s*10/);
@@ -253,6 +254,10 @@ test("Version A pricing is visible without wiring live payments", () => {
   assert.match(app, /maxPaidCollaborators:\s*5/);
   assert.match(app, /pricing-mode-panel/);
   assert.match(app, /目前為測試模式：不會實際扣款/);
+  const testModeCopy = app.match(/const CARE_WEDO_TEST_MODE_COPY = "([^"]+)"/)?.[1] || "";
+  assert.doesNotMatch(testModeCopy, /\$\d|\d+\s*筆/);
+  assert.match(app, /dashboard\?\.pricing/);
+  assert.match(app, /formatCareWedoPricingCopy/);
   assert.match(groupSettings, /主帳號不列入協作者費用/);
   assert.doesNotMatch(app, /主帳號：\$0/);
   assert.match(app, /首位減免，增加才收費/);
@@ -263,6 +268,11 @@ test("Version A pricing is visible without wiring live payments", () => {
   assert.doesNotMatch(app, /paymentIntent|card_number|credit_card_number/i);
   assert.match(css, /\.billing-estimate-panel/);
   assert.match(css, /\.pricing-example-band/);
+  assert.match(staticPricing, /class="section staging-pricing-notice"/);
+  assert.match(staticPricing, /data-pricing-production/);
+  assert.match(staticPricing, /care-wedo-staging\.pages\.dev/);
+  assert.match(staticPricing, /main\.care-wedo-staging\.pages\.dev/);
+  assert.match(staticPricing, /document\.querySelectorAll\("\[data-pricing-production\]"\)/);
 });
 
 test("OCR quota limit opens a plan upgrade prompt instead of a raw error", () => {

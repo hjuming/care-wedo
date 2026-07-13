@@ -98,6 +98,14 @@ test("dashboard exposes active membership and role capabilities for the selected
       can_manage_care: true,
       can_complete_medication: true,
     });
+    assert.deepEqual(body.pricing, {
+      currency_symbol: "$",
+      recipient_monthly: 30,
+      collaborator_monthly: 10,
+      included_care_profiles_during_beta: 1,
+      free_monthly_ocr_limit: 10,
+      paid_monthly_ocr_limit: 100,
+    });
   } finally {
     globalThis.fetch = originalFetch;
   }

@@ -80,7 +80,13 @@ test("static AIO pages are readable without JavaScript", () => {
     assert.match(html, /<!doctype html>/i);
     assert.match(html, /<main/);
     assert.match(html, /Care WEDO/);
-    assert.doesNotMatch(html, /<script/i);
+    if (page === "pricing") {
+      assert.doesNotMatch(html, /<script[^>]+src=/i);
+      assert.match(html, /const stagingHosts = new Set\(\[/);
+      assert.match(html, /care-wedo-staging\.pages\.dev/);
+    } else {
+      assert.doesNotMatch(html, /<script/i);
+    }
     assert.doesNotMatch(html, /Care WEDO 需要 JavaScript/);
     assert.match(sitemap, new RegExp(`<loc>https://care\\.wedopr\\.com/${page}</loc>`));
     assert.match(llms, new RegExp(`https://care\\.wedopr\\.com/${page}`));

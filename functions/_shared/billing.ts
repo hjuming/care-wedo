@@ -36,6 +36,17 @@ export const CARE_WEDO_PAID_COLLABORATOR_MONTHLY_PRICE = 10;
 export const CARE_WEDO_GROUP_MONTHLY_PRICE_MAX = 250;
 export const CARE_WEDO_INCLUDED_CARE_PROFILES_DURING_BETA = 1;
 
+// Pricing copy must come from one backend-owned contract. Frontend clients may
+// render this summary, but must not invent a second set of add-on amounts.
+export const CARE_WEDO_PRICING = Object.freeze({
+  currency_symbol: "$",
+  recipient_monthly: CARE_WEDO_CARE_PROFILE_MONTHLY_PRICE,
+  collaborator_monthly: CARE_WEDO_PAID_COLLABORATOR_MONTHLY_PRICE,
+  included_care_profiles_during_beta: CARE_WEDO_INCLUDED_CARE_PROFILES_DURING_BETA,
+  free_monthly_ocr_limit: FREE_OCR_MONTHLY_LIMIT,
+  paid_monthly_ocr_limit: 100,
+});
+
 export type GroupBillingEntitlement = {
   groupId: number;
   ownerUserId: number | null;

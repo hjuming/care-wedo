@@ -193,6 +193,7 @@ function mergeDashboardShell(profileData, shellData) {
     ...profileData,
     mode: shellData.mode || profileData.mode,
     plan: shellData.plan ?? profileData.plan,
+    pricing: shellData.pricing ?? profileData.pricing,
     ocr_used: shellData.ocr_used ?? profileData.ocr_used,
     ocr_limit: shellData.ocr_limit ?? profileData.ocr_limit,
     care_profiles: shellData.care_profiles?.length ? shellData.care_profiles : profileData.care_profiles,
@@ -203,13 +204,30 @@ const AVATAR_MAX_SOURCE_SIZE = 5 * 1024 * 1024;
 const AVATAR_CANVAS_SIZE = 480;
 const CARE_WEDO_SUPPORT_EMAIL = "Care@wedopr.com";
 const CARE_WEDO_PRICING = {
+  currency_symbol: "$",
   recipientMonthly: 30,
   collaboratorMonthly: 10,
   includedCareProfilesDuringBeta: 1,
   freeMonthlyOcrLimit: 10,
   paidMonthlyOcrLimit: 100,
 };
-const CARE_WEDO_TEST_MODE_COPY = "目前為測試模式：不會實際扣款；首位照護對象 $0/月，新增照護對象每位 $30/月、協作者每位 $10/月，付款前會清楚確認。";
+const CARE_WEDO_TEST_MODE_COPY = "目前為測試模式：不會實際扣款；費用與額度僅供流程驗證，正式規則會在付款前清楚確認。";
+
+function normalizeCareWedoPricing(pricing = {}) {
+  return {
+    currency_symbol: pricing.currency_symbol || "$",
+    recipientMonthly: Number(pricing.recipient_monthly ?? pricing.recipientMonthly ?? CARE_WEDO_PRICING.recipientMonthly),
+    collaboratorMonthly: Number(pricing.collaborator_monthly ?? pricing.collaboratorMonthly ?? CARE_WEDO_PRICING.collaboratorMonthly),
+    includedCareProfilesDuringBeta: Number(pricing.included_care_profiles_during_beta ?? pricing.includedCareProfilesDuringBeta ?? CARE_WEDO_PRICING.includedCareProfilesDuringBeta),
+    freeMonthlyOcrLimit: Number(pricing.free_monthly_ocr_limit ?? pricing.freeMonthlyOcrLimit ?? CARE_WEDO_PRICING.freeMonthlyOcrLimit),
+    paidMonthlyOcrLimit: Number(pricing.paid_monthly_ocr_limit ?? pricing.paidMonthlyOcrLimit ?? CARE_WEDO_PRICING.paidMonthlyOcrLimit),
+  };
+}
+
+function formatCareWedoPricingCopy(pricing = CARE_WEDO_PRICING) {
+  const normalized = normalizeCareWedoPricing(pricing);
+  return `首位照護對象 ${normalized.currency_symbol}0/月；新增照護對象每位 ${normalized.currency_symbol}${normalized.recipientMonthly}/月、協作者每位 ${normalized.currency_symbol}${normalized.collaboratorMonthly}/月，付款前會清楚確認。`;
+}
 const CARE_WEDO_GROUP_LIMITS = {
   maxCareProfiles: 4,
   maxPaidCollaborators: 5,
@@ -463,7 +481,15 @@ function FeatureValue({ value }) {
   return <span>{value}</span>;
 }
 
-function PlanTierTable() {
+function PlanTierTable({ reviewMode = false }) {
+  if (reviewMode) {
+    return (
+      <div className="pricing-test-mode-card" role="status">
+        <strong>STAGING 測試模式</strong>
+        <p>{CARE_WEDO_TEST_MODE_COPY}</p>
+      </div>
+    );
+  }
   return (
     <div className="plan-tier-table pricing-model-table" role="table" aria-label="Care WEDO 版本 A 收費方式">
       <div className="plan-tier-row plan-tier-head" role="row">
@@ -488,7 +514,7 @@ function PlanTierTable() {
   );
 }
 
-function PlanDetailsModal({ onClose }) {
+function PlanDetailsModal({ onClose, reviewMode = safeReviewLoginEnabled() }) {
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content plan-details-modal" role="dialog" aria-modal="true" aria-labelledby="plan-details-title" onClick={(event) => event.stopPropagation()}>
@@ -500,20 +526,28 @@ function PlanDetailsModal({ onClose }) {
           <button type="button" className="btn-close" onClick={onClose} aria-label="關閉">×</button>
         </div>
         <div className="modal-body">
-          <PlanTierTable />
-          <div className="pricing-note-card">
-            <strong>版本 A 收費方向</strong>
-            <p>免費可以先照顧 1 位家人，最近 30 天資料會保存但不開放歷史查詢。開放測試期首位照護對象減免 $30/月；新增照護對象或協作者才會進入付款確認。</p>
-          </div>
-          <p className="helper-copy">付款由綠界安全處理，Care WEDO 不保存信用卡資料。付款與資料問題可聯絡 <a href={`mailto:${CARE_WEDO_SUPPORT_EMAIL}`}>{CARE_WEDO_SUPPORT_EMAIL}</a>。</p>
+          <PlanTierTable reviewMode={reviewMode} />
+          {reviewMode ? (
+            <p className="helper-copy">這個 staging 入口只用來驗證家庭協作流程，不會建立付款或扣款動作。</p>
+          ) : (
+            <>
+              <div className="pricing-note-card">
+                <strong>版本 A 收費方向</strong>
+                <p>免費可以先照顧 1 位家人，最近 30 天資料會保存但不開放歷史查詢。開放測試期首位照護對象減免 $30/月；新增照護對象或協作者才會進入付款確認。</p>
+              </div>
+              <p className="helper-copy">付款由綠界安全處理，Care WEDO 不保存信用卡資料。付款與資料問題可聯絡 <a href={`mailto:${CARE_WEDO_SUPPORT_EMAIL}`}>{CARE_WEDO_SUPPORT_EMAIL}</a>。</p>
+            </>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-function PlanUpgradeModal({ reason = "quota", onClose, onViewPlans }) {
+function PlanUpgradeModal({ reason = "quota", onClose, onViewPlans, pricing = CARE_WEDO_PRICING }) {
   const isHistory = reason === "history";
+  const reviewMode = safeReviewLoginEnabled();
+  const normalizedPricing = normalizeCareWedoPricing(pricing);
   const title = isHistory ? "歷史紀錄是照護圈功能" : "本月免費整理額度已用完";
   const kicker = isHistory ? "歷史查詢" : "整理額度";
   const heroTitle = isHistory
@@ -539,24 +573,33 @@ function PlanUpgradeModal({ reason = "quota", onClose, onViewPlans }) {
             <strong>{heroTitle}</strong>
             <p>{heroCopy}</p>
           </div>
-          <div className="quota-upgrade-options" aria-label="版本 A 收費方式">
-            <article>
-              <span>首位照護對象</span>
-              <strong>$0/月</strong>
-              <p>開放測試期減免；啟用家庭群組協作與完整歷史保存。</p>
-            </article>
-            <article>
-              <span>整理額度</span>
-              <strong>100 筆/月</strong>
-              <p>每位照護對象各自計算。</p>
-            </article>
-            <article>
-              <span>增加照護對象</span>
-              <strong>+$30/人/月</strong>
-              <p>每多照顧一位家人加一份保存空間。</p>
-            </article>
-          </div>
-          <p className="helper-copy">Free 會保留最近 30 天資料，但歷史查詢與完整保存是照護圈功能；新增照護對象每位 $30/月、協作者每位 $10/月。Care WEDO 目前透過綠界安全付款，後續可再納入藍新等金流。</p>
+          {reviewMode ? (
+            <div className="pricing-test-mode-card" role="status">
+              <strong>STAGING 測試模式</strong>
+              <p>{CARE_WEDO_TEST_MODE_COPY}</p>
+            </div>
+          ) : (
+            <>
+              <div className="quota-upgrade-options" aria-label="版本 A 收費方式">
+                <article>
+                  <span>首位照護對象</span>
+                  <strong>{normalizedPricing.currency_symbol}0/月</strong>
+                  <p>開放測試期減免；啟用家庭群組協作與完整歷史保存。</p>
+                </article>
+                <article>
+                  <span>整理額度</span>
+                  <strong>{normalizedPricing.paidMonthlyOcrLimit} 筆/月</strong>
+                  <p>每位照護對象各自計算。</p>
+                </article>
+                <article>
+                  <span>增加照護對象</span>
+                  <strong>+{normalizedPricing.currency_symbol}{normalizedPricing.recipientMonthly}/人/月</strong>
+                  <p>每多照顧一位家人加一份保存空間。</p>
+                </article>
+              </div>
+              <p className="helper-copy">Free 會保留最近 30 天資料，但歷史查詢與完整保存是照護圈功能；{formatCareWedoPricingCopy(normalizedPricing)} Care WEDO 目前透過綠界安全付款，後續可再納入藍新等金流。</p>
+            </>
+          )}
           <div className="quota-upgrade-actions">
             <button type="button" className="primary-action" onClick={onViewPlans}>查看方案</button>
             <button type="button" className="secondary-action" onClick={onClose}>{secondaryActionLabel}</button>
@@ -720,6 +763,8 @@ function LandingPage({ variant = "home" }) {
   const isDetailsPage = variant === "details";
   const isGuidePage = variant === "guide";
   const isPricingPage = variant === "pricing";
+  const reviewMode = safeReviewLoginEnabled();
+  const pricing = normalizeCareWedoPricing(CARE_WEDO_PRICING);
   const showDetailedContent = isDetailsPage || isGuidePage || isPricingPage;
   const heroMode = isGuidePage ? "guide" : isPricingPage ? "pricing" : isDetailsPage ? "features" : "home";
   const heroContent = {
@@ -904,6 +949,14 @@ function LandingPage({ variant = "home" }) {
           {isPricingPage && (
             <section className="landing-section pricing-start-section" id="plans" aria-label="Care WEDO 方案">
               <div className="section-kicker">費用先講清楚</div>
+              {reviewMode ? (
+                <div className="pricing-test-mode-card" role="status">
+                  <h2>STAGING 測試模式</h2>
+                  <p>{CARE_WEDO_TEST_MODE_COPY}</p>
+                  <p>本頁只驗證登入與家庭協作流程，不建立付款、扣款或正式方案承諾。</p>
+                </div>
+              ) : (
+              <>
               <h2>Free 先試用，照護圈升級才做長期保存。</h2>
               <div className="plan-cards">
                 <article className="plan-card">
@@ -915,19 +968,19 @@ function LandingPage({ variant = "home" }) {
                 <article className="plan-card featured-plan">
                   <button type="button" className="plan-name-trigger" onClick={() => setShowPlanDetails(true)}>版本 A 收費方式</button>
                   <h3>首位減免，增加才收費</h3>
-                  <p>適合長期照顧父母、長輩或慢性病家人。開放測試期首位照護對象減免；新增照護對象 $30/位/月、協作者 $10/人/月。</p>
+                  <p>適合長期照顧父母、長輩或慢性病家人。開放測試期首位照護對象減免；{formatCareWedoPricingCopy(pricing)}</p>
                   <LineLoginAction loggingIn={loggingIn} label="建立家庭協作" onLogin={handleLineLogin} />
                 </article>
               </div>
               <div className="pricing-example-band" aria-label="收費方式範例">
                 <article>
                   <span>照護協作者</span>
-                  <strong>+$10/人/月</strong>
+                  <strong>+{pricing.currency_symbol}{pricing.collaboratorMonthly}/人/月</strong>
                   <p>可協助上傳、編輯、查看資料，不可更改付款與成員權限。</p>
                 </article>
                 <article>
                   <span>照護對象</span>
-                  <strong>+$30/人/月</strong>
+                  <strong>+{pricing.currency_symbol}{pricing.recipientMonthly}/人/月</strong>
                   <p>每多照顧一位家人，就增加一份長期資料保存空間。</p>
                 </article>
                 <article>
@@ -936,7 +989,7 @@ function LandingPage({ variant = "home" }) {
                   <p>付款由綠界安全處理，Care WEDO 不保存信用卡資料。</p>
                 </article>
               </div>
-              <p className="plan-beta-note">開放測試期間，首位主要照護對象減免 $30/月；增加照護對象或協作者才會進入付款確認。</p>
+              <p className="plan-beta-note">開放測試期間，首位主要照護對象減免；增加照護對象或協作者才會進入付款確認。</p>
               <div className="feature-table" role="table" aria-label="Care WEDO Free 與照護圈升級功能對照">
                 <div className="feature-row table-head" role="row">
                   <strong>功能</strong>
@@ -959,6 +1012,8 @@ function LandingPage({ variant = "home" }) {
                 </div>
                 <a href={`mailto:${CARE_WEDO_SUPPORT_EMAIL}`}>{CARE_WEDO_SUPPORT_EMAIL}</a>
               </div>
+              </>
+              )}
             </section>
           )}
 
@@ -1726,6 +1781,7 @@ function DashboardApp() {
     description: `成員 ${dashboard.plan.max_members} 位・照護對象 ${dashboard.plan.max_recipients} 位`,
   } : null);
   const planPermissions = dashboard?.plan_permissions || permissionVersion?.capabilities || {};
+  const pricing = normalizeCareWedoPricing(dashboard?.pricing || CARE_WEDO_PRICING);
   const canViewHistory = planPermissions.can_view_history !== false;
   const careCapabilities = deriveCareCapabilities(dashboard || {});
   const { canManageCare, canCompleteMedication, readOnly } = careCapabilities;
@@ -2505,6 +2561,7 @@ function DashboardApp() {
               onAddReminder={() => setShowManualReminder(true)}
               linePushAudit={linePushAudit}
               activityAudit={activityAudit}
+              pricing={pricing}
               familyNotes={familyNotes}
               onFamilyNotesChange={handleFamilyNotesChange}
               onLogout={logoutLineIdentity}
@@ -2582,6 +2639,7 @@ function DashboardApp() {
       {planUpgradePrompt && (
         <PlanUpgradeModal
           reason={planUpgradePrompt.reason}
+          pricing={pricing}
           onClose={() => setPlanUpgradePrompt(null)}
           onViewPlans={() => {
             setPlanUpgradePrompt(null);
@@ -3787,6 +3845,7 @@ function SettingsView({
   onAddReminder,
   linePushAudit = [],
   activityAudit = [],
+  pricing = CARE_WEDO_PRICING,
   familyNotes,
   onFamilyNotesChange,
   onLogout,
@@ -3801,6 +3860,7 @@ function SettingsView({
         ? "Supabase 帳號"
         : "LINE 帳號";
   const accountDisplayName = identity.profile?.displayName || identity.profile?.email || accountProviderLabel;
+  const normalizedPricing = normalizeCareWedoPricing(pricing);
 
   return (
     <div className="settings-grid">
@@ -3877,7 +3937,7 @@ function SettingsView({
       <section className="summary-panel wide-panel pricing-mode-panel" aria-label="目前費用模式">
         <p className="panel-eyebrow">{reviewMode ? "STAGING 測試模式" : "正式方案"}</p>
         <h3>{reviewMode ? "測試環境不會實際扣款" : "方案與付款"}</h3>
-        <p>{reviewMode ? CARE_WEDO_TEST_MODE_COPY : "首位照護對象 $0/月；新增照護對象每位 $30/月、協作者每位 $10/月，付款前會清楚確認。"}</p>
+        <p>{reviewMode ? CARE_WEDO_TEST_MODE_COPY : formatCareWedoPricingCopy(normalizedPricing)}</p>
       </section>
 
       {isPersonalMode && onLogout && (
