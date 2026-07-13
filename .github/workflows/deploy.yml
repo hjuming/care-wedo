@@ -3,6 +3,7 @@ name: Deploy to Cloudflare Pages
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -73,6 +74,9 @@ jobs:
           VITE_LINE_LIFF_ID: "2009972224-fQcfBXw5"
 
       - name: Deploy to Cloudflare Pages
+        # Main pushes run quality gates only. Production deploys require an
+        # explicit manual dispatch after product/security sign-off.
+        if: github.event_name == 'workflow_dispatch'
         run: |
           SHORT_SHA=$(git rev-parse --short HEAD)
           npx wrangler@4 pages deploy care-wedo-app/dist \

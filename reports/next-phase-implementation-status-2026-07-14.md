@@ -31,7 +31,7 @@
 1. `migration_phase61_appointment_idempotency.sql` 尚未套用 staging；目前跨請求／並發唯一約束仍待資料庫 migration。
 2. 三組 fixture 帳密尚未在本輪重新取得，因此尚未執行 `staging:fixture:apply`、三角色 fresh-context、跨帳號提醒 read-back 與乾淨 fixture live 重跑。
 3. staging Pages runtime 缺少 LINE、Google、billing 等必要整合設定；OCR、LINE、掛號、推播與 billing 仍維持另案範圍。
-4. 未部署 production、未修改 production secrets。
+4. 本機直接部署只更新 `care-wedo-staging`，未修改 production secrets；但 repo 的 `main` push workflow 目標是 `care-wedo` production，GitHub Actions 本輪狀態因 API 連線失敗尚未查證，不能宣稱 production 未部署。
 
 ## 下一個安全施工順序
 
@@ -39,3 +39,7 @@
 2. 以私密環境變數提供三組 staging 測試帳密，執行 `npm run staging:fixture:apply`，保存去識別化 IDs。
 3. 以三個 fresh browser context 重跑建立一次／重登入／跨帳號讀取／長輩 403，保存 JSON、PNG、status code。
 4. 只有 Phase 1–3 出口與 Phase 5 evidence 全部回讀後，才進行產品與資安簽核；本報告不構成 production-ready 宣告。
+
+## 部署安全提醒
+
+本輪已將 `.github/workflows/deploy.yml` 改為：`main` push 只跑 quality gates，production Pages deploy 需明確 `workflow_dispatch`；下一輪仍應在 Phase 5／產品與資安簽核後才手動觸發。
