@@ -7,7 +7,7 @@
 
 | 工作單 | 狀態 | 證據 |
 | --- | --- | --- |
-| P0 長輩權限與 403 回饋 | 已完成程式修正 | `care-wedo-app/src/App.jsx`、`functions/_shared/group_permissions.ts`、前端 403 regression |
+| P0 長輩權限與 403 回饋 | 已完成程式修正 | `care-wedo-app/src/App.jsx`、`functions/_shared/group_permissions.ts`、前端 403 regression；服藥紀錄寫入失敗改為 fail-closed |
 | P0 UTF-8／canonical 名稱 | 已完成程式與測試 | Supabase Auth identity regression、dashboard profile display name |
 | P0 家庭提醒 persistence | 已完成可靠性修正 | 先寫入、封存舊列、read-back、不一致回滾；`functions/_tests/family-notes.test.ts` |
 | P1 行程冪等與去重 | 已完成程式與測試 | `functions/api/appointments.ts`、`supabase/migration_phase61_appointment_idempotency.sql`、dedupe tests |
@@ -19,7 +19,7 @@
 ## 驗證結果
 
 - 前端測試：193/193 通過。
-- Functions 測試：53/53 通過。
+- Functions 測試：55/55 通過。
 - staging tooling 測試：6/6 通過（fixture 3、migration check 3）。
 - TypeScript、ESLint、Vite build、`git diff --check` 通過。
 - 完整 `npm run verify` 通過：lint、stylelint、前端／Functions、typecheck、env example、contrast、RLS policy sync、10-case receipt pack。
@@ -28,6 +28,7 @@
 - staging 首頁：HTTP 200。
 - staging `/api/health`：HTTP 503、`env_ready:false`；符合「未就緒不得誤報 production-ready」的 gate。
 - 行程去重查詢若暫時不可用會回 503 並拒絕新增，避免「查不到就寫入」造成重複資料。
+- 批次與單筆服藥紀錄若 `medication_logs` 寫入失敗會回 503，不再回傳假成功。
 
 ## 尚未達成的出口
 

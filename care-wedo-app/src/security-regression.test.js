@@ -506,7 +506,9 @@ test("Medication slot status API records dated logs with ownership checks", () =
   assert.match(api, /medications\?id=in\.\(\$\{medicationIds\.join\(","\)\}\)/);
   assert.match(api, /medication_logs\?select=/);
   assert.match(api, /status:\s*status/);
-  assert.match(api, /medications\.taken_logs_missing/);
+  assert.match(api, /dependencyUnavailable/);
+  assert.match(api, /服藥紀錄暫時無法儲存，請稍後重試/);
+  assert.match(api, /status: dependencyUnavailable \? 503 : 500/);
   assert.doesNotMatch(api, /body:\s*JSON\.stringify\(\{\s*taken_status:\s*status\s*\}\)/);
   assert.match(dashboard, /fetchTodayMedicationLogs/);
   assert.match(dashboard, /taken_date=eq\.\$\{todayInTaipei\(\)\}/);

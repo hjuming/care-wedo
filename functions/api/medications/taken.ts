@@ -74,35 +74,26 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       return Response.json({ error: "找不到藥物或沒有確認權限" }, { status: 403 });
     }
 
-    let logs: Array<{ id: number }> = [];
-    try {
-      logs = await supabaseFetch<Array<{ id: number }>>(
-        env,
-        "medication_logs?select=id",
-        {
-          method: "POST",
-          headers: { Prefer: "return=representation" },
-          body: JSON.stringify(medications.map((medication) => ({
-            medication_id: medication.id,
-            group_id: medication.group_id,
-            profile_id: medication.profile_id,
-            taken_date: takenDate,
-            time_slot: inferTimeSlot(medication, body.time_slot),
-            status: status,
-            confirmed_by_user_id: userId,
-          }))),
-        },
-      );
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "";
-      if (!/medication_logs|PGRST205|Could not find the table/i.test(message)) {
-        throw error;
-      }
-      console.warn(JSON.stringify({
-        event: "medications.taken_logs_missing",
-        medication_count: medicationIds.length,
-      }));
-    }
+    // A missing/unavailable medication_logs table is a failed mutation, not a
+    // successful no-op. Returning success here makes the elder-facing UI claim
+    // that a dose was recorded when no durable record exists.
+    const logs = await supabaseFetch<Array<{ id: number }>>(
+      env,
+      "medication_logs?select=id",
+      {
+        method: "POST",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify(medications.map((medication) => ({
+          medication_id: medication.id,
+          group_id: medication.group_id,
+          profile_id: medication.profile_id,
+          taken_date: takenDate,
+          time_slot: inferTimeSlot(medication, body.time_slot),
+          status: status,
+          confirmed_by_user_id: userId,
+        }))),
+      },
+    );
 
     return Response.json({
       success: true,
@@ -112,9 +103,11 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       status,
     });
   } catch (error) {
+    const message = error instanceof Error ? error.message : "無法記錄吃藥狀態";
+    const dependencyUnavailable = /medication_logs|PGRST205|Could not find the table|Supabase request failed \((?:5\d\d|404)\)/i.test(message);
     return Response.json(
-      { error: error instanceof Error ? error.message : "無法記錄吃藥狀態" },
-      { status: 500 },
+      { error: dependencyUnavailable ? "服藥紀錄暫時無法儲存，請稍後重試" : message },
+      { status: dependencyUnavailable ? 503 : 500 },
     );
   }
 };

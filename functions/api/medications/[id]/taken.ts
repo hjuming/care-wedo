@@ -63,35 +63,24 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       : todayInTaipei();
     const timeSlot = inferTimeSlot(medication, body.time_slot);
 
-    let logs: Array<{ id: number }> = [];
-    try {
-      logs = await supabaseFetch<Array<{ id: number }>>(
-        env,
-        "medication_logs?select=id",
-        {
-          method: "POST",
-          headers: { Prefer: "return=representation" },
-          body: JSON.stringify({
-            medication_id: medication.id,
-            group_id: medication.group_id,
-            profile_id: medication.profile_id,
-            taken_date: takenDate,
-            time_slot: timeSlot,
-            status: "taken",
-            confirmed_by_user_id: userId,
-          }),
-        },
-      );
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "";
-      if (!/medication_logs|PGRST205|Could not find the table/i.test(message)) {
-        throw error;
-      }
-      console.warn(JSON.stringify({
-        event: "medications.single_taken_logs_missing",
-        medication_id: medication.id,
-      }));
-    }
+    // Do not report success unless the medication log was durably written.
+    const logs = await supabaseFetch<Array<{ id: number }>>(
+      env,
+      "medication_logs?select=id",
+      {
+        method: "POST",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify({
+          medication_id: medication.id,
+          group_id: medication.group_id,
+          profile_id: medication.profile_id,
+          taken_date: takenDate,
+          time_slot: timeSlot,
+          status: "taken",
+          confirmed_by_user_id: userId,
+        }),
+      },
+    );
 
     return Response.json({
       success: true,
@@ -103,9 +92,10 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "無法記錄吃藥狀態";
+    const dependencyUnavailable = /medication_logs|PGRST205|Could not find the table|Supabase request failed \((?:5\d\d|404)\)/i.test(message);
     return Response.json(
-      { error: message },
-      { status: message.includes("請先登入") ? 401 : 500 },
+      { error: dependencyUnavailable ? "服藥紀錄暫時無法儲存，請稍後重試" : message },
+      { status: message.includes("請先登入") ? 401 : dependencyUnavailable ? 503 : 500 },
     );
   }
 };

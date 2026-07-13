@@ -9,6 +9,7 @@ import { onRequestPost as createAppointment } from "../api/appointments";
 import { onRequestPatch as patchAppointment } from "../api/appointments/[id]";
 import { onRequestPatch as patchMedication } from "../api/medications/[id]";
 import { onRequestPost as markMedicationsTaken } from "../api/medications/taken";
+import { onRequestPost as markMedicationTaken } from "../api/medications/[id]/taken";
 import { onRequestPatch as patchProfile } from "../api/profiles/[id]";
 import { onRequestDelete as deleteMe } from "../api/me";
 import { onRequestPatch as orderProfiles } from "../api/profiles/order";
@@ -786,6 +787,63 @@ test("allows medication taken POST for owned medications and writes owned group 
     assert.deepEqual(logPayload.map((row: any) => row.medication_id), OWNED_MED_IDS);
     assert.equal(logPayload.every((row: any) => row.group_id === ATTACKER_GROUP_ID), true);
     assert.equal(logPayload.every((row: any) => row.confirmed_by_user_id === ATTACKER_USER_ID), true);
+  });
+});
+
+test("fails closed when the batch medication log write is unavailable", async () => {
+  const OWNED_MED_ID = 979;
+
+  await withMockedFetch((url, init) => {
+    const base = baseRoutes(url);
+    if (base) return base;
+
+    if (
+      url.includes(`/rest/v1/medications?id=in.(${OWNED_MED_ID})`)
+      && url.includes("select=id,user_id,group_id,profile_id,time_slot,scheduled_time,frequency")
+    ) {
+      return json([medicationRow(OWNED_MED_ID, ATTACKER_GROUP_ID)]);
+    }
+    if (url.includes("/rest/v1/medication_logs?select=id") && init?.method === "POST") {
+      return json({ code: "PGRST205", message: "Could not find the table 'public.medication_logs'" }, 404);
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  }, async () => {
+    const res = await markMedicationsTaken({
+      request: makePostRequest("/api/medications/taken", { medication_ids: [OWNED_MED_ID] }),
+      env: ENV,
+    } as any);
+
+    assert.equal(res.status, 503, "missing medication log storage must be reported as unavailable");
+    assert.deepEqual(await res.json(), { error: "服藥紀錄暫時無法儲存，請稍後重試" });
+  });
+});
+
+test("fails closed when the single medication log write is unavailable", async () => {
+  const OWNED_MED_ID = 978;
+
+  await withMockedFetch((url, init) => {
+    const base = baseRoutes(url);
+    if (base) return base;
+
+    if (
+      url.includes(`/rest/v1/medications?id=eq.${OWNED_MED_ID}`)
+      && url.includes("select=id,user_id,group_id,profile_id,time_slot,scheduled_time,frequency")
+    ) {
+      return json([medicationRow(OWNED_MED_ID, ATTACKER_GROUP_ID)]);
+    }
+    if (url.includes("/rest/v1/medication_logs?select=id") && init?.method === "POST") {
+      return json({ code: "PGRST205", message: "Could not find the table 'public.medication_logs'" }, 404);
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  }, async () => {
+    const res = await markMedicationTaken({
+      request: makePostRequest(`/api/medications/${OWNED_MED_ID}/taken`, {}),
+      env: ENV,
+      params: { id: String(OWNED_MED_ID) },
+    } as any);
+
+    assert.equal(res.status, 503, "missing medication log storage must be reported as unavailable");
+    assert.deepEqual(await res.json(), { error: "服藥紀錄暫時無法儲存，請稍後重試" });
   });
 });
 
