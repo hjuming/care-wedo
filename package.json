@@ -20,6 +20,7 @@
     "staging:smoke:ready:report": "node scripts/staging-smoke-readiness.mjs --report-only",
     "staging:fixture:dry": "node scripts/staging-care-fixture.mjs",
     "staging:fixture:apply": "node scripts/staging-care-fixture.mjs --apply --confirm-staging",
+    "staging:fixture:verify": "node scripts/staging-care-fixture.mjs --verify",
     "staging:migration:check": "node scripts/staging-migration-check.mjs",
     "staging:role-e2e:plan": "node scripts/staging-role-e2e.mjs",
     "staging:role-e2e": "node scripts/staging-role-e2e.mjs --confirm-staging",

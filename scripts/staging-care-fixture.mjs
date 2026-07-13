@@ -120,7 +120,7 @@ function redactEmail(email) {
   return `${local.slice(0, 1)}***@${domain}`;
 }
 
-function createRestClient(supabaseUrl, serviceKey) {
+function createRestClient(supabaseUrl, serviceKey, fetchImpl = fetch) {
   const base = `${stripTrailingSlash(supabaseUrl)}/rest/v1`;
   const headers = {
     apikey: serviceKey,
@@ -129,7 +129,7 @@ function createRestClient(supabaseUrl, serviceKey) {
   };
 
   async function request(path, init = {}) {
-    const response = await fetch(`${base}/${path}`, {
+    const response = await fetchImpl(`${base}/${path}`, {
       ...init,
       headers: { ...headers, ...(init.headers || {}) },
     });
@@ -335,9 +335,54 @@ export async function applyFixture({ env = process.env } = {}) {
   };
 }
 
+export async function verifyFixture({ env = process.env, fetchImpl = fetch } = {}) {
+  const supabaseUrl = stripTrailingSlash(env.SUPABASE_URL);
+  const serviceKey = env.SUPABASE_SERVICE_ROLE_KEY;
+  const projectRef = env.CARE_WEDO_STAGING_PROJECT_REF || STAGING_TARGET.projectRef;
+  const baseUrl = env.CARE_WEDO_STAGING_BASE_URL;
+  const target = validateTarget({ supabaseUrl, baseUrl, projectRef });
+  if (!target.ok) throw new Error(`拒絕驗證：${target.errors.join("；")}`);
+  if (!configured(serviceKey)) throw new Error("缺少 SUPABASE_SERVICE_ROLE_KEY（只允許從環境變數提供）");
+
+  const db = createRestClient(supabaseUrl, serviceKey, fetchImpl);
+  const groups = await db.get(`family_groups?name=eq.${encodeURIComponent(FIXTURE.groupName)}&select=id,name,owner_user_id&limit=2`);
+  const group = groups.length === 1 ? groups[0] : null;
+  if (!group?.id) {
+    return {
+      target: { project_ref: projectRef, base_host: target.actualBaseHost, supabase_host: target.actualSupabaseHost },
+      fixture_key: FIXTURE.key,
+      ready: false,
+      reason: groups.length === 0 ? "group_missing" : "duplicate_groups",
+      counts: { groups: groups.length, profiles: 0, appointments: 0, medications: 0, memberships: 0 },
+    };
+  }
+
+  const [profiles, appointments, medications, memberships] = await Promise.all([
+    db.get(`care_profiles?group_id=eq.${group.id}&display_name=eq.${encodeURIComponent(FIXTURE.profileName)}&select=id,display_name&limit=2`),
+    db.get(`appointments?group_id=eq.${group.id}&notes=eq.${encodeURIComponent(FIXTURE.key)}&status=neq.deleted&select=id,profile_id,title,date,time&limit=10`),
+    db.get(`medications?group_id=eq.${group.id}&reminder_text=eq.${encodeURIComponent(FIXTURE.key)}&active=eq.true&select=id,profile_id,name,time_slot,scheduled_time&limit=10`),
+    db.get(`user_family_groups?group_id=eq.${group.id}&select=user_id,role,can_manage&limit=10`),
+  ]);
+  const roles = new Map(memberships.map((membership) => [String(membership.role) + ":" + String(membership.can_manage), true]));
+  const expectedRoles = ["admin:true", "member:true", "member:false"];
+  const roleShapeMatches = expectedRoles.every((role) => roles.has(role)) && memberships.length === 3;
+  return {
+    target: { project_ref: projectRef, base_host: target.actualBaseHost, supabase_host: target.actualSupabaseHost },
+    fixture_key: FIXTURE.key,
+    ready: groups.length === 1 && profiles.length === 1 && appointments.length === 1 && medications.length === 1 && roleShapeMatches,
+    group: { id: group.id, name: group.name },
+    profile: profiles[0] ? { id: profiles[0].id, display_name: profiles[0].display_name } : null,
+    appointment: appointments[0] ? { id: appointments[0].id, profile_id: appointments[0].profile_id } : null,
+    medication: medications[0] ? { id: medications[0].id, profile_id: medications[0].profile_id } : null,
+    counts: { groups: groups.length, profiles: profiles.length, appointments: appointments.length, medications: medications.length, memberships: memberships.length },
+    membership_roles: memberships.map(({ role, can_manage }) => ({ role, can_manage })),
+  };
+}
+
 async function main() {
   const args = new Set(process.argv.slice(2));
   const apply = args.has("--apply");
+  const verify = args.has("--verify");
   const confirmed = args.has("--confirm-staging");
   const plan = buildFixturePlan(process.env);
   const target = validateTarget({
@@ -347,6 +392,10 @@ async function main() {
   });
 
   if (!apply) {
+    if (verify) {
+      console.log(JSON.stringify({ event: "care_wedo_staging_fixture_verify", mode: "verify", result: await verifyFixture() }, null, 2));
+      return;
+    }
     console.log(JSON.stringify({ event: "care_wedo_staging_fixture_plan", mode: "dry_run", target, plan }, null, 2));
     return;
   }

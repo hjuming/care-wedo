@@ -6,7 +6,13 @@ import {
   STAGING_TARGET,
   buildFixturePlan,
   validateTarget,
+  verifyFixture,
 } from "./staging-care-fixture.mjs";
+
+const targetEnv = {
+  SUPABASE_URL: `https://${STAGING_TARGET.projectRef}.supabase.co`,
+  CARE_WEDO_STAGING_BASE_URL: `https://${STAGING_TARGET.host}`,
+};
 
 test("staging fixture target is locked to the Care WEDO staging project", () => {
   const result = validateTarget({
@@ -45,4 +51,30 @@ test("dry-run plan exposes no credentials and keeps a stable appointment marker"
   assert.equal(plan.fixture.medication.time_slot, FIXTURE.medicationTimeSlot);
   assert.equal(JSON.stringify(plan).includes("[not printed]"), false);
   assert.equal(JSON.stringify(plan).includes("[not printed]"), false);
+});
+
+test("fixture verify is read-only and detects the exact clean fixture shape", async () => {
+  const env = {
+    ...targetEnv,
+    SUPABASE_SERVICE_ROLE_KEY: "test-only-key",
+  };
+  const result = await verifyFixture({
+    env,
+    fetchImpl: async (url) => {
+      if (url.includes("user_family_groups?")) return new Response(JSON.stringify([
+        { user_id: 1, role: "admin", can_manage: true },
+        { user_id: 2, role: "member", can_manage: true },
+        { user_id: 3, role: "member", can_manage: false },
+      ]), { status: 200 });
+      if (url.includes("family_groups?")) return new Response(JSON.stringify([{ id: 100, name: FIXTURE.groupName }]), { status: 200 });
+      if (url.includes("care_profiles?")) return new Response(JSON.stringify([{ id: 200, display_name: FIXTURE.profileName }]), { status: 200 });
+      if (url.includes("appointments?")) return new Response(JSON.stringify([{ id: 300, profile_id: 200 }]), { status: 200 });
+      if (url.includes("medications?")) return new Response(JSON.stringify([{ id: 400, profile_id: 200 }]), { status: 200 });
+      throw new Error(`unexpected fetch: ${url}`);
+    },
+  });
+
+  assert.equal(result.ready, true);
+  assert.deepEqual(result.counts, { groups: 1, profiles: 1, appointments: 1, medications: 1, memberships: 3 });
+  assert.equal(JSON.stringify(result).includes("test-only-key"), false);
 });
