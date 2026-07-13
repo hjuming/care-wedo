@@ -30,7 +30,10 @@ test("medication completion copy identifies the slot and actor", () => {
 });
 
 test("mobile shell prevents long identity text and bottom navigation overlap", () => {
+  const nav = readProjectFile("care-wedo-app/src/components/MobileBottomNav.jsx");
   const css = readProjectFile("care-wedo-app/src/index.css");
+  assert.match(nav, /--mobile-nav-count/);
+  assert.match(css, /grid-template-columns:\s*repeat\(var\(--mobile-nav-count/);
   assert.match(css, /\.mobile-bottom-nav[\s\S]*padding-bottom:\s*calc\(/);
   assert.match(css, /\.care-shell[\s\S]*padding-bottom:\s*calc\(/);
   assert.match(css, /\.account-sub[\s\S]*overflow-wrap:\s*anywhere/);

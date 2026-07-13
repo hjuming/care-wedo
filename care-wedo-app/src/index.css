@@ -2470,7 +2470,7 @@ input:focus-visible {
   width: min(320px, calc(100vw - 24px));
   max-width: calc(100vw - 24px);
   transform: none;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(var(--mobile-nav-count, 5), minmax(0, 1fr));
   gap: 4px;
   padding: 8px;
   padding-bottom: calc(8px + env(safe-area-inset-bottom));
@@ -3979,6 +3979,64 @@ input:focus-visible {
 .reminder-audit-panel {
   display: grid;
   gap: 14px;
+}
+
+.activity-audit-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.activity-audit-list {
+  display: grid;
+  gap: 10px;
+}
+
+.activity-audit-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid rgb(94, 143, 154, 0.22);
+  border-radius: 8px;
+  background: white;
+  padding: 14px;
+}
+
+.activity-audit-row > div {
+  min-width: 0;
+}
+
+.activity-audit-row strong,
+.activity-audit-row span,
+.activity-audit-row small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.activity-audit-row strong {
+  color: var(--text-primary);
+  font-size: 17px;
+  line-height: 1.25;
+}
+
+.activity-audit-row span,
+.activity-audit-row small {
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.5;
+}
+
+.activity-audit-actor {
+  color: var(--primary-dark) !important;
+}
+
+.duplicate-appointment-note {
+  margin: 8px 0 0;
+  color: var(--primary-dark);
+  font-size: 13px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
 }
 
 .panel-heading-row {
