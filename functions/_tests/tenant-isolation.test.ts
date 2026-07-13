@@ -565,6 +565,9 @@ test("allows POST appointment for an owned profile and writes the owned group sc
     if (url.includes(`/rest/v1/care_profiles?group_id=in.(${ATTACKER_GROUP_ID})`)) {
       return json([careProfileRow(OWNED_PROFILE_ID)]);
     }
+    if (url.includes(`/rest/v1/appointments?group_id=eq.${ATTACKER_GROUP_ID}&profile_id=eq.${OWNED_PROFILE_ID}`)) {
+      return json([]);
+    }
     if (url.includes("/rest/v1/appointments?select=*") && init?.method === "POST") {
       insertedPayload = JSON.parse(String(init.body || "{}"));
       return json([appointmentRow(984)]);

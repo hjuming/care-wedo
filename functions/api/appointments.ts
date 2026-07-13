@@ -77,7 +77,7 @@ async function findExistingAppointment(env: Env, payload: Record<string, unknown
       event: "appointments.dedupe_lookup_failed",
       message: error instanceof Error ? error.message : "unknown error",
     }));
-    return null;
+    throw new Error("行程去重檢查失敗，為避免建立重複資料，請稍後再試。");
   }
 }
 
@@ -240,7 +240,15 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     const message = error instanceof Error ? error.message : "新增排程失敗";
     return Response.json(
       { error: message },
-      { status: message.includes("請先登入") ? 401 : message.includes("沒有修改權限") ? 403 : 500 },
+      {
+        status: message.includes("請先登入")
+          ? 401
+          : message.includes("沒有修改權限")
+            ? 403
+            : message.includes("去重檢查")
+              ? 503
+              : 500,
+      },
     );
   }
 };

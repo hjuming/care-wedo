@@ -152,3 +152,36 @@ test("falls back to fingerprint dedupe when the legacy appointments schema lacks
     globalThis.fetch = originalFetch;
   }
 });
+
+test("refuses to create an appointment when the duplicate check is unavailable", async () => {
+  let insertAttempted = false;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: any, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input.url;
+    if (url.includes("api.line.me/oauth2/v2.1/verify")) return json({ sub: "Umanager", name: "照護者" });
+    if (url.includes("/rest/v1/users?line_user_id=")) return json([{ id: 1, name: "照護者" }]);
+    if (url.includes("/rest/v1/user_family_groups?user_id=eq.1")) return json([{ user_id: 1, group_id: 100, role: "admin", can_manage: true }]);
+    if (url.includes("/rest/v1/care_profiles?group_id=in.(100)")) return json([{ id: 501, group_id: 100, display_name: "測試長輩" }]);
+    if (url.includes("/rest/v1/user_feature_flags?user_id=eq.1&feature_key=like.profile_order:")) return json([]);
+    if (url.includes("/rest/v1/appointments") && init?.method === "POST") {
+      insertAttempted = true;
+      return json([{ id: 1 }]);
+    }
+    if (url.includes("/rest/v1/appointments") && (!init?.method || init.method === "GET")) {
+      return json({ message: "temporary database outage" }, 503);
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  }) as typeof fetch;
+
+  try {
+    const response = await createAppointment({
+      request: request({ profile_id: 501, type: "clinic_visit", date: "2026-08-18", title: "測試回診" }),
+      env: ENV,
+    } as any);
+    assert.equal(response.status, 503);
+    assert.match((await response.json() as any).error, /去重檢查/);
+    assert.equal(insertAttempted, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

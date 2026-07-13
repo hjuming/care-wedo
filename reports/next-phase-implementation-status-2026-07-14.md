@@ -18,13 +18,14 @@
 ## 驗證結果
 
 - 前端測試：193/193 通過。
-- Functions 測試：52/52 通過。
+- Functions 測試：53/53 通過。
 - staging fixture 測試：3/3 通過。
 - TypeScript、ESLint、Vite build、`git diff --check` 通過。
 - Git：`6e62e8e feat: harden family reminder persistence and staging fixture` 已推送 `origin/main`。
 - staging deployment：`https://d0cf98af.care-wedo-staging.pages.dev`，alias `https://main.care-wedo-staging.pages.dev`。
 - staging 首頁：HTTP 200。
 - staging `/api/health`：HTTP 503、`env_ready:false`；符合「未就緒不得誤報 production-ready」的 gate。
+- 行程去重查詢若暫時不可用會回 503 並拒絕新增，避免「查不到就寫入」造成重複資料。
 
 ## 尚未達成的出口
 
