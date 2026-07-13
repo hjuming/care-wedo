@@ -4,6 +4,8 @@ import { pathToFileURL } from "node:url";
 import { STAGING_TARGET, validateTarget } from "./staging-care-fixture.mjs";
 
 const PHASE = "phase61_appointment_idempotency";
+const UNIQUE_INDEX = "appointments_group_idempotency_key_uidx";
+const SQL_VERIFICATION_PATH = "supabase/verify_phase61_appointment_idempotency.sql";
 
 function stripTrailingSlash(value) {
   return String(value || "").replace(/\/+$/, "");
@@ -35,6 +37,9 @@ export async function checkPhase61({ env = process.env, fetchImpl = fetch } = {}
     service_key_configured: configured(serviceKey),
     column_present: false,
     ready_for_appointment_idempotency: false,
+    unique_index_name: UNIQUE_INDEX,
+    unique_index_verification: "manual_sql_required",
+    read_only_sql_path: SQL_VERIFICATION_PATH,
     action: "migration_required",
   };
 
