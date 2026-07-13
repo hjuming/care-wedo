@@ -140,6 +140,7 @@ export async function runRoleE2E({ env = process.env, browserType = chromium } =
     appointment: { first_status: null, retry_status: null, deduplicated: false, same_id: false },
     collaborator: { medication_status: null, medication_already_recorded: false, primary_readback_status: null, primary_readback_match: false },
     family_notes: { save_status: null, readback_status: null, readback_match: false },
+    audit: { readback_status: null, medication_taken: false, family_note_created: false },
     elder: { appointment_status: null, medication_status: null, management_controls_visible: null },
     artifact_dir: artifactDir,
   };
@@ -236,13 +237,30 @@ export async function runRoleE2E({ env = process.env, browserType = chromium } =
       throw new Error("primary 重新讀取未看到 collaborator 家庭提醒");
     }
 
+    const auditReadback = await callApi(primary, `/api/dashboard?group_id=${groupId}&profile_id=${profileId}`);
+    const auditEvents = Array.isArray(auditReadback.body?.activity_audit) ? auditReadback.body.activity_audit : [];
+    result.audit.readback_status = auditReadback.status;
+    result.audit.medication_taken = auditEvents.some((event) => event.action === "medication_taken");
+    result.audit.family_note_created = auditEvents.some((event) => event.action === "family_note_created");
+    if (auditReadback.status !== 200 || !result.audit.medication_taken || !result.audit.family_note_created) {
+      throw new Error("primary dashboard 未讀回協作 audit trail");
+    }
+
     const elderAppointment = await callApi(elder, `/api/appointments/${firstId}`, jsonInit("PATCH", { status: "completed" }));
     const elderMedication = await callApi(elder, "/api/medications/taken", jsonInit("POST", { medication_ids: [medicationId], status: "taken" }));
     result.elder.appointment_status = elderAppointment.status;
     result.elder.medication_status = elderMedication.status;
     result.elder.management_controls_visible = await elder.evaluate(() => {
-      const text = document.body.innerText || "";
-      return /編輯|新增照護對象|邀請協作者|刪除照護資料|付款/.test(text);
+      const isVisible = (element) => {
+        const style = window.getComputedStyle(element);
+        const rect = element.getBoundingClientRect();
+        return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
+      };
+      const controls = Array.from(document.querySelectorAll("button, a, input, select, textarea"))
+        .filter(isVisible)
+        .map((element) => `${element.textContent || ""} ${element.getAttribute("aria-label") || ""} ${element.getAttribute("title") || ""}`)
+        .join(" ");
+      return /編輯|新增照護對象|邀請協作者|刪除照護資料|付款/.test(controls);
     });
     await elder.screenshot({ path: `${artifactDir}/elder-final.png`, fullPage: true });
     if (elderAppointment.status !== 403 || elderMedication.status !== 403 || result.elder.management_controls_visible) {
