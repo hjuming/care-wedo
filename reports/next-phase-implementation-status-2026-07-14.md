@@ -18,7 +18,7 @@
 ## 驗證結果
 
 - 前端測試：192/192 通過。
-- Functions 測試：51/51 通過。
+- Functions 測試：52/52 通過。
 - staging fixture 測試：3/3 通過。
 - TypeScript、ESLint、Vite build、`git diff --check` 通過。
 - Git：`6e62e8e feat: harden family reminder persistence and staging fixture` 已推送 `origin/main`。
