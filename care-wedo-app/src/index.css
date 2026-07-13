@@ -4329,7 +4329,6 @@ input:focus-visible {
   font-size: 14px;
   margin-top: 2px;
   overflow-wrap: anywhere;
-  word-break: break-word;
 }
 
 .family-notes-editor {

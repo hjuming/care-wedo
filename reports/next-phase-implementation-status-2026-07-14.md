@@ -22,6 +22,7 @@
 - Functions 測試：53/53 通過。
 - staging tooling 測試：6/6 通過（fixture 3、migration check 3）。
 - TypeScript、ESLint、Vite build、`git diff --check` 通過。
+- 完整 `npm run verify` 通過：lint、stylelint、前端／Functions、typecheck、env example、contrast、RLS policy sync、10-case receipt pack。
 - Git：最新實作 `dc3c54f` 已推送 `origin/main`；包含提醒 persistence、行程 fail-closed 去重與 staging readiness checks。
 - staging deployment：`https://d0cf98af.care-wedo-staging.pages.dev`，alias `https://main.care-wedo-staging.pages.dev`。
 - staging 首頁：HTTP 200。
