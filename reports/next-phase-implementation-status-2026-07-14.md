@@ -16,7 +16,7 @@
 | P1/P2 手機與長輩 IA | 已完成程式與 regression | 412px/safe-area/bottom-nav、今天用藥、四分區設定、服藥操作者／時間 |
 | Phase 0 clean fixture | 已建立安全工具 | `npm run staging:fixture:dry`；apply 預設關閉且鎖定 staging ref／host |
 | Phase 61 migration check | 已建立唯讀檢查 | `npm run staging:migration:check`；只讀欄位，不假設 unique index 已建立 |
-| Phase 5 fresh-context runner | 已建立安全工具 | `npm run staging:role-e2e:plan`／`npm run staging:role-e2e`；三個隔離 browser context、行程冪等、協作者記錄服藥與主要照護者 read-back、家庭提醒 read-back、長輩兩條 403 |
+| Phase 5 fresh-context runner | 已建立安全工具 | `npm run staging:role-e2e:plan`／`npm run staging:role-e2e`；三個隔離 browser context、行程冪等、協作者記錄服藥與主要照護者 read-back、家庭提醒與 audit read-back、長輩互動控制與兩條 403 |
 
 ## 驗證結果
 
@@ -25,7 +25,7 @@
 - staging tooling 測試：8/8 通過（fixture 3、migration check 3、role e2e plan 2）。
 - TypeScript、ESLint、Vite build、`git diff --check` 通過。
 - 完整 `npm run verify` 通過：lint、stylelint、前端／Functions、typecheck、env example、contrast、RLS policy sync、10-case receipt pack。
-- Git：最新實作 `e7608e6`（本次 runner 增量）已推送 `origin/main`；包含協作者記錄服藥與主要照護者 read-back，並保留重跑去重行為。
+- Git：最新實作 `cb1bbcb`（本次 runner 增量）已推送 `origin/main`；包含協作者記錄服藥、audit read-back、精確互動控制檢查與重跑去重行為。
 - staging deployment：`https://b28d8777.care-wedo-staging.pages.dev`，alias `https://main.care-wedo-staging.pages.dev`。
 - staging 首頁：HTTP 200。
 - staging `/api/health`：HTTP 503、`env_ready:false`；符合「未就緒不得誤報 production-ready」的 gate。
