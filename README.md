@@ -416,7 +416,7 @@ CI/CD gate：
 - 資料圍堵明文採短期 service-role-only + app-layer ownership filters，細節見 `DATA_CONTAINMENT_CONTRACT.md`；staging smoke 前先跑 `npm run staging:smoke:ready` 檢查必要 env，Google protected write staging 驗收見 `GOOGLE_PROTECTED_WRITE_SMOKE_RUNBOOK.md` 與 `npm run google:protected-write:smoke`；Storage policy staging 驗收見 `STORAGE_POLICY_SMOKE_RUNBOOK.md` 與 `npm run storage:policy:smoke`。
 - Phase 0 乾淨家庭 fixture 使用 `npm run staging:fixture:dry` 預覽；只有確認 `SUPABASE_URL`、`CARE_WEDO_STAGING_BASE_URL`、三組測試帳密與 staging service-role secret 均指向受控 staging 後，才可執行 `npm run staging:fixture:apply`。工具固定 staging project ref／host、以穩定 fixture key 重用群組／照護對象／單一行程與單一藥單，絕不把密碼或 secret 寫入報告。
 - Phase 61 套用前先跑 `npm run staging:migration:check`；它只讀 staging REST schema，確認 `appointments.idempotency_key` 是否存在，不會執行 migration，也不會宣稱 partial unique index 已建立。
-- 三角色 fresh-context 驗收先用 `npm run staging:role-e2e:plan` 檢查設定；只有注入 staging fixture 的去識別化 `GROUP_ID`、`PROFILE_ID`、`MEDICATION_ID` 與三組帳密後，才可執行 `npm run staging:role-e2e`。該 runner 會以三個隔離 browser context 驗證 primary 建立／重試同一行程、collaborator 跨帳號讀取與家庭提醒、elder 的兩條 403 寫入路徑，並只輸出 status／布林結果與暫存截圖路徑。
+- 三角色 fresh-context 驗收先用 `npm run staging:role-e2e:plan` 檢查設定；只有注入 `SUPABASE_URL`、`CARE_WEDO_STAGING_BASE_URL`、三組 `CARE_WEDO_FIXTURE_*_EMAIL/PASSWORD` 與去識別化 `CARE_WEDO_FIXTURE_GROUP_ID`／`PROFILE_ID`／`MEDICATION_ID` 後，才可執行 `npm run staging:role-e2e`。該 runner 會以三個隔離 browser context 驗證 primary 建立／重試同一行程、collaborator 跨帳號讀取與家庭提醒、elder 的兩條 403 寫入路徑，並只輸出 status／布林結果與暫存截圖路徑。
 
 本機交付前建議：
 
