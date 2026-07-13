@@ -201,7 +201,8 @@ test("Medication view groups medicines by time and keeps one calm taken action",
   assert.doesNotMatch(medicationView, /onUpdateMedication/);
   assert.doesNotMatch(medicationView, /onDeleteMedication/);
   assert.match(medicationView, /getMedicationShortName/);
-  assert.match(medicationView, /"我已吃完"/);
+  assert.match(medicationView, /"標記本次已服用"/);
+  assert.doesNotMatch(medicationView, /我已吃完/);
   assert.match(medicationView, /formatDateLabel\(todayDate\).*已記錄/);
   assert.match(medicationView, /顯示全部藥物/);
   assert.match(medicationView, /totalMedicationCount/);

@@ -15,7 +15,7 @@ import { completeSupabaseOAuthCallback, hasSupabaseAuthConfig, loginWithGoogle, 
 import { safeReviewLoginEnabled } from "./services/safeReviewLogin";
 import { deriveCareCapabilities } from "./services/capabilities";
 import { trackError, trackEvent } from "./services/telemetry";
-import { buildTodayTasks, formatTaipeiTodayLabel, hasSameDayTasks } from "./services/todayTasks";
+import { buildTodayTasks, formatTaipeiTodayLabel, groupMedicationsBySchedule, hasSameDayTasks } from "./services/todayTasks";
 import { buildSearchSuggestions, matchSearch } from "./services/search";
 import PrivacyPage from "./components/PrivacyPage";
 import TermsPage from "./components/TermsPage";
@@ -102,6 +102,8 @@ function normalizeMedication(med, index) {
     taken_status: med.taken_status || "",
     taken_date: med.taken_date || "",
     taken_slots: Array.isArray(med.taken_slots) ? med.taken_slots : [],
+    taken_by: med.taken_by || med.taken_by_name || med.confirmed_by || "",
+    taken_at: med.taken_at || med.confirmed_at || "",
     active: med.active !== false,
     color: med.color || ["#b7791f", "#2f855a", "#2b6cb0", "#805ad5"][index % 4],
   };
@@ -203,6 +205,7 @@ const CARE_WEDO_PRICING = {
   freeMonthlyOcrLimit: 10,
   paidMonthlyOcrLimit: 100,
 };
+const CARE_WEDO_TEST_MODE_COPY = "目前為測試模式：不會實際扣款；首位照護對象 $0/月，新增照護對象每位 $30/月、協作者每位 $10/月，付款前會清楚確認。";
 const CARE_WEDO_GROUP_LIMITS = {
   maxCareProfiles: 4,
   maxPaidCollaborators: 5,
@@ -534,9 +537,9 @@ function PlanUpgradeModal({ reason = "quota", onClose, onViewPlans }) {
           </div>
           <div className="quota-upgrade-options" aria-label="版本 A 收費方式">
             <article>
-              <span>照護圈升級</span>
-              <strong>$30/月</strong>
-              <p>啟用家庭群組協作與完整歷史保存。</p>
+              <span>首位照護對象</span>
+              <strong>$0/月</strong>
+              <p>開放測試期減免；啟用家庭群組協作與完整歷史保存。</p>
             </article>
             <article>
               <span>整理額度</span>
@@ -549,7 +552,7 @@ function PlanUpgradeModal({ reason = "quota", onClose, onViewPlans }) {
               <p>每多照顧一位家人加一份保存空間。</p>
             </article>
           </div>
-          <p className="helper-copy">Free 會保留最近 30 天資料，但歷史查詢與完整保存是付費功能。Care WEDO 目前透過綠界安全付款，後續可再納入藍新等金流。</p>
+          <p className="helper-copy">Free 會保留最近 30 天資料，但歷史查詢與完整保存是照護圈功能；新增照護對象每位 $30/月、協作者每位 $10/月。Care WEDO 目前透過綠界安全付款，後續可再納入藍新等金流。</p>
           <div className="quota-upgrade-actions">
             <button type="button" className="primary-action" onClick={onViewPlans}>查看方案</button>
             <button type="button" className="secondary-action" onClick={onClose}>{secondaryActionLabel}</button>
@@ -1852,6 +1855,7 @@ function DashboardApp() {
   }), [appointments, todayDate]);
   const collaborators = dashboard?.collaborators || dashboard?.members || [];
   const linePushAudit = dashboard?.line_push_audit || [];
+  const activityAudit = dashboard?.activity_audit || [];
 
   useEffect(() => {
     if (readOnly && !visibleSections.some((section) => section.id === activeSection)) {
@@ -2139,13 +2143,14 @@ function DashboardApp() {
 
   async function handleMedicationTaken(group, status) {
     try {
-      await markMedicationSlotStatus({
+      const result = await markMedicationSlotStatus({
         medicationIds: group.medicationIds,
         status,
         idToken: identity.idToken,
         timeSlot: group.slot,
       });
       await loadDashboard(identity, activeProfileId, activeGroupId);
+      return result;
     } catch (err) {
       if (err.code === "AUTH_REQUIRED") {
         await resetCareWedoSessionAndReturnHome();
@@ -2449,6 +2454,8 @@ function DashboardApp() {
           {activeSection === "overview" && (
             <OverviewView
               todayLabel={todayLabel}
+              todayDate={todayDate}
+              medications={medications}
               searchQuery={searchQuery}
               onSearchChange={setSearchQuery}
               todayTasks={todayTasks}
@@ -2489,6 +2496,7 @@ function DashboardApp() {
               onTaken={canCompleteMedication ? handleMedicationTaken : undefined}
               canCompleteMedication={canCompleteMedication}
               readOnly={readOnly}
+              activityAudit={activityAudit}
             />
           )}
 
@@ -3244,6 +3252,8 @@ function SearchField({ value, onChange, suggestions = [], placeholder = "搜尋"
 
 function OverviewView({
   todayLabel,
+  todayDate,
+  medications = [],
   searchQuery,
   onSearchChange,
   todayTasks,
@@ -3259,6 +3269,10 @@ function OverviewView({
   readOnly = false,
 }) {
   const [locallyDoneTaskIds, setLocallyDoneTaskIds] = useState(() => new Set());
+  const todayMedicationGroups = useMemo(
+    () => groupMedicationsBySchedule(medications).filter((group) => group.medications.length > 0),
+    [medications],
+  );
 
   function handlePrimaryAction(task) {
     if (readOnly || !onComplete) return;
@@ -3301,6 +3315,33 @@ function OverviewView({
           className="today-search-box"
         />
       </section>
+
+      {readOnly && todayMedicationGroups.length > 0 && (
+        <section className="today-medication-priority" aria-label="今天用藥">
+          <div className="panel-title-row">
+            <div>
+              <p className="panel-eyebrow">今天先看</p>
+              <h3>今天用藥</h3>
+            </div>
+            <span className="today-medication-date">{todayLabel.date}</span>
+          </div>
+          <div className="today-medication-list">
+            {todayMedicationGroups.map((group) => {
+              const completed = group.medications.every((medication) => (
+                medication.taken_slots?.includes(group.slot)
+                || (medication.taken_status === "taken" && medication.taken_date === todayDate)
+              ));
+              return (
+                <article key={group.slot} className={`today-medication-row ${completed ? "is-done" : ""}`}>
+                  <strong>{group.label}</strong>
+                  <span>{group.medications.map((medication) => medication.name || "藥名待確認").join("、")}</span>
+                  <em>{completed ? "已記錄" : "請依藥袋服用"}</em>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       <section className="today-timeline-panel">
         {todayTasks.length ? (
@@ -3736,6 +3777,7 @@ function SettingsView({
   onLogout,
 }) {
   const priceEstimate = estimateCareCirclePrice({ careProfiles, collaborators });
+  const reviewMode = safeReviewLoginEnabled();
   const accountProvider = identity.profile?.authProvider || identity.provider;
   const accountProviderLabel = accountProvider === "email"
     ? "Email／密碼測試帳號"
@@ -3748,6 +3790,7 @@ function SettingsView({
 
   return (
     <div className="settings-grid">
+      <div className="settings-section-label" role="heading" aria-level="2">家庭與成員</div>
       <section className="summary-panel wide-panel collaborator-control-panel">
         <p className="panel-eyebrow">協作者管理中心</p>
         <h3>設定與資料整理都集中在這裡。</h3>
@@ -3784,6 +3827,7 @@ function SettingsView({
         <GroupSettings identity={identity} onProfileCreated={onGroupChange} onGroupChange={onGroupChange} />
       </section>
 
+      <div className="settings-section-label" role="heading" aria-level="2">提醒與通知</div>
       <ReminderAuditPanel logs={linePushAudit} />
 
       <section className="summary-panel wide-panel">
@@ -3791,6 +3835,7 @@ function SettingsView({
         <FamilyNotesEditor notes={familyNotes} onChange={onFamilyNotesChange} />
       </section>
 
+      <div className="settings-section-label" role="heading" aria-level="2">照護資料</div>
       <section className="summary-panel wide-panel">
         <p className="panel-eyebrow">常見照護提醒</p>
         <div className="care-tips-grid">
@@ -3812,6 +3857,12 @@ function SettingsView({
         <a className="inline-action" href={`mailto:${CARE_WEDO_SUPPORT_EMAIL}`}>{CARE_WEDO_SUPPORT_EMAIL}</a>
       </section>
 
+      <div className="settings-section-label" role="heading" aria-level="2">費用與帳號</div>
+      <section className="summary-panel wide-panel pricing-mode-panel" aria-label="目前費用模式">
+        <p className="panel-eyebrow">{reviewMode ? "STAGING 測試模式" : "正式方案"}</p>
+        <h3>{reviewMode ? "測試環境不會實際扣款" : "方案與付款"}</h3>
+        <p>{reviewMode ? CARE_WEDO_TEST_MODE_COPY : "首位照護對象 $0/月；新增照護對象每位 $30/月、協作者每位 $10/月，付款前會清楚確認。"}</p>
+      </section>
       <section className="summary-panel wide-panel billing-estimate-panel">
         <div>
           <p className="panel-eyebrow">本月費用預估</p>

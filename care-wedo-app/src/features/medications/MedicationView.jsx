@@ -90,6 +90,33 @@ function medicationScheduleText(medication = {}) {
   ].filter(Boolean).join(" ｜ ") || "照藥袋或醫囑";
 }
 
+function formatRecordedAt(value) {
+  if (!value) return "時間待確認";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "時間待確認";
+  return new Intl.DateTimeFormat("zh-TW", {
+    timeZone: "Asia/Taipei",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date);
+}
+
+function resolveSlotRecordMeta(group, activityAudit = [], localMeta = null) {
+  const medicationMeta = group.medications.find((medication) => medication.taken_at || medication.taken_by);
+  const auditMeta = activityAudit.find((event) => (
+    event?.entity === "medication"
+    && event?.status !== "forgotten"
+    && String(event?.summary || "").includes(group.label)
+  ));
+  return {
+    actor: localMeta?.actor || medicationMeta?.taken_by || auditMeta?.actor_display_name || "家庭協作者",
+    recordedAt: localMeta?.recordedAt || medicationMeta?.taken_at || auditMeta?.occurred_at || "",
+  };
+}
+
 function buildMedicationSummaryText(medications = [], date, formatDateLabel) {
   const rows = uniqueActiveMedications(medications);
   return [
@@ -259,12 +286,14 @@ export default function MedicationView({
   onTaken,
   canCompleteMedication = true,
   readOnly = false,
+  activityAudit = [],
 }) {
   const [savingSlot, setSavingSlot] = useState(null);
   const [expandedMedicationId, setExpandedMedicationId] = useState(null);
   const [showMedicationSummary, setShowMedicationSummary] = useState(false);
   const [locallyTakenSlots, setLocallyTakenSlots] = useState(() => new Set());
   const [slotFeedback, setSlotFeedback] = useState({});
+  const [localRecordMeta, setLocalRecordMeta] = useState({});
   const medicationGroups = useMemo(() => groupMedicationsBySchedule(medications), [medications]);
   const summaryMedications = useMemo(() => uniqueActiveMedications(medicationSummarySource), [medicationSummarySource]);
   const hasAnyMedication = medicationGroups.some((group) => group.medications.length > 0);
@@ -280,15 +309,22 @@ export default function MedicationView({
   async function handleSlotStatus(group, status) {
     if (!group.medicationIds.length || !onTaken || !canCompleteMedication || readOnly) return;
     setSavingSlot(`${group.slot}-${status}`);
-    setSlotFeedback((current) => ({ ...current, [group.slot]: "" }));
+    setSlotFeedback((current) => ({ ...current, [group.slot]: null }));
     try {
-      await onTaken?.(group, status);
+      const result = await onTaken?.(group, status);
       if (status === "taken") {
         setLocallyTakenSlots((prev) => new Set(prev).add(`${todayDate}:${group.slot}`));
+        setLocalRecordMeta((current) => ({
+          ...current,
+          [group.slot]: {
+            actor: result?.confirmed_by_name || result?.taken_by || "目前帳號",
+            recordedAt: result?.created_at || result?.taken_at || new Date().toISOString(),
+          },
+        }));
       }
-      setSlotFeedback((current) => ({ ...current, [group.slot]: "本次服用已記錄。" }));
+      setSlotFeedback((current) => ({ ...current, [group.slot]: { kind: "success", message: `本次${group.label}服用已記錄。` } }));
     } catch (error) {
-      setSlotFeedback((current) => ({ ...current, [group.slot]: medicationMutationErrorMessage(error) }));
+      setSlotFeedback((current) => ({ ...current, [group.slot]: { kind: "error", message: medicationMutationErrorMessage(error) } }));
     } finally {
       setSavingSlot(null);
     }
@@ -316,18 +352,26 @@ export default function MedicationView({
             </div>
             <div className="medicine-slot-actions">
               {group.medications.length > 0 && isSlotDone(group) && (
-                <span className="medicine-slot-status is-done">{formatDateLabel(todayDate)} 已記錄</span>
+                <span className="medicine-slot-status is-done">
+                  <strong>{formatDateLabel(todayDate)}・{group.label} 已記錄</strong>
+                  <small>
+                    {(() => {
+                      const meta = resolveSlotRecordMeta(group, activityAudit, localRecordMeta[group.slot]);
+                      return `操作者：${meta.actor}・時間：${formatRecordedAt(meta.recordedAt)}`;
+                    })()}
+                  </small>
+                </span>
               )}
               {group.medications.length > 0 && !isSlotDone(group) && canCompleteMedication && !readOnly && (
                 <button type="button" className="primary-action compact-action" onClick={() => handleSlotStatus(group, "taken")} disabled={savingSlot === `${group.slot}-taken`}>
-                  {savingSlot === `${group.slot}-taken` ? "記錄中…" : "我已吃完"}
+                  {savingSlot === `${group.slot}-taken` ? "記錄中…" : "標記本次已服用"}
                 </button>
               )}
             </div>
           </div>
-          {slotFeedback[group.slot] && (
-            <p className={slotFeedback[group.slot].includes("沒有記錄") ? "error-msg" : "success-msg"} role="status">
-              {slotFeedback[group.slot]}
+          {slotFeedback[group.slot]?.message && (
+            <p className={slotFeedback[group.slot].kind === "error" ? "error-msg" : "success-msg"} role="status">
+              {slotFeedback[group.slot].message}
             </p>
           )}
           {group.medications.length ? <div className="medicine-chip-list">
@@ -371,9 +415,9 @@ export default function MedicationView({
         <EmptyMedicationGuide
           title={searchQuery && totalMedicationCount > 0 ? "沒有符合搜尋的藥物。" : "目前還沒有吃藥說明。"}
           description={searchQuery && totalMedicationCount > 0 ? "目前的關鍵字把藥物篩掉了，可以先顯示全部藥物再重新查看。" : "拍藥袋或處方箋就可以開始，Care WEDO 會幫你整理吃藥時間、份量與注意事項。"}
-          primaryLabel={searchQuery && totalMedicationCount > 0 ? "顯示全部藥物" : "拍照新增照護資料"}
+          primaryLabel={searchQuery && totalMedicationCount > 0 ? "顯示全部藥物" : onUpload && !readOnly ? "拍照新增照護資料" : undefined}
           onPrimary={searchQuery && totalMedicationCount > 0 ? onClearSearch : onUpload}
-          secondaryLabel={searchQuery && totalMedicationCount > 0 ? "拍照新增照護資料" : undefined}
+          secondaryLabel={searchQuery && totalMedicationCount > 0 && onUpload && !readOnly ? "拍照新增照護資料" : undefined}
           onSecondary={searchQuery && totalMedicationCount > 0 ? onUpload : undefined}
         />
       )}

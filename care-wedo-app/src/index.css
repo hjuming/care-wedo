@@ -2473,6 +2473,7 @@ input:focus-visible {
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 4px;
   padding: 8px;
+  padding-bottom: calc(8px + env(safe-area-inset-bottom));
   border: 1px solid var(--border);
   border-radius: 22px;
   background: rgb(255, 250, 242, 0.92);
@@ -2518,7 +2519,8 @@ input:focus-visible {
   font: inherit;
   line-height: 1.15;
   text-overflow: clip;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .side-rail {
@@ -3115,6 +3117,20 @@ input:focus-visible {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
+}
+
+.settings-section-label {
+  grid-column: 1 / -1;
+  margin: 12px 0 -4px;
+  color: var(--accent);
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+}
+
+.pricing-mode-panel {
+  border-color: rgb(94, 143, 154, 0.34);
+  background: linear-gradient(135deg, rgb(221, 235, 237, 0.72), rgb(255, 250, 242, 0.92));
 }
 
 .summary-panel {
@@ -3742,7 +3758,8 @@ input:focus-visible {
 }
 
 .medicine-slot-status {
-  display: inline-flex;
+  display: inline-grid;
+  gap: 2px;
   align-items: center;
   min-height: 40px;
   border-radius: 999px;
@@ -3751,6 +3768,19 @@ input:focus-visible {
   padding: 6px 12px;
   font-size: 15px;
   font-weight: 900;
+}
+
+.medicine-slot-status strong,
+.medicine-slot-status small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.medicine-slot-status small {
+  color: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.3;
 }
 
 .medicine-slot-status.is-done {
@@ -4240,6 +4270,8 @@ input:focus-visible {
   color: var(--text-secondary);
   font-size: 14px;
   margin-top: 2px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .family-notes-editor {
@@ -7150,6 +7182,66 @@ button:disabled,
   padding: 0;
 }
 
+.today-medication-priority {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid rgb(79, 125, 90, 0.24);
+  border-radius: var(--radius-card);
+  background: linear-gradient(135deg, rgb(236, 245, 238, 0.94), rgb(255, 255, 255, 0.86));
+}
+
+.today-medication-priority h3 {
+  margin-top: 2px;
+  color: var(--primary-dark);
+  font-size: 26px;
+}
+
+.today-medication-date {
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 800;
+  text-align: right;
+}
+
+.today-medication-list {
+  display: grid;
+  gap: 8px;
+}
+
+.today-medication-row {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid rgb(79, 125, 90, 0.16);
+  border-radius: 12px;
+  background: rgb(255, 255, 255, 0.72);
+}
+
+.today-medication-row strong {
+  color: var(--primary-dark);
+}
+
+.today-medication-row span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.today-medication-row em {
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-style: normal;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.today-medication-row.is-done em {
+  color: var(--success);
+}
+
 .elder-task-list {
   display: flex;
   flex-direction: column;
@@ -7531,6 +7623,21 @@ button:disabled,
 
   .care-context-details .care-context-item:first-child {
     grid-column: auto;
+  }
+
+  .today-medication-row {
+    grid-template-columns: 42px minmax(0, 1fr);
+  }
+
+  .today-medication-row em {
+    grid-column: 2;
+    justify-self: start;
+    white-space: normal;
+  }
+
+  .medicine-slot-status {
+    width: 100%;
+    max-width: 100%;
   }
 }
 
