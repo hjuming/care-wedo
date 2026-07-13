@@ -9,6 +9,12 @@ function readProjectFile(path) {
   return readFileSync(resolve(root, path), "utf8");
 }
 
+test("production deploy requires an explicit workflow dispatch", () => {
+  const workflow = readProjectFile(".github/workflows/deploy.yml");
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /if:\s*github\.event_name == ['"]workflow_dispatch['"]/);
+});
+
 test("API middleware rejects protected requests without a bearer token", () => {
   const source = readProjectFile("functions/api/_middleware.ts");
   assert.match(source, /if \(!token\) \{/);
