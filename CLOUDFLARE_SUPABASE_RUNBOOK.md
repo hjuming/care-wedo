@@ -55,7 +55,7 @@
 ```bash
 # AI OCR
 GOOGLE_API_KEY=<Gemini API Key>
-GEMINI_MODEL_NAME=gemini-2.5-flash
+GEMINI_MODEL_NAME=gemini-3.5-flash
 
 # 資料庫
 SUPABASE_URL=https://你的-project.supabase.co
