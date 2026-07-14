@@ -157,7 +157,18 @@ function buildGroupBillingSummary({ group, careProfileCount, collaboratorCount }
   };
 }
 
-function PaidActionConfirmationModal({ action, onCancel, onConfirm, submitting = false }) {
+function formatPaidActionError(errorMessage) {
+  if (!errorMessage) return null;
+  if (errorMessage === "billing_gateway_checkout_failed") {
+    return "目前無法建立安全付款頁，付款尚未送出。請稍候再試；若持續發生，請聯絡 Care WEDO。";
+  }
+  if (errorMessage === "billing_checkout_not_configured") {
+    return "付款服務尚未完成設定，付款尚未送出。請聯絡 Care WEDO。";
+  }
+  return errorMessage;
+}
+
+function PaidActionConfirmationModal({ action, onCancel, onConfirm, submitting = false, errorMessage = null }) {
   if (!action) return null;
 
   if (action.type === "limit_reached") {
@@ -251,6 +262,11 @@ function PaidActionConfirmationModal({ action, onCancel, onConfirm, submitting =
           <p className="quota-note">
             主帳號不列入協作者費用。付款頁由綠界提供，Care WEDO 不保存信用卡資料。
           </p>
+          {formatPaidActionError(errorMessage) && (
+            <p className="error-msg paid-action-error" role="alert">
+              {formatPaidActionError(errorMessage)}
+            </p>
+          )}
           <div className="paid-action-buttons">
             <button type="button" className="primary-action" onClick={onConfirm} disabled={submitting}>
               {submitting ? "準備付款中..." : requiresCheckout ? "前往安全付款" : "我了解，繼續新增"}
@@ -866,6 +882,7 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
         }}
         onConfirm={runConfirmedPaidAction}
         submitting={billingSubmitting}
+        errorMessage={error}
       />
     </div>
   );

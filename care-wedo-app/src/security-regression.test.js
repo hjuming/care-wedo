@@ -687,6 +687,10 @@ test("Paid care actions show a beta fee confirmation before continuing", () => {
   assert.match(component, /前往付款/);
   assert.match(component, /createBillingCheckout/);
   assert.match(component, /submitGatewayCheckout/);
+  assert.match(component, /formatPaidActionError/);
+  assert.match(component, /billing_gateway_checkout_failed/);
+  assert.match(component, /role="alert"/);
+  assert.match(component, /付款尚未送出/);
   assert.match(component, /Care WEDO 不保存信用卡資料/);
   assert.match(component, /已達 .*位共同協作者上限/);
   assert.match(css, /\.group-billing-panel/);
