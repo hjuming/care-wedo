@@ -14,7 +14,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { chromium } from "playwright";
-import { PERSONAS, STAGING_TARGET, validateTarget } from "./staging-care-fixture.mjs";
+import { FIXTURE, PERSONAS, STAGING_TARGET, validateTarget } from "./staging-care-fixture.mjs";
 
 const DEFAULT_ARTIFACT_DIR = "/private/tmp/care-wedo-staging-role-e2e";
 const APPOINTMENT_KEY = "care-wedo-phase5-role-e2e-v1";
@@ -80,6 +80,10 @@ async function loginRole(context, baseUrl, persona, artifactDir, env) {
   await page.goto(`${baseUrl}/login`, { waitUntil: "domcontentloaded", timeout: 30000 });
   const form = page.locator('form[aria-label="安全測試登入"]');
   await form.waitFor({ state: "visible", timeout: 15000 });
+  const loginFontScale = await checkFontScale(page);
+  if (Object.values(loginFontScale).some((check) => check.horizontal_overflow || check.offscreen_control)) {
+    throw new Error(`${persona.key} 登入頁在 412px、130%/150% 字級出現溢出或不可見控制項`);
+  }
   await form.locator('input[type="email"]').fill(String(env[persona.emailEnv]));
   await form.locator('input[type="password"]').fill(String(env[persona.passwordEnv]));
   await form.locator('button[type="submit"]').click();
@@ -87,8 +91,7 @@ async function loginRole(context, baseUrl, persona, artifactDir, env) {
   await page.waitForTimeout(1200);
   const accessTokenPresent = await page.evaluate(() => Boolean(localStorage.getItem("care_wedo_supabase_access_token")));
   if (!accessTokenPresent) throw new Error(`${persona.key} 登入後沒有建立 Supabase session`);
-  await page.screenshot({ path: `${artifactDir}/${persona.key}-dashboard.png`, fullPage: true });
-  return page;
+  return { page, loginFontScale };
 }
 
 async function checkFontScale(page) {
@@ -152,6 +155,49 @@ async function dashboardContains(page, groupId, profileId, predicate) {
   return { result, matched: Boolean(predicate(result.body || {})) };
 }
 
+/**
+ * Return only booleans for the canonical fixture labels.  The actual labels
+ * are intentionally never copied into the report, so the result is safe to
+ * persist as a redacted staging artifact.
+ */
+export function checkCanonicalFixtureText(text, fixture = FIXTURE) {
+  const dashboardText = String(text || "");
+  const groupName = String(fixture.groupName || "").trim();
+  const profileName = String(fixture.profileName || "").trim();
+  return {
+    group_name_visible: Boolean(groupName) && dashboardText.includes(groupName),
+    profile_name_visible: Boolean(profileName) && dashboardText.includes(profileName),
+  };
+}
+
+/**
+ * Describe the required fresh-context protocol for a writer read-back.
+ * Keeping this as a pure helper makes the protocol regression-testable without
+ * launching Playwright or contacting staging.
+ */
+export function buildFreshContextReadback({ writer = "collaborator", reader = writer } = {}) {
+  const sameAccount = configured(writer) && writer === reader;
+  return {
+    writer,
+    reader,
+    close_writer_context: sameAccount,
+    relogin_reader: sameAccount,
+  };
+}
+
+async function readCanonicalFixtureText(page) {
+  await page.waitForFunction(
+    ({ groupName, profileName }) => {
+      const text = document.body?.innerText || "";
+      return text.includes(groupName) && text.includes(profileName);
+    },
+    { groupName: FIXTURE.groupName, profileName: FIXTURE.profileName },
+    { timeout: 15000 },
+  );
+  const text = await page.locator("body").innerText();
+  return checkCanonicalFixtureText(text, FIXTURE);
+}
+
 export async function runRoleE2E({ env = process.env, browserType = chromium } = {}) {
   const missing = requiredApplyEnv(env);
   if (missing.length) throw new Error(`staging fresh-context 缺少設定：${missing.join(", ")}`);
@@ -171,7 +217,15 @@ export async function runRoleE2E({ env = process.env, browserType = chromium } =
     personas: {},
     appointment: { first_status: null, retry_status: null, deduplicated: false, same_id: false },
     collaborator: { medication_status: null, medication_already_recorded: false, primary_readback_status: null, primary_readback_match: false },
-    family_notes: { save_status: null, readback_status: null, readback_match: false },
+    family_notes: {
+      save_status: null,
+      readback_status: null,
+      readback_match: false,
+      writer_context_closed: false,
+      fresh_context_login: false,
+      primary_readback_status: null,
+      primary_readback_match: false,
+    },
     audit: { readback_status: null, medication_taken: false, family_note_created: false },
     elder: { appointment_status: null, medication_status: null, management_controls_visible: null },
     artifact_dir: artifactDir,
@@ -181,9 +235,21 @@ export async function runRoleE2E({ env = process.env, browserType = chromium } =
     for (const persona of PERSONAS) {
       const context = await browser.newContext({ viewport: { width: 412, height: 915 }, deviceScaleFactor: 1 });
       contexts.set(persona.key, context);
-      pages.set(persona.key, await loginRole(context, baseUrl, persona, artifactDir, env));
-      const fontScale = await checkFontScale(pages.get(persona.key));
-      result.personas[persona.key] = { logged_in: true, fresh_context: true, font_scale: fontScale };
+      const loginResult = await loginRole(context, baseUrl, persona, artifactDir, env);
+      pages.set(persona.key, loginResult.page);
+      const fontScale = await checkFontScale(loginResult.page);
+      const canonicalFixture = await readCanonicalFixtureText(loginResult.page);
+      result.personas[persona.key] = {
+        logged_in: true,
+        fresh_context: true,
+        login_font_scale: loginResult.loginFontScale,
+        font_scale: fontScale,
+        canonical_fixture: canonicalFixture,
+      };
+      if (!canonicalFixture.group_name_visible || !canonicalFixture.profile_name_visible) {
+        throw new Error(`${persona.key} dashboard 未顯示 canonical fixture 中文家庭／長輩名稱`);
+      }
+      await loginResult.page.screenshot({ path: `${artifactDir}/${persona.key}-dashboard.png`, fullPage: true });
       if (Object.values(fontScale).some((check) => check.horizontal_overflow || check.offscreen_control)) {
         throw new Error(`${persona.key} 412px 在 130%/150% 字級出現溢出或不可見控制項`);
       }
@@ -266,9 +332,47 @@ export async function runRoleE2E({ env = process.env, browserType = chromium } =
     if (savedNotes.status !== 200 || savedNotes.body?.notes?.[0] !== FAMILY_NOTE) {
       throw new Error("collaborator 家庭提醒儲存未通過 read-back");
     }
+
+    // Close the writer's browser context, then log in again with the same
+    // collaborator account. This proves persistence beyond React/localStorage
+    // state and avoids calling the first page a "fresh" read-back.
+    const freshReadbackPlan = buildFreshContextReadback({ writer: "collaborator" });
+    if (!freshReadbackPlan.close_writer_context || !freshReadbackPlan.relogin_reader) {
+      throw new Error("家庭提醒 fresh-context protocol 未啟用");
+    }
+    const collaboratorContext = contexts.get("collaborator");
+    await collaboratorContext.close();
+    contexts.delete("collaborator");
+    pages.delete("collaborator");
+    result.family_notes.writer_context_closed = true;
+
+    const freshCollaboratorContext = await browser.newContext({ viewport: { width: 412, height: 915 }, deviceScaleFactor: 1 });
+    contexts.set("collaborator", freshCollaboratorContext);
+    const freshCollaboratorLogin = await loginRole(
+      freshCollaboratorContext,
+      baseUrl,
+      PERSONAS.find((persona) => persona.key === "collaborator"),
+      artifactDir,
+      env,
+    );
+    const freshCollaborator = freshCollaboratorLogin.page;
+    pages.set("collaborator", freshCollaborator);
+    result.family_notes.fresh_context_login = true;
+    const freshCollaboratorReadback = await dashboardContains(
+      freshCollaborator,
+      groupId,
+      profileId,
+      (body) => (body.family_notes || []).includes(FAMILY_NOTE),
+    );
+    result.family_notes.readback_status = freshCollaboratorReadback.result.status;
+    result.family_notes.readback_match = freshCollaboratorReadback.matched;
+    if (freshCollaboratorReadback.result.status !== 200 || !freshCollaboratorReadback.matched) {
+      throw new Error("collaborator fresh context 未讀回家庭提醒");
+    }
+
     const primaryReadback = await dashboardContains(primary, groupId, profileId, (body) => (body.family_notes || []).includes(FAMILY_NOTE));
-    result.family_notes.readback_status = primaryReadback.result.status;
-    result.family_notes.readback_match = primaryReadback.matched;
+    result.family_notes.primary_readback_status = primaryReadback.result.status;
+    result.family_notes.primary_readback_match = primaryReadback.matched;
     if (primaryReadback.result.status !== 200 || !primaryReadback.matched) {
       throw new Error("primary 重新讀取未看到 collaborator 家庭提醒");
     }
@@ -296,7 +400,7 @@ export async function runRoleE2E({ env = process.env, browserType = chromium } =
         .filter(isVisible)
         .map((element) => `${element.textContent || ""} ${element.getAttribute("aria-label") || ""} ${element.getAttribute("title") || ""}`)
         .join(" ");
-      return /編輯|新增照護對象|邀請協作者|刪除照護資料|付款/.test(controls);
+      return /編輯|新增照護對象|新增主要照護對象|手動新增提醒|邀請協作者|刪除照護資料|刪除提醒|付款|照護圈升級/.test(controls);
     });
     await elder.screenshot({ path: `${artifactDir}/elder-final.png`, fullPage: true });
     if (elderAppointment.status !== 403 || elderMedication.status !== 403 || result.elder.management_controls_visible) {

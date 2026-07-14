@@ -15,6 +15,7 @@ import {
   canCreateFamilyGroup,
   checkGroupMemberLimit,
   checkGroupRecipientLimit,
+  CARE_WEDO_PRICING,
   getGroupPlan,
   recordBillingGroupEvent,
   resolveGroupBillingEntitlement,
@@ -102,6 +103,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
           member_count: members.length,
           care_profile_count: profileCountByGroupId.get(group.id) || 0,
           billing_entitlement: billingEntitlement,
+          pricing: CARE_WEDO_PRICING,
           plan: {
             id: plan.id,
             name: plan.name,

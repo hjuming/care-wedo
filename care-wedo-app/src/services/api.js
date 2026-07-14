@@ -761,9 +761,35 @@ export async function deleteAppointment(id, { idToken }) {
   return response.json();
 }
 
-export async function createAppointment(payload, { idToken }) {
+export function buildAppointmentIdempotencyKey(payload = {}) {
+  const fingerprint = [
+    payload.profile_id,
+    payload.type,
+    payload.date,
+    payload.time,
+    payload.title,
+    payload.hospital,
+    payload.department,
+    payload.doctor,
+    payload.number,
+    payload.location,
+    payload.fasting_required,
+    payload.fasting_hours,
+    payload.notes,
+    payload.reminder_text,
+  ].map((value) => String(value ?? "").trim()).join("|");
+  let hash = 2166136261;
+  for (let index = 0; index < fingerprint.length; index += 1) {
+    hash ^= fingerprint.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `care-${(hash >>> 0).toString(36)}`;
+}
+
+export async function createAppointment(payload, { idToken } = {}) {
   const headers = { "Content-Type": "application/json" };
   if (idToken) headers.Authorization = `Bearer ${idToken}`;
+  headers["Idempotency-Key"] = buildAppointmentIdempotencyKey(payload);
 
   const response = await fetch(`${API_BASE}/appointments`, {
     method: "POST",

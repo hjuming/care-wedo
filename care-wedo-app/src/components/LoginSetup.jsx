@@ -1,17 +1,32 @@
 import { useEffect, useRef, useState } from "react";
+import aiAvatar from "../assets/ai-avatar.png";
 
 export default function LoginSetup({ identity, onSetupComplete }) {
   const [step, setStep] = useState("check"); // check, setup, success, error
   const [retryToken, setRetryToken] = useState(0);
   const [familyName, setFamilyName] = useState("");
-  const [careName, setCareName] = useState("家中長輩");
+  const identityProfile = identity?.profile || {};
+  const identityDisplayName = String(
+    identityProfile.displayName
+      || identityProfile.display_name
+      || identityProfile.name
+      || identityProfile.email
+      || "照護對象",
+  ).trim() || "照護對象";
+  const identityPictureUrl = identityProfile.pictureUrl || identityProfile.picture_url || identityProfile.avatar_url || null;
+  const [careName, setCareName] = useState(identityDisplayName);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const onSetupCompleteRef = useRef(onSetupComplete);
+  const careNameEditedRef = useRef(false);
 
   useEffect(() => {
     onSetupCompleteRef.current = onSetupComplete;
   }, [onSetupComplete]);
+
+  useEffect(() => {
+    if (!careNameEditedRef.current) setCareName(identityDisplayName);
+  }, [identityDisplayName]);
 
   useEffect(() => {
     let isMounted = true;
@@ -154,13 +169,24 @@ export default function LoginSetup({ identity, onSetupComplete }) {
         <h2>先設定主要照護對象</h2>
         <form onSubmit={handleSetup} className="setup-form">
           {error && <p className="error-msg">{error}</p>}
+
+          <div className="setup-identity-preview">
+            <img src={identityPictureUrl || aiAvatar} alt={`${identityDisplayName} 頭像`} />
+            <div>
+              <strong>{identityDisplayName}</strong>
+              <span>預設使用目前登入者的名稱與頭像，可再修改照護稱呼。</span>
+            </div>
+          </div>
           
           <label>
             主要照護對象稱呼 *
             <input
               type="text"
               value={careName}
-              onChange={(e) => setCareName(e.target.value)}
+              onChange={(e) => {
+                careNameEditedRef.current = true;
+                setCareName(e.target.value);
+              }}
               placeholder="例：家中長輩、主要照護對象"
               required
             />

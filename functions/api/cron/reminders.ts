@@ -3,7 +3,7 @@ import { logError, logEvent } from "../../_shared/logger";
 import { sendProductionAlert } from "../../_shared/alerts";
 import { recordLinePushLog } from "../../_shared/line_push_logs";
 
-const DEFAULT_RECIPIENT = "親愛的家人";
+const DEFAULT_RECIPIENT = "照護對象";
 const WEEKDAY_LABELS = ["日", "一", "二", "三", "四", "五", "六"];
 const BRAND_SIGNATURE = "Care WEDO\n陪你照顧最重要的人\nhttps://care.wedopr.com/app/open";
 

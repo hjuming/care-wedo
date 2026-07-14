@@ -65,7 +65,7 @@ const medicalDocParsePrompt = `你是 Care WEDO 的 LINE 健康小管家。
 
 提醒文字語氣：
 - 像子女提醒自家長輩，不像醫院公告。
-- 預設稱謂用「親愛的家人」。使用者之後可在後台改稱謂。
+- 預設稱謂用「照護對象」。使用者之後可在後台改稱謂。
 - reminder_text 每則最多 45 個中文字。
 - 用短句。不要說教，不要嚇人。
 - 少用專業醫學名詞。若一定要保留，請用白話補一句。
@@ -86,7 +86,7 @@ const medicalDocParsePrompt = `你是 Care WEDO 的 LINE 健康小管家。
       "fasting_required": true,
       "fasting_hours": 8,
       "notes": "重要補充，例如先量血壓、記得帶健保卡",
-      "reminder_text": "親愛的家人，明天要去醫院，記得帶健保卡。"
+      "reminder_text": "照護對象，明天要去醫院，記得帶健保卡。"
     }
   ],
   "medications": [
@@ -96,7 +96,7 @@ const medicalDocParsePrompt = `你是 Care WEDO 的 LINE 健康小管家。
       "frequency": "頻率",
       "purpose": "用途",
       "warnings": "注意事項，請改成白話",
-      "reminder_text": "親愛的家人，這顆藥照單子時間吃就好。"
+      "reminder_text": "照護對象，這顆藥照單子時間吃就好。"
     }
   ]
 }

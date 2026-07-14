@@ -275,6 +275,17 @@ test("Version A pricing is visible without wiring live payments", () => {
   assert.match(staticPricing, /document\.querySelectorAll\("\[data-pricing-production\]"\)/);
 });
 
+test("Group settings consumes the backend pricing contract instead of duplicating add-on amounts", () => {
+  const groupsApi = readProjectFile("functions/api/groups.ts");
+  const component = readProjectFile("care-wedo-app/src/components/GroupSettings.jsx");
+
+  assert.match(groupsApi, /pricing:\s*CARE_WEDO_PRICING/);
+  assert.match(component, /resolveGroupPricing/);
+  assert.match(component, /recipient_monthly/);
+  assert.match(component, /collaborator_monthly/);
+  assert.doesNotMatch(component, /const GROUP_PRICING\s*=/);
+});
+
 test("OCR quota limit opens a plan upgrade prompt instead of a raw error", () => {
   const app = readProjectFile("care-wedo-app/src/App.jsx");
   const css = readProjectFile("care-wedo-app/src/index.css");
@@ -306,7 +317,7 @@ test("Family assistance controls do not appear outside centralized settings", ()
   assert.match(source, /協作者管理中心/);
 });
 
-test("Manual reminders derive title from type while preserving department", () => {
+test("Manual reminders derive a readable department and type title", () => {
   const app = readProjectFile("care-wedo-app/src/App.jsx");
   const appointmentView = readProjectFile("care-wedo-app/src/features/appointments/AppointmentView.jsx");
   const schema = readProjectFile("supabase/schema.sql");
@@ -329,11 +340,17 @@ test("Manual reminders derive title from type while preserving department", () =
   assert.match(shared, /Could not find\.\*title/);
   assert.match(shared, /department: legacyUpdates\.department \|\| title/);
   assert.doesNotMatch(manualModal, /<label>提醒名稱<\/label>/);
-  assert.match(manualModal, /title: typeLabel\(formData\.type\)/);
+  assert.match(manualModal, /title: buildAppointmentTitle\(formData\.department, formData\.type\)/);
   assert.match(manualModal, /department: formData\.department,/);
   assert.match(saveHandler, /createAppointment\(\{ \.\.\.payload, profile_id: activeProfileId \}/);
   assert.match(app, /async function handleAppointmentUpdateSave/);
   assert.match(app, /async function handleAppointmentDelete/);
+});
+
+test("Appointment creation sends a stable idempotency key for retry-safe writes", () => {
+  const api = readProjectFile("care-wedo-app/src/services/api.js");
+  assert.match(api, /export function buildAppointmentIdempotencyKey\(payload(?: = \{\})?\)/);
+  assert.match(api, /headers\["Idempotency-Key"\] = buildAppointmentIdempotencyKey\(payload\)/);
 });
 
 test("Appointment cards expose edit and soft-delete controls with scoped APIs", () => {
@@ -427,6 +444,25 @@ test("Logged-in dashboard exposes a clear care context header", () => {
   assert.match(app, /登入者/);
   assert.match(css, /\.care-context-header/);
   assert.match(css, /\.today-main-actions/);
+});
+
+test("Elder read-only mode does not expose plan upgrade or editable settings copy", () => {
+  const app = readProjectFile("care-wedo-app/src/App.jsx");
+  const footer = app.slice(app.indexOf("<div className=\"side-rail-footer\">"), app.indexOf("</div>", app.indexOf("<div className=\"side-rail-footer\">") + 1));
+  const settings = app.slice(app.indexOf("function SettingsView"), app.indexOf("function CareProfileEditor"));
+
+  assert.match(footer, /canManageCare/);
+  assert.doesNotMatch(settings, /長輩頁面只保留拍照新增、查看提醒與完成確認/);
+  assert.match(settings, /長輩頁面只保留今天、行程與用藥查看/);
+});
+
+test("Family notes expose an explicit retry action after a failed save", () => {
+  const app = readProjectFile("care-wedo-app/src/App.jsx");
+  const editor = app.slice(app.indexOf("function FamilyNotesEditor"), app.indexOf("function FamilyNotesModal"));
+
+  assert.match(editor, /儲存失敗，請再試一次/);
+  assert.match(editor, /重試儲存/);
+  assert.match(editor, /onClick=\{handleSave\}/);
 });
 
 test("Records page defaults to future arrangements and loads history on demand", () => {
@@ -627,7 +663,7 @@ test("Paid care actions show a beta fee confirmation before continuing", () => {
   assert.match(component, /buildPaidActionPreview/);
   assert.match(component, /第一位主要照護對象測試期減免/);
   assert.match(component, /本次需要前往綠界安全付款/);
-  assert.match(component, /requiresCheckout = action\.preview\.delta > 0/);
+  assert.match(component, /requiresCheckout = pricingUnavailable \|\| action\.preview\.delta > 0/);
   assert.match(component, /這個動作會讓/);
   assert.match(component, /若協作者完成加入/);
   assert.match(component, /前往安全付款/);

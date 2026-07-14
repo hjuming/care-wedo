@@ -3,7 +3,7 @@ import { logError, logEvent } from "../../_shared/logger";
 import { sendProductionAlert } from "../../_shared/alerts";
 import { recordLinePushLog } from "../../_shared/line_push_logs";
 
-const DEFAULT_RECIPIENT = "親愛的家人";
+const DEFAULT_RECIPIENT = "照護對象";
 const BRAND_SIGNATURE = "Care WEDO\n陪你照顧最重要的人\nhttps://care.wedopr.com/app/open";
 const TAIPEI_OFFSET_MS = 8 * 60 * 60 * 1000;
 const DELAYED_EVENING_GRACE_HOUR = 6;

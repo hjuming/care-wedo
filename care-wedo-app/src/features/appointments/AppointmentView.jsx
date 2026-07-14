@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { buildGoogleCalendarEventUrl } from "../../services/api";
-import { formatDateLabel, isDateTodayOrFuture, normalizeDateInput, todayInTaipei, typeIcon, typeLabel } from "../shared/careFormatters";
+import { buildAppointmentTitle, formatDateLabel, isDateTodayOrFuture, normalizeDateInput, todayInTaipei, typeIcon, typeLabel } from "../shared/careFormatters";
 
 const REMINDER_TYPE_OPTIONS = [
   { value: "clinic_visit", label: "門診" },
@@ -100,7 +100,7 @@ function buildReminderPayload(formData) {
   return {
     ...formData,
     date: normalizeDateInput(formData.date),
-    title: typeLabel(formData.type),
+    title: buildAppointmentTitle(formData.department, formData.type),
     department: formData.department,
     fasting_hours: formData.fasting_required ? formData.fasting_hours : null,
   };

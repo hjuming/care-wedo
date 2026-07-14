@@ -17,18 +17,46 @@ const GROUP_LIMITS = {
   maxPaidCollaborators: 5,
   maxMembersIncludingOwner: 6,
 };
-const GROUP_PRICING = {
-  recipientMonthly: 30,
-  collaboratorMonthly: 10,
-  includedCareProfilesDuringBeta: 1,
-};
 
-function calculateGroupMonthlyEstimate({ careProfileCount = 1, collaboratorCount = 0 } = {}) {
+// Pricing is returned by the backend contract on both dashboard and groups
+// payloads. Keep camelCase aliases only for older payloads during rollout;
+// do not duplicate pricing amounts in the frontend bundle.
+function resolveGroupPricing(group) {
+  const source = group?.pricing
+    || group?.billing_entitlement?.pricing
+    || group?.billing_entitlement?.pricing_contract
+    || group || {};
+  const recipientMonthly = Number(source.recipient_monthly ?? source.recipientMonthly);
+  const collaboratorMonthly = Number(source.collaborator_monthly ?? source.collaboratorMonthly);
+  const includedCareProfilesDuringBeta = Number(
+    source.included_care_profiles_during_beta ?? source.includedCareProfilesDuringBeta,
+  );
+
+  return {
+    recipientMonthly: Number.isFinite(recipientMonthly) ? recipientMonthly : null,
+    collaboratorMonthly: Number.isFinite(collaboratorMonthly) ? collaboratorMonthly : null,
+    includedCareProfilesDuringBeta: Number.isFinite(includedCareProfilesDuringBeta)
+      ? includedCareProfilesDuringBeta
+      : null,
+  };
+}
+
+function calculateGroupMonthlyEstimate({ careProfileCount = 1, collaboratorCount = 0, pricing } = {}) {
   const recipientCount = Math.max(Number(careProfileCount) || 0, 1);
   const paidCollaboratorCount = Math.max(Number(collaboratorCount) || 0, 0);
-  const chargeableRecipientCount = Math.max(recipientCount - GROUP_PRICING.includedCareProfilesDuringBeta, 0);
-  const recipientSubtotal = chargeableRecipientCount * GROUP_PRICING.recipientMonthly;
-  const collaboratorSubtotal = paidCollaboratorCount * GROUP_PRICING.collaboratorMonthly;
+  const pricingAvailable = pricing
+    && Number.isFinite(pricing.recipientMonthly)
+    && Number.isFinite(pricing.collaboratorMonthly)
+    && Number.isFinite(pricing.includedCareProfilesDuringBeta);
+  const chargeableRecipientCount = pricingAvailable
+    ? Math.max(recipientCount - pricing.includedCareProfilesDuringBeta, 0)
+    : null;
+  const recipientSubtotal = pricingAvailable
+    ? chargeableRecipientCount * pricing.recipientMonthly
+    : null;
+  const collaboratorSubtotal = pricingAvailable
+    ? paidCollaboratorCount * pricing.collaboratorMonthly
+    : null;
 
   return {
     recipientCount,
@@ -36,7 +64,11 @@ function calculateGroupMonthlyEstimate({ careProfileCount = 1, collaboratorCount
     paidCollaboratorCount,
     recipientSubtotal,
     collaboratorSubtotal,
-    total: recipientSubtotal + collaboratorSubtotal,
+    recipientMonthly: pricingAvailable ? pricing.recipientMonthly : null,
+    collaboratorMonthly: pricingAvailable ? pricing.collaboratorMonthly : null,
+    includedCareProfilesDuringBeta: pricingAvailable ? pricing.includedCareProfilesDuringBeta : null,
+    total: pricingAvailable ? recipientSubtotal + collaboratorSubtotal : null,
+    pricingAvailable: Boolean(pricingAvailable),
   };
 }
 
@@ -82,13 +114,18 @@ function getBillingLimitConfig(group) {
 }
 
 function buildPaidActionPreview({ actionType, group, careProfileCount, collaboratorCount }) {
-  const current = calculateGroupMonthlyEstimate({ careProfileCount, collaboratorCount });
+  const pricing = resolveGroupPricing(group);
+  const current = calculateGroupMonthlyEstimate({ careProfileCount, collaboratorCount, pricing });
   const billingLimits = getBillingLimitConfig(group);
   const next = calculateGroupMonthlyEstimate({
     careProfileCount: actionType === "create_profile" ? careProfileCount + 1 : careProfileCount,
     collaboratorCount: actionType === "invite_collaborator" ? collaboratorCount + 1 : collaboratorCount,
+    pricing,
   });
   const coveredCurrentTotal = billingLimits.paidMonthlyAmount ?? billingLimits.estimatedMonthlyAmount ?? current.total;
+  const delta = Number.isFinite(next.total) && Number.isFinite(coveredCurrentTotal)
+    ? Math.max(next.total - coveredCurrentTotal, 0)
+    : null;
   return {
     actionType,
     groupName: group?.name || "家庭群組",
@@ -97,19 +134,25 @@ function buildPaidActionPreview({ actionType, group, careProfileCount, collabora
       total: coveredCurrentTotal,
     },
     next,
-    delta: Math.max(next.total - coveredCurrentTotal, 0),
+    delta,
   };
 }
 
 function buildGroupBillingSummary({ group, careProfileCount, collaboratorCount }) {
   const billingConfig = getBillingLimitConfig(group);
-  const fallback = calculateGroupMonthlyEstimate({ careProfileCount, collaboratorCount });
+  const fallback = calculateGroupMonthlyEstimate({
+    careProfileCount,
+    collaboratorCount,
+    pricing: resolveGroupPricing(group),
+  });
   const estimatedMonthlyAmount = billingConfig.estimatedMonthlyAmount ?? fallback.total;
   const paidMonthlyAmount = billingConfig.paidMonthlyAmount ?? 0;
   return {
     estimatedMonthlyAmount,
     paidMonthlyAmount,
-    amountDue: Math.max(estimatedMonthlyAmount - paidMonthlyAmount, 0),
+    amountDue: Number.isFinite(estimatedMonthlyAmount)
+      ? Math.max(estimatedMonthlyAmount - paidMonthlyAmount, 0)
+      : null,
     subscriptionStatus: billingConfig.subscriptionStatus,
   };
 }
@@ -148,11 +191,19 @@ function PaidActionConfirmationModal({ action, onCancel, onConfirm, submitting =
 
   const isProfileAction = action.preview.actionType === "create_profile";
   const title = isProfileAction ? "新增主要照護對象" : "邀請共同協作者";
-  const deltaLabel = action.preview.delta > 0 ? `+$${action.preview.delta}/月` : "$0";
-  const requiresCheckout = action.preview.delta > 0;
-  const feeChangeCopy = isProfileAction
-    ? `這個動作會讓「${action.preview.groupName}」月費從 $${action.preview.current.total} 變成 $${action.preview.next.total}。`
-    : `若協作者完成加入，「${action.preview.groupName}」月費會從 $${action.preview.current.total} 變成 $${action.preview.next.total}。`;
+  const pricingUnavailable = action.preview.delta === null;
+  const deltaLabel = pricingUnavailable
+    ? "依付款頁最新計價"
+    : action.preview.delta > 0 ? `+$${action.preview.delta}/月` : "$0";
+  const requiresCheckout = pricingUnavailable || action.preview.delta > 0;
+  const betaDiscountCopy = action.preview.next.pricingAvailable
+    ? `第一位主要照護對象測試期減免 $${action.preview.next.recipientMonthly}/月。`
+    : "第一位主要照護對象享有測試期減免。";
+  const feeChangeCopy = pricingUnavailable
+    ? `「${action.preview.groupName}」的最新月費會在安全付款頁再次確認。`
+    : isProfileAction
+      ? `這個動作會讓「${action.preview.groupName}」月費從 $${action.preview.current.total} 變成 $${action.preview.next.total}。`
+      : `若協作者完成加入，「${action.preview.groupName}」月費會從 $${action.preview.current.total} 變成 $${action.preview.next.total}。`;
 
   return (
     <div className="modal-overlay paid-action-modal-overlay" onClick={onCancel}>
@@ -166,33 +217,37 @@ function PaidActionConfirmationModal({ action, onCancel, onConfirm, submitting =
         </div>
         <div className="modal-body">
           <p className="helper-copy">
-            第一位主要照護對象測試期減免 $30/月。{requiresCheckout ? "本次需要前往綠界安全付款。" : "本次仍在減免額度內，不需付款。"}{feeChangeCopy}
+            {betaDiscountCopy}{requiresCheckout ? "本次需要前往綠界安全付款。" : "本次仍在減免額度內，不需付款。"}{feeChangeCopy}
           </p>
           <div className="paid-action-total-row">
             <span>本次月費影響</span>
             <strong>{deltaLabel}</strong>
           </div>
-          <div className="paid-action-breakdown" aria-label="增加後月費明細">
-            <div>
-              <span>主要照護對象</span>
-              <strong>${GROUP_PRICING.recipientMonthly} x {action.preview.next.chargeableRecipientCount} 位</strong>
-              <em>${action.preview.next.recipientSubtotal}</em>
+          {action.preview.next.pricingAvailable ? (
+            <div className="paid-action-breakdown" aria-label="增加後月費明細">
+              <div>
+                <span>主要照護對象</span>
+                <strong>${action.preview.next.recipientMonthly ?? "—"} x {action.preview.next.chargeableRecipientCount} 位</strong>
+                <em>${action.preview.next.recipientSubtotal}</em>
+              </div>
+              {action.preview.next.recipientCount > 0 && (
+                <div>
+                  <span>測試期減免</span>
+                  <strong>首位主要照護對象</strong>
+                  <em>$0</em>
+                </div>
+              )}
+              {action.preview.next.paidCollaboratorCount > 0 && (
+                <div>
+                  <span>共同協作者</span>
+                  <strong>${action.preview.next.collaboratorMonthly ?? "—"} x {action.preview.next.paidCollaboratorCount} 位</strong>
+                  <em>${action.preview.next.collaboratorSubtotal}</em>
+                </div>
+              )}
             </div>
-            {action.preview.next.recipientCount > 0 && (
-              <div>
-                <span>測試期減免</span>
-                <strong>首位主要照護對象</strong>
-                <em>$0</em>
-              </div>
-            )}
-            {action.preview.next.paidCollaboratorCount > 0 && (
-              <div>
-                <span>共同協作者</span>
-                <strong>${GROUP_PRICING.collaboratorMonthly} x {action.preview.next.paidCollaboratorCount} 位</strong>
-                <em>${action.preview.next.collaboratorSubtotal}</em>
-              </div>
-            )}
-          </div>
+          ) : (
+            <p className="quota-note">目前版本未帶回月費明細，付款頁會以後端最新計價為準。</p>
+          )}
           <p className="quota-note">
             主帳號不列入協作者費用。付款頁由綠界提供，Care WEDO 不保存信用卡資料。
           </p>

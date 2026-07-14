@@ -18,6 +18,10 @@ import { pathToFileURL } from "node:url";
 export const STAGING_TARGET = Object.freeze({
   projectRef: "minnckpmjwdfvltagbru",
   host: "care-wedo-staging.pages.dev",
+  acceptedHosts: Object.freeze([
+    "care-wedo-staging.pages.dev",
+    "reviewer-e2e.care-wedo-staging.pages.dev",
+  ]),
 });
 
 export const FIXTURE = Object.freeze({
@@ -66,8 +70,8 @@ export function validateTarget({ supabaseUrl = "", baseUrl = "", projectRef = ST
   if (actualSupabaseHost !== expectedSupabaseHost) {
     errors.push(`SUPABASE_URL 必須指向 ${expectedSupabaseHost}`);
   }
-  if (actualBaseHost !== STAGING_TARGET.host) {
-    errors.push(`staging base URL 必須使用 ${STAGING_TARGET.host}`);
+  if (!STAGING_TARGET.acceptedHosts.includes(actualBaseHost)) {
+    errors.push(`staging base URL 必須使用 ${STAGING_TARGET.acceptedHosts.join(" 或 ")}`);
   }
 
   return { ok: errors.length === 0, errors, expectedSupabaseHost, actualSupabaseHost, actualBaseHost };
@@ -250,12 +254,11 @@ async function ensureAppointment(db, groupId, profileId, primaryUserId) {
   const marker = encodeURIComponent(FIXTURE.key);
   const existing = await db.get(`appointments?group_id=eq.${groupId}&profile_id=eq.${profileId}&notes=eq.${marker}&status=neq.deleted&select=id,group_id,profile_id,title,date,time&limit=1`);
   if (existing[0]?.id) return { ...existing[0], created: false };
-  const created = await db.post("appointments", {
+  const payload = {
     user_id: primaryUserId,
     group_id: groupId,
     profile_id: profileId,
     created_by_user_id: primaryUserId,
-    idempotency_key: `${FIXTURE.key}-appointment`,
     type: "clinic_visit",
     title: FIXTURE.appointmentTitle,
     date: FIXTURE.appointmentDate,
@@ -264,7 +267,17 @@ async function ensureAppointment(db, groupId, profileId, primaryUserId) {
     department: FIXTURE.department,
     notes: FIXTURE.key,
     status: "upcoming",
-  });
+  };
+  let created;
+  try {
+    created = await db.post("appointments", { ...payload, idempotency_key: `${FIXTURE.key}-appointment` });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error || "");
+    if (!/idempotency_key|schema cache/i.test(message)) throw error;
+    // Phase 0 fixture can still be prepared before Phase 61 is applied;
+    // the API will keep using its fingerprint fallback until the index exists.
+    created = await db.post("appointments", payload);
+  }
   return { ...created[0], created: true };
 }
 

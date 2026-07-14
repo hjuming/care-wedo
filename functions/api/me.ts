@@ -57,7 +57,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
 export const onRequestPost: PagesFunction<Env> = async (context) => {
   const { request, env } = context;
   try {
-    const { userId } = await getIdentity(context);
+    const { userId, identity } = await getIdentity(context);
     const body = await readJsonBody<{
       action?: string;
       family_name?: string;
@@ -66,11 +66,17 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
 
     if (body.action === "init_family") {
       // Create the primary family group and default care profile
-      const familyName = body.family_name || `${body.primary_care_name || "主要照護對象"} 的家庭`;
-      const primaryCareName = body.primary_care_name || "親愛的家人";
+      const identityEmail = identity.provider === "supabase" ? identity.email : "";
+      const identityName = String(identity.name || identityEmail || "").trim() || "照護對象";
+      const primaryCareName = String(body.primary_care_name || identityName).trim() || identityName;
+      const requestedFamilyName = String(body.family_name || "").trim();
+      const familyName = requestedFamilyName || `${primaryCareName} 的家庭`;
 
-      const group = await createGroup(env, userId, familyName);
-      const profile = await ensureGroupDefaultProfile(env, group.id, userId, primaryCareName);
+      const group = await createGroup(env, userId, familyName, {
+        displayName: primaryCareName,
+        avatarUrl: identity.pictureUrl || null,
+      });
+      const profile = await ensureGroupDefaultProfile(env, group.id, userId, primaryCareName, identity.pictureUrl || null);
 
       return Response.json({
         success: true,

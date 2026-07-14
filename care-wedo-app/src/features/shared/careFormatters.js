@@ -23,6 +23,14 @@ export function typeLabel(type) {
   return "回診";
 }
 
+export function buildAppointmentTitle(department, type) {
+  const departmentText = String(department || "").trim();
+  const typeText = typeLabel(type);
+  if (!departmentText) return typeText;
+  if (!typeText || departmentText === typeText) return departmentText;
+  return `${departmentText}・${typeText}`;
+}
+
 export function typeIcon(type) {
   if (type === "family_note") return "家";
   if (type === "inspection") return "驗";

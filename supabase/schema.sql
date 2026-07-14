@@ -125,7 +125,7 @@ create table if not exists public.care_profiles (
   id bigserial primary key,
   group_id bigint references public.family_groups(id) on delete cascade,
   primary_user_id bigint references public.users(id) on delete set null,
-  display_name text not null default '親愛的家人',
+  display_name text not null default '照護對象',
   relationship text not null default 'family',
   avatar_url text,
   birth_year integer,

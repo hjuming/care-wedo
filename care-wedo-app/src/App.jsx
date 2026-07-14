@@ -7,7 +7,7 @@ import OcrResult from "./components/OcrResult";
 import { CalendarView, ManualReminderModal } from "./features/appointments/AppointmentView";
 import MedicationView from "./features/medications/MedicationView";
 import { CareDocumentUploadModal, ScanProgress, UploadGuide } from "./features/ocr/OcrWorkflow";
-import { formatDateLabel, isDateTodayOrFuture, normalizeDateInput, todayInTaipei, typeIcon, typeLabel } from "./features/shared/careFormatters";
+import { buildAppointmentTitle, formatDateLabel, isDateTodayOrFuture, normalizeDateInput, todayInTaipei, typeIcon, typeLabel } from "./features/shared/careFormatters";
 import { patientData, medicines, timeline as initialTimeline } from "./data/patient";
 import { confirmOcrDocument, createAppointment, deleteAppointment, deleteCareDocument, downloadAppointmentCalendarFile, downloadLocalAppointmentCalendarFile, fetchDashboard, fetchDocumentDetail, fetchDocumentFileUrl, fetchSessionIdentity, joinGroup, markMedicationSlotStatus, ocrAnalyze, ocrAnalyzeText, patchAppointment, patchMedication, updateActiveProfilePreference, updateFamilyNotes, updateProfile, updateProfileOrder, uploadCareDocument } from "./services/api";
 import { buildExternalAppUrl, buildLiffEntryUrl, buildLineAppLiffFallbackUrl, initLineIdentity, isLineInAppBrowser, loginWithLine, logoutLineIdentity, openDashboardInExternalBrowserAfterLineCallback, openUrlInExternalBrowser, resetCareWedoSessionAndReturnHome, shouldOpenLiffEntryUrl } from "./services/liff";
@@ -2208,7 +2208,7 @@ function DashboardApp() {
     const updates = {
       ...payload,
       date: normalizeDateInput(payload.date),
-      title: typeLabel(payload.type),
+      title: buildAppointmentTitle(payload.department, payload.type),
       department: payload.department,
       fasting_hours: payload.fasting_required ? payload.fasting_hours : null,
     };
@@ -2429,9 +2429,11 @@ function DashboardApp() {
 
           {identity.status === "authenticated" && (
             <div className="side-rail-footer">
-              <button type="button" className="side-footer-action" onClick={() => setShowPlanDetails(true)}>
-                照護圈升級
-              </button>
+              {canManageCare && (
+                <button type="button" className="side-footer-action" onClick={() => setShowPlanDetails(true)}>
+                  照護圈升級
+                </button>
+              )}
               <a className="side-footer-action" href="https://care.wedopr.com/">
                 Care WEDO
               </a>
@@ -3868,7 +3870,7 @@ function SettingsView({
       <section className="summary-panel wide-panel collaborator-control-panel">
         <p className="panel-eyebrow">協作者管理中心</p>
         <h3>設定與資料整理都集中在這裡。</h3>
-        <p>長輩頁面只保留拍照新增、查看提醒與完成確認；編輯資料、手動新增、家人提醒由照護圈協作者在這裡處理。</p>
+        <p>長輩頁面只保留今天、行程與用藥查看；編輯資料、手動新增、家人提醒由照護圈協作者在這裡處理。</p>
         <div className="management-action-grid">
           <button type="button" className="primary-action" onClick={onEditProfile}>編輯照護對象</button>
           <button type="button" className="secondary-action" onClick={onAddReminder}>手動新增提醒</button>
@@ -4028,7 +4030,7 @@ function FamilyNotesEditor({ notes, onChange }) {
           新增
         </button>
         <button type="button" className="inline-action" onClick={handleSave} disabled={saving}>
-          {saving ? "儲存中..." : saved ? "已儲存" : "儲存"}
+          {saving ? "儲存中..." : error ? "重試儲存" : saved ? "已儲存" : "儲存"}
         </button>
       </div>
     </div>

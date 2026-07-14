@@ -461,6 +461,7 @@ export async function createCareProfile(
     groupId: number;
     primaryUserId?: number | null;
     displayName: string;
+    avatarUrl?: string | null;
     relationship?: string;
     isDefault?: boolean;
   },
@@ -472,6 +473,7 @@ export async function createCareProfile(
       group_id: input.groupId,
       primary_user_id: input.primaryUserId || null,
       display_name: input.displayName,
+      avatar_url: input.avatarUrl || null,
       relationship: input.relationship || "family",
       is_default: Boolean(input.isDefault),
     }),
@@ -485,7 +487,8 @@ export async function ensureGroupDefaultProfile(
   env: Env,
   groupId: number,
   userId: number,
-  displayName = "親愛的家人",
+  displayName?: string,
+  avatarUrl?: string | null,
 ): Promise<CareProfileRow> {
   let existing: CareProfileRow[];
   try {
@@ -504,10 +507,23 @@ export async function ensureGroupDefaultProfile(
 
   if (existing[0]) return existing[0];
 
+  let resolvedDisplayName = displayName?.trim() || "";
+  let resolvedAvatarUrl = avatarUrl || null;
+  if (!resolvedDisplayName || !resolvedAvatarUrl) {
+    const users = await supabaseFetch<Array<{ name: string | null; picture_url: string | null }>>(
+      env,
+      `users?id=eq.${userId}&select=name,picture_url&limit=1`,
+    );
+    const user = users[0];
+    if (!resolvedDisplayName) resolvedDisplayName = user?.name?.trim() || "";
+    if (!resolvedAvatarUrl) resolvedAvatarUrl = user?.picture_url || null;
+  }
+
   return createCareProfile(env, {
     groupId,
     primaryUserId: userId,
-    displayName,
+    displayName: resolvedDisplayName || "照護對象",
+    avatarUrl: resolvedAvatarUrl,
     relationship: "family",
     isDefault: true,
   });
@@ -525,7 +541,12 @@ export async function resolveDefaultCareContext(env: Env, userId: number): Promi
   return { groupId: primaryGroupId, profileId: profile.id, profileName: profile.display_name };
 }
 
-export async function createGroup(env: Env, userId: number, name: string): Promise<GroupRow> {
+export async function createGroup(
+  env: Env,
+  userId: number,
+  name: string,
+  defaultProfile: { displayName?: string; avatarUrl?: string | null } = {},
+): Promise<GroupRow> {
   // Generate a random 6-character invite code
   const inviteCode = Math.random().toString(36).substring(2, 8).toUpperCase();
 
@@ -556,7 +577,7 @@ export async function createGroup(env: Env, userId: number, name: string): Promi
     }),
   });
 
-  await ensureGroupDefaultProfile(env, group.id, userId);
+  await ensureGroupDefaultProfile(env, group.id, userId, defaultProfile.displayName, defaultProfile.avatarUrl);
 
   return group;
 }
