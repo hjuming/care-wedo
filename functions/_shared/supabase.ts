@@ -283,15 +283,27 @@ export async function getOrCreateDefaultUser(
     return existing[0].id;
   }
 
-  const created = await supabaseFetch<Array<{ id: number }>>(env, "users?select=id", {
-    method: "POST",
-    headers: { Prefer: "return=representation" },
-    body: JSON.stringify({
-      line_user_id: targetLineId,
-      name: targetName,
-      picture_url: targetPictureUrl,
-    }),
-  });
+  let created: Array<{ id: number }>;
+  try {
+    created = await supabaseFetch<Array<{ id: number }>>(env, "users?select=id", {
+      method: "POST",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify({
+        line_user_id: targetLineId,
+        name: targetName,
+        picture_url: targetPictureUrl,
+      }),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (!/Supabase request failed \(409\)/.test(message)) throw error;
+    const raced = await supabaseFetch<Array<{ id: number }>>(
+      env,
+      `users?line_user_id=eq.${encodeURIComponent(targetLineId)}&select=id&limit=1`,
+    );
+    if (raced[0]?.id) return raced[0].id;
+    throw error;
+  }
 
   if (!created || created.length === 0) throw new Error("無法建立使用者");
   return created[0].id;
@@ -328,18 +340,30 @@ export async function getOrCreateUserFromIdentity(env: Env, identity: VerifiedCa
     return existing[0].id;
   }
 
-  const created = await supabaseFetch<Array<{ id: number }>>(env, "users?select=id", {
-    method: "POST",
-    headers: { Prefer: "return=representation" },
-    body: JSON.stringify({
-      auth_user_id: identity.authUserId,
-      auth_provider: identity.authProvider,
-      email: identity.email || null,
-      name: identity.name || identity.email || "Google 帳號",
-      picture_url: identity.pictureUrl || null,
-      plan: "free",
-    }),
-  });
+  let created: Array<{ id: number }>;
+  try {
+    created = await supabaseFetch<Array<{ id: number }>>(env, "users?select=id", {
+      method: "POST",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify({
+        auth_user_id: identity.authUserId,
+        auth_provider: identity.authProvider,
+        email: identity.email || null,
+        name: identity.name || identity.email || "Google 帳號",
+        picture_url: identity.pictureUrl || null,
+        plan: "free",
+      }),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (!/Supabase request failed \(409\)/.test(message)) throw error;
+    const raced = await supabaseFetch<Array<{ id: number }>>(
+      env,
+      `users?auth_user_id=eq.${encodeURIComponent(identity.authUserId)}&select=id&limit=1`,
+    );
+    if (raced[0]?.id) return raced[0].id;
+    throw error;
+  }
 
   if (!created || created.length === 0) throw new Error("無法建立使用者");
   return created[0].id;
@@ -413,6 +437,53 @@ export async function getUserMemberships(env: Env, userId: number): Promise<User
   );
 }
 
+async function repairLegacyDefaultProfile(
+  env: Env,
+  userId: number,
+  profiles: CareProfileRow[],
+): Promise<CareProfileRow[]> {
+  const candidates = profiles.filter((profile) => (
+    profile.primary_user_id === userId
+      && profile.is_default
+      && profile.display_name?.trim() === "親愛的家人"
+      && !profile.avatar_url
+  ));
+  if (candidates.length === 0) return profiles;
+
+  const users = await supabaseFetch<Array<{ name: string | null; picture_url: string | null }>>(
+    env,
+    `users?id=eq.${userId}&select=name,picture_url&limit=1`,
+  );
+  const identityName = users[0]?.name?.trim() || "";
+  const identityPictureUrl = users[0]?.picture_url || null;
+  if (!identityName && !identityPictureUrl) return profiles;
+
+  const candidateIds = new Set(candidates.map((profile) => profile.id));
+  return Promise.all(profiles.map(async (profile) => {
+    if (!candidateIds.has(profile.id)) return profile;
+    const updates: Record<string, string> = {};
+    if (identityName) updates.display_name = identityName;
+    if (identityPictureUrl) updates.avatar_url = identityPictureUrl;
+    if (Object.keys(updates).length === 0) return profile;
+
+    try {
+      const updated = await supabaseFetch<CareProfileRow[]>(env, `care_profiles?id=eq.${profile.id}`, {
+        method: "PATCH",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify(updates),
+      });
+      return updated[0] || { ...profile, ...updates };
+    } catch (error) {
+      console.warn(JSON.stringify({
+        event: "care_profiles.legacy_default_repair_failed",
+        profile_id: profile.id,
+        message: error instanceof Error ? error.message : "unknown_error",
+      }));
+      return profile;
+    }
+  }));
+}
+
 export async function getAccessibleProfiles(env: Env, userId: number): Promise<CareProfileRow[]> {
   const memberships = await getUserMemberships(env, userId);
   if (memberships.length === 0) return [];
@@ -421,7 +492,8 @@ export async function getAccessibleProfiles(env: Env, userId: number): Promise<C
   const path = `care_profiles?group_id=in.(${groupIds.join(",")})&select=*&order=group_id.asc,sort_order.asc,is_default.desc,created_at.asc`;
   try {
     const profiles = await supabaseFetch<CareProfileRow[]>(env, path);
-    return sortProfilesWithOrderMap(profiles, await getProfileOrderMapFromFlags(env, userId));
+    const normalizedProfiles = await repairLegacyDefaultProfile(env, userId, profiles);
+    return sortProfilesWithOrderMap(normalizedProfiles, await getProfileOrderMapFromFlags(env, userId));
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     if (!/care_profiles\.sort_order|sort_order.*column|Could not find.*sort_order/i.test(message)) throw error;
@@ -429,7 +501,8 @@ export async function getAccessibleProfiles(env: Env, userId: number): Promise<C
       env,
       `care_profiles?group_id=in.(${groupIds.join(",")})&select=*&order=group_id.asc,is_default.desc,created_at.asc`,
     );
-    return sortProfilesWithOrderMap(profiles, await getProfileOrderMapFromFlags(env, userId));
+    const normalizedProfiles = await repairLegacyDefaultProfile(env, userId, profiles);
+    return sortProfilesWithOrderMap(normalizedProfiles, await getProfileOrderMapFromFlags(env, userId));
   }
 }
 
@@ -505,7 +578,10 @@ export async function ensureGroupDefaultProfile(
     );
   }
 
-  if (existing[0]) return existing[0];
+  if (existing[0]) {
+    const [normalized] = await repairLegacyDefaultProfile(env, userId, existing);
+    return normalized || existing[0];
+  }
 
   let resolvedDisplayName = displayName?.trim() || "";
   let resolvedAvatarUrl = avatarUrl || null;
