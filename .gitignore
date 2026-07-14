@@ -24,4 +24,5 @@ test-fixtures/real-receipt-regression/private-images/
 
 # Environment Variables
 .env
+.env.staging
 .wrangler/
