@@ -65,6 +65,16 @@ test("Dashboard API returns family members for the global care contact dock", ()
   assert.match(source, /collaborators:/);
 });
 
+test("Care context header keeps subject identity separate from account metadata", () => {
+  const css = readProjectFile("care-wedo-app/src/index.css");
+  const headerBlock = css.slice(css.indexOf(".care-context-header {"), css.indexOf(".care-context-main {"));
+  const detailsBlock = css.slice(css.indexOf(".care-context-details {"), css.indexOf(".care-context-item {"));
+
+  assert.match(headerBlock, /grid-template-columns:\s*minmax\(0, 1fr\)/);
+  assert.match(detailsBlock, /grid-template-columns:\s*minmax\(260px, 1\.35fr\) repeat\(2, minmax\(220px, 1fr\)\)/);
+  assert.match(css, /\.care-context-item \.group-context-badge \{[\s\S]*text-overflow:\s*ellipsis/);
+});
+
 test("Family notes are stored as group-scoped reminders", () => {
   const dashboard = readProjectFile("functions/api/dashboard.ts");
   const groupsApi = readProjectFile("functions/api/groups.ts");

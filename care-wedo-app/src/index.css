@@ -2761,7 +2761,7 @@ input:focus-visible {
 
 .care-context-header {
   display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(360px, 0.95fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 18px;
   align-items: stretch;
   margin-bottom: 22px;
@@ -2850,7 +2850,7 @@ input:focus-visible {
 
 .care-context-details {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(260px, 1.35fr) repeat(2, minmax(220px, 1fr));
   gap: 10px;
 }
 
@@ -2946,6 +2946,9 @@ input:focus-visible {
   border-radius: 8px;
   padding: 6px 10px;
   font-size: 16px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .care-context-item .group-context-badge::before {
@@ -7167,6 +7170,13 @@ button:disabled,
   margin-right: 8px;
   color: var(--accent);
   font-size: 14px;
+}
+
+.group-context-badge-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .group-context-menu {

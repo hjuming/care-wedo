@@ -2977,7 +2977,7 @@ function GroupBadge({ groups = [], activeGroupId, activeGroupName, onChange, fal
   const label = activeGroupName || groups.find((group) => group.id === activeGroupId)?.name || fallbackLabel;
 
   if (!groups.length || !onChange) {
-    return <span className="group-context-badge static">{label}</span>;
+    return <span className="group-context-badge static"><span className="group-context-badge-label">{label}</span></span>;
   }
 
   return (
@@ -2989,7 +2989,7 @@ function GroupBadge({ groups = [], activeGroupId, activeGroupName, onChange, fal
         aria-haspopup="listbox"
         aria-expanded={open}
       >
-        {label}
+        <span className="group-context-badge-label">{label}</span>
       </button>
       {open && (
         <div className="group-context-menu" role="listbox" aria-label="切換照護圈">
