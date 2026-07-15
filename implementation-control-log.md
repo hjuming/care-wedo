@@ -10,6 +10,9 @@
 - 實際修改：`.github/workflows/deploy.yml`、`care-wedo-app/scripts/verify-vite-public-auth-config.mjs`、`care-wedo-app/src/supabase-auth-regression.test.js`、`CLOUDFLARE_SUPABASE_RUNBOOK.md`、`README.md`。
 - 驗證狀態（部署前）：前端 199/199 tests、ESLint、Stylelint、Vite build、`git diff --check` 通過；缺 env 時 guard exit 1，帶入測試值時 guard 與 build 通過。
 - 部署與回滾：推送至 `main` 後以 GitHub Actions `workflow_dispatch` 建置／部署；若 production smoke 失敗，以前一個成功 commit 重新部署或 `git revert` 回滾本次 commit。正式 bundle／健康檢查需於部署後補驗。
+- 部署結果：commit `680ddf8` 已推送 `main`；workflow run `29438952062` 成功，包含 frontend public auth config gate 與 Cloudflare Pages deploy。
+- 部署後證據：`/api/health` 回傳 `status=ok`、`env_ready=true`；正式 bundle 已包含 Supabase project URL；headless DOM 顯示 `用 Google 登入後台` 1 個、fallback note 不存在；點擊按鈕成功導向 Google OAuth（host `accounts.google.com`）。
+- 未驗證：未輸入真實 Google 帳號完成 callback／後端 protected-write E2E；本次只驗證登入入口與 OAuth 導向已恢復。
 
 ## 2026-07-11｜安全測試登入入口
 
