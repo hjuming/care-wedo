@@ -1,5 +1,17 @@
 # 任務執行控制日誌
 
+## 2026-07-16｜Google OAuth callback race 修正與測試群組重置盤點
+
+- 目標：修正 Google OAuth callback 進入 spinner 後需手動重新整理的競態條件，並在確認精確群組 ID 後重建測試家庭、跑完整角色流程。
+- 高風險 gate：使用者已確認刪除測試群組；但正式資料庫有多個近期測試群組，尚未指定要刪除的 ID，因此目前只完成唯讀盤點，未執行 DELETE。
+- 根因證據：`AuthCallbackPage` 先 `replaceState('/app')` 並同步 dispatch `popstate`，父層 listener 可能尚未掛載，導致 URL 與 React route state 分離；重新整理才重新讀取 `/app`。
+- 實際修改：`care-wedo-app/src/App.jsx` 在掛載 `popstate` listener 後同步目前 pathname；`care-wedo-app/src/supabase-auth-regression.test.js` 新增 race 回歸 guard。
+- 驗證：callback regression 9/9 pass；子 agent 以 fresh context 獨立確認同一根因與修正；尚未做真實 Google callback E2E。
+- 唯讀資料盤點：正式 Supabase 有 `id=6` 金流測試家庭、`id=7` MING的家庭群組（符合截圖）、`id=8` WEDO測試群組；待使用者指定刪除 ID。
+- 回滾：本輪程式修正可用 `git revert` 回滾；資料刪除尚未執行，無外部資料回滾需求。
+- 刪除結果：使用者指定 `id=7` 且確認執行；以正式 Supabase host + 群組名稱雙重核對後刪除，cascade 清除 1 membership、1 profile、1 billing subscription、1 invoice；刪除後 `family_groups?id=eq.7` 唯讀回傳 0 筆。未刪除 app user/Auth user。
+- 備份：刪除前快照位於 `/private/tmp/care-wedo-group-7-snapshot.json`，權限為 owner-only，未加入 Git；若需回復只能依快照人工重建。
+
 ## 2026-07-16｜Google OAuth production build config 修正與部署
 
 - 目標：修正正式站 Google 登入按鈕未出現的原因，將 Supabase public auth config 注入 production Vite build，並部署至 Cloudflare Pages。

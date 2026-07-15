@@ -1437,6 +1437,9 @@ export default function App() {
     // 處理瀏覽器上一頁/下一頁
     const handlePopState = () => setRoute(resolveRoute(window.location.pathname));
     window.addEventListener("popstate", handlePopState);
+    // OAuth callback may replace the URL before this listener is mounted.
+    // Read the current pathname once so the callback cannot remain on its spinner.
+    window.setTimeout(() => setRoute(resolveRoute(window.location.pathname)), 0);
 
     // 攔截所有內部 <a> 點擊，改用 pushState 客戶端導航
     // 不攔截：外部連結、mailto、tel、hash 錨點、target="_blank"

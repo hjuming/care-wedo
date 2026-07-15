@@ -92,6 +92,15 @@ test("Production build workflow injects both Supabase public auth values", () =>
   assert.match(workflow, /Validate frontend public auth config/);
 });
 
+test("App synchronizes its route after installing the popstate listener", () => {
+  const app = readProjectFile("care-wedo-app/src/App.jsx");
+
+  assert.match(
+    app,
+    /window\.addEventListener\("popstate", handlePopState\);[\s\S]{0,220}?setTimeout\(\(\) => setRoute\(resolveRoute\(window\.location\.pathname\)\), 0\);/,
+  );
+});
+
 test("Supabase JWT payload decodes UTF-8 display names without mojibake", () => {
   const bytes = new TextEncoder().encode(JSON.stringify({ user_metadata: { full_name: "林怡君" } }));
   const base64 = globalThis.btoa(String.fromCharCode(...bytes));
