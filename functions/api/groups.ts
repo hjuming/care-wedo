@@ -16,7 +16,9 @@ import {
   checkGroupMemberLimit,
   checkGroupRecipientLimit,
   CARE_WEDO_PRICING,
+  calculateCareCircleMonthlyAmount,
   getGroupPlan,
+  isPaidSubscriptionStatus,
   recordBillingGroupEvent,
   resolveGroupBillingEntitlement,
 } from "../_shared/billing";
@@ -369,6 +371,20 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       if (body.target_user_id === userId) return Response.json({ error: "不能移除自己" }, { status: 400 });
 
       await assertAdmin(env, userId, body.group_id);
+      const beforeBilling = await resolveGroupBillingEntitlement(env, body.group_id);
+      const nextCollaboratorCount = Math.max(beforeBilling.paidCollaboratorCount - 1, 0);
+      const nextAmount = calculateCareCircleMonthlyAmount(beforeBilling.careProfileCount, nextCollaboratorCount);
+      if (
+        isPaidSubscriptionStatus(beforeBilling.subscriptionStatus)
+        && nextAmount < beforeBilling.paidMonthlyAmount
+      ) {
+        return Response.json({
+          error: "已付款訂閱若要減少協作者，需先完成訂閱變更，避免綠界仍依原金額扣款。",
+          code: "billing_downgrade_requires_review",
+          current_amount: beforeBilling.paidMonthlyAmount,
+          next_amount: nextAmount,
+        }, { status: 409 });
+      }
       await supabaseFetch(
         env,
         `user_family_groups?user_id=eq.${body.target_user_id}&group_id=eq.${body.group_id}`,

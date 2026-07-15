@@ -161,6 +161,7 @@ export const onRequestPost: PagesFunction<BillingCheckoutEnv> = async (context) 
         frequency: 1,
         exec_times: 12,
       },
+      subscription_replace_merchant_trade_no: entitlement.providerMerchantTradeNo || undefined,
       client_back_url: `${publicBaseUrl}${returnPath}`,
       metadata: {
         request_id: requestId,
@@ -168,6 +169,7 @@ export const onRequestPost: PagesFunction<BillingCheckoutEnv> = async (context) 
         action_type: body.action_type,
         care_profile_count: nextCareProfileCount,
         paid_collaborator_count: nextPaidCollaboratorCount,
+        previous_merchant_trade_no: entitlement.providerMerchantTradeNo || null,
       },
     };
     const rawBody = JSON.stringify(payload);

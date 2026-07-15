@@ -1,7 +1,7 @@
 # Care WEDO — Cloudflare + Supabase 部署 Runbook
 
 > **版本**：V1.0 Beta Candidate  
-> **最後更新**：2026-05-17
+> **最後更新**：2026-07-16
 > **部署方式**：GitHub Actions + wrangler v4（Cloudflare 原生 CI 已停用，見下方說明）
 
 ---
@@ -120,7 +120,18 @@ Google OAuth MVP 啟用前，還需要在 Supabase Dashboard 完成：
 VITE_LINE_LIFF_ID = "2009972224-fQcfBXw5"
 ```
 
-> **說明**：Cloudflare Pages 使用 `wrangler.toml` 時，前端建置變數（`VITE_*`）必須放在 `[vars]`，不能透過 Dashboard 設定（Dashboard 只接受 Secret 類型）。
+> **重要**：本專案目前由 GitHub Actions 先在 runner 執行 Vite build，再上傳 `care-wedo-app/dist`。`VITE_*` 會在 build time 寫入 bundle，不能只在 Cloudflare Pages runtime 環境變數設定後期待既有 dist 自動更新。
+
+Google OAuth 的兩個前端公開值，請在 **GitHub repo → Settings → Secrets and variables → Actions** 設定（建議使用 Variables；使用 Secrets 也可）：
+
+```text
+VITE_SUPABASE_URL
+VITE_SUPABASE_PUBLISHABLE_KEY
+```
+
+`.github/workflows/deploy.yml` 會優先讀 Actions Variables，沒有時才讀同名 Secrets；建置前的 `verify-vite-public-auth-config.mjs` 若任一值缺漏或 URL 不是 `https://*.supabase.co` 會直接失敗，避免正式站靜默回退成「Google 尚未開放」。
+
+設定後請以 **workflow_dispatch** 重新執行部署。若仍使用 Cloudflare 原生 CI，則也要在 Pages project 的 **Settings → Builds & deployments → Environment variables**（Production build）設定同兩個名稱；僅設定 Functions runtime 變數不會改變已上傳的前端 bundle。
 
 ### GitHub Actions Secrets（部署用）
 

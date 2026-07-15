@@ -6,6 +6,9 @@ export type Env = {
   CARE_WEDO_ALERT_WEBHOOK_URL?: string;
   CARE_WEDO_ALERT_WEBHOOK_SECRET?: string;
   CARE_WEDO_ENV?: string;
+  WEDO_BILLING_CHECKOUT_SECRET?: string;
+  WEDO_BILLING_SUBSCRIPTION_CANCEL_URL?: string;
+  CARE_WEDO_PUBLIC_BASE_URL?: string;
 };
 
 export type VerifiedLineIdentity = {

@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   createBillingCheckout,
+  cancelBillingSubscription,
   createCareProfile,
+  fetchBillingHistory,
+  fetchBillingCheckoutStatus,
   fetchGroups,
   regenerateInvite,
   removeMember,
@@ -108,6 +111,8 @@ function getBillingLimitConfig(group) {
     estimatedMonthlyAmount: Number.isFinite(entitlement.estimatedMonthlyAmount) ? entitlement.estimatedMonthlyAmount : null,
     paidMonthlyAmount: Number.isFinite(entitlement.paidMonthlyAmount) ? entitlement.paidMonthlyAmount : null,
     subscriptionStatus: entitlement.subscriptionStatus || null,
+    cancelAtPeriodEnd: entitlement.cancelAtPeriodEnd === true,
+    currentPeriodEnd: entitlement.currentPeriodEnd || null,
     careProfileCount: Number.isFinite(entitlement.careProfileCount) ? entitlement.careProfileCount : null,
     paidCollaboratorCount: Number.isFinite(entitlement.paidCollaboratorCount) ? entitlement.paidCollaboratorCount : null,
   };
@@ -291,6 +296,9 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
   const [copiedCode, setCopiedCode] = useState(null);
   const [pendingPaidAction, setPendingPaidAction] = useState(null);
   const [billingSubmitting, setBillingSubmitting] = useState(false);
+  const [cancelingGroupId, setCancelingGroupId] = useState(null);
+  const [billingHistoryByGroup, setBillingHistoryByGroup] = useState({});
+  const [historyLoadingGroupId, setHistoryLoadingGroupId] = useState(null);
   const reviewMode = safeReviewLoginEnabled();
 
   const loadGroups = useCallback(async () => {
@@ -320,10 +328,61 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
     if (url.searchParams.get("billing") !== "return") return;
-    setSuccess("付款結果正在同步中。若剛完成付款，請稍候重新整理照護圈設定。");
     url.searchParams.delete("billing");
     window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
-  }, []);
+    const pendingRaw = window.sessionStorage.getItem("care_wedo_pending_billing_action");
+    if (!pendingRaw || !identity?.idToken) {
+      setSuccess("付款結果正在同步中。若剛完成付款，請稍候重新整理照護圈設定。");
+      return;
+    }
+    let pending;
+    try {
+      pending = JSON.parse(pendingRaw);
+    } catch {
+      window.sessionStorage.removeItem("care_wedo_pending_billing_action");
+      setSuccess("付款結果正在同步中。若剛完成付款，請稍候重新整理照護圈設定。");
+      return;
+    }
+    (async () => {
+      try {
+        const status = await fetchBillingCheckoutStatus({
+          idToken: identity.idToken,
+          groupId: pending.groupId,
+          requestId: pending.requestId,
+        });
+        if (status.status === "paid") {
+          if (pending.type === "create_profile") {
+            await submitCreateProfile({
+              groupId: pending.groupId,
+              profileName: pending.profileName,
+              profileRelationship: pending.profileRelationship,
+            });
+          } else if (pending.type === "invite_collaborator") {
+            const group = data.groups?.find((item) => item.id === pending.groupId) || {
+              id: pending.groupId,
+              name: pending.groupName || "家庭群組",
+              invite_code: pending.inviteCode,
+            };
+            if (group.invite_code) executeInviteCopy(group, pending.copyMode || "full");
+            setSuccess("付款成功，已複製協作者邀請內容。");
+          } else {
+            setSuccess("付款成功，訂閱狀態正在同步。");
+          }
+          window.sessionStorage.removeItem("care_wedo_pending_billing_action");
+          await loadGroups();
+        } else if (status.status === "failed") {
+          window.sessionStorage.removeItem("care_wedo_pending_billing_action");
+          setError("付款未完成，原本的新增動作尚未套用。");
+        } else {
+          setSuccess("付款結果正在同步中，請稍候再重新整理照護圈設定。");
+        }
+      } catch (err) {
+        setError(err.message || "無法確認付款結果");
+      }
+    })();
+    // The return flow is intentionally one-shot and uses the latest loaded group state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [identity]);
 
   function getMembersByGroup(groupId) {
     return data.user_memberships?.filter((m) => m.group_id === groupId) || [];
@@ -541,6 +600,16 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
           }
           return;
         }
+        window.sessionStorage.setItem("care_wedo_pending_billing_action", JSON.stringify({
+          requestId: checkout.request_id,
+          type: action.type,
+          groupId: action.groupId,
+          profileName: action.profileName,
+          profileRelationship: action.profileRelationship,
+          copyMode: action.copyMode,
+          groupName: action.group?.name,
+          inviteCode: action.group?.invite_code,
+        }));
         submitGatewayCheckout(checkout.checkout);
       } catch (err) {
         setError(err.message || "無法建立付款連結");
@@ -584,6 +653,42 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
     } catch (err) {
       setError(err.message || "無法建立付款連結");
       setBillingSubmitting(false);
+    }
+  }
+
+  async function handleCancelSubscription(group) {
+    if (!group?.id) return;
+    const billingConfig = getBillingLimitConfig(group);
+    if (billingConfig.cancelAtPeriodEnd) return;
+    const endDate = billingConfig.currentPeriodEnd || "本期結束日";
+    if (!window.confirm(`確定停止「${group.name}」的下期續扣嗎？本期仍可使用至 ${endDate}，已扣款不會自動退款。`)) return;
+    setError(null);
+    setSuccess(null);
+    setCancelingGroupId(group.id);
+    try {
+      const result = await cancelBillingSubscription({
+        idToken: identity.idToken,
+        groupId: group.id,
+      });
+      setSuccess(`已停止下期續扣，本期服務至 ${result.current_period_end || endDate}。`);
+      await loadGroups();
+    } catch (err) {
+      setError(err.message || "取消訂閱失敗");
+    } finally {
+      setCancelingGroupId(null);
+    }
+  }
+
+  async function handleLoadBillingHistory(group) {
+    if (!group?.id) return;
+    setHistoryLoadingGroupId(group.id);
+    try {
+      const result = await fetchBillingHistory({ idToken: identity.idToken, groupId: group.id });
+      setBillingHistoryByGroup((current) => ({ ...current, [group.id]: result.history || [] }));
+    } catch (err) {
+      setError(err.message || "無法取得交易紀錄");
+    } finally {
+      setHistoryLoadingGroupId(null);
     }
   }
 
@@ -726,7 +831,48 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
                       <p className="quota-note">請群組管理者或付款負責人處理付款。</p>
                     )
                   ) : (
-                    <p className="quota-note">目前付款狀態已涵蓋這個群組。</p>
+                    <>
+                      <p className="quota-note">
+                        {billingSummary.subscriptionStatus === "cancel_at_period_end"
+                          ? `已停止下期續扣，本期服務至 ${groupBillingConfig.currentPeriodEnd || "到期日"}。`
+                          : "目前付款狀態已涵蓋這個群組。"}
+                      </p>
+                      {canStartPayment && billingSummary.subscriptionStatus === "active" && (
+                        <button
+                          type="button"
+                          className="btn-danger-sm billing-cancel-button"
+                          onClick={() => handleCancelSubscription(group)}
+                          disabled={cancelingGroupId === group.id}
+                        >
+                          {cancelingGroupId === group.id ? "處理中..." : "停止下期續扣"}
+                        </button>
+                      )}
+                    </>
+                  )}
+                  {!reviewMode && (
+                    <div className="billing-history-block">
+                      <button
+                        type="button"
+                        className="btn-secondary-sm"
+                        onClick={() => handleLoadBillingHistory(group)}
+                        disabled={historyLoadingGroupId === group.id}
+                      >
+                        {historyLoadingGroupId === group.id ? "載入中..." : "查看交易紀錄"}
+                      </button>
+                      {billingHistoryByGroup[group.id] && (
+                        billingHistoryByGroup[group.id].length > 0 ? (
+                          <div className="billing-history-list" aria-label="交易紀錄">
+                            {billingHistoryByGroup[group.id].map((item) => (
+                              <div className="billing-history-item" key={`${item.kind}-${item.id}`}>
+                                <span>{item.kind === "invoice" ? `帳單 ${item.period || ""}` : item.event_type || "帳務事件"}</span>
+                                <strong>{item.kind === "invoice" ? `$${item.amount ?? 0}` : `${item.amount_delta >= 0 ? "+" : ""}$${item.amount_delta ?? 0}`}</strong>
+                                <small>{item.status || item.occurred_at || ""}</small>
+                              </div>
+                            ))}
+                          </div>
+                        ) : <p className="quota-note">目前沒有交易紀錄。</p>
+                      )}
+                    </div>
                   )}
                 </div>
 

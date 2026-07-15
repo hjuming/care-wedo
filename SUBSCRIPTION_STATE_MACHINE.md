@@ -1,7 +1,7 @@
 # Care WEDO Subscription State Machine
 
-> 最後更新：2026-07-07
-> 狀態：設計合約 + pure transition helper / unit tests；已補 Care 端中央金流 webhook 驗簽、去重、本機 fixture tests，以及 Care checkout API / 付款 UI。
+> 最後更新：2026-07-15
+> 狀態：Care 端中央金流 webhook、checkout、綠界定期定額、小額 live callback、付款返回補償、停止下期續扣與交易紀錄已完成；方案降價換約、自助退款與完整 period-end job 仍待補強。
 > 原則：先定狀態機與資料不變條件，再實作 migration / webhook / checkout UI。
 
 ## 1. 現況事實
@@ -9,12 +9,13 @@
 | 事實 | 依據 |
 |---|---|
 | Billing foundation 已存在 | `billing_subscriptions`、`billing_events`、`invoices` 已在 phase55 migration / `supabase/schema.sql` |
-| 目前仍是 Beta / no-charge | `recordBillingGroupEvent()` 會寫 subscription snapshot 與 draft invoice，但不收款 |
+| 產品仍採 Beta 測試政策 | 正式 subscription path 已可透過 WEDOPR／綠界完成受控小額實測；是否對外開放由部署環境與 billing flag 控制 |
 | 方案計算已有後端來源 | `resolveGroupBillingEntitlement()` 計算照護對象數、共同協作者數、估算月費與上限 |
 | 正式付款入口已接上中央金流 | `functions/api/billing/checkout.ts` 以 HMAC 呼叫 WEDOPR checkout；前端只送綠界表單，不接觸卡號或 paymentIntent |
 | Pure state helper 已存在 | `functions/_shared/subscription_state.ts` 定義狀態、事件、side effects、idempotency key contract 與 `transitionSubscriptionState()` |
 | State helper 已有 unit tests | `functions/_tests/subscription-state.test.ts` 覆蓋合法 transition、非法 transition、checkout pending 不擴權、provider webhook idempotency key 與 no-op entitlement/retry 事件 |
 | Care 端中央 webhook 已有本機驗收 | `functions/api/billing/webhook.ts` / `functions/_shared/billing_webhook.ts` 驗 `x-wedo-billing-*` HMAC、`billing_events.provider_event_id` 去重，fixture 覆蓋成功、失敗、重送與錯簽章 |
+| 自助帳務控制已完成 | `cancel`、`history`、`status` API 與 Phase 63 provider reference／取消欄位已補；正式退款仍與取消續扣分開處理 |
 
 ## 2. 狀態定義
 
@@ -89,16 +90,15 @@ Phase 60 已先補 Care 端 webhook 必需的事件欄位：
 | `billing_events` | `provider`、`provider_event_id`、`merchant_trade_no`、`provider_trade_no`、`raw_event`、`transition` | 已補：`supabase/migration_phase60_billing_webhook_events.sql` |
 | `billing_events` | `billing_events_provider_event_unique_idx` | 已補，用於 webhook replay 去重 |
 
-後續 checkout / 取消 / 退款前，仍需要補齊：
+仍待跨 provider 或完整對帳時補齊：
 
 | Table | 欄位 | 原因 |
 |---|---|---|
-| `billing_subscriptions` | `provider`、`provider_customer_id`、`provider_subscription_id` | 對應 LINE Pay / NewebPay / ECPay / Stripe |
+| `billing_subscriptions` | `provider_customer_id`、`provider_subscription_id` | ECPay 目前以 merchant trade number 為主要 reference；其他 provider 接入時再補 |
 | `billing_subscriptions` | `current_period_start`、`current_period_end` | 判斷當期權益與到期取消 |
-| `billing_subscriptions` | `grace_until`、`cancel_at_period_end`、`canceled_at` | 支援付款失敗與取消流程 |
-| `billing_subscriptions` | `state_version` | 避免 webhook / API 競態覆蓋 |
+| `billing_subscriptions` | `grace_until`、`state_version` | 支援付款失敗競態與完整寬限期流程 |
 | `billing_events` | `request_id` | API / job 重試去重 |
-| `invoices` | `provider_invoice_id`、`provider_payment_id` | 對帳 |
+| `invoices` | `provider_invoice_id`、`provider_payment_id` | 多 provider 對帳；ECPay 目前事件先保存 merchant／provider trade reference |
 | `invoices` | `status` enum-like contract: `draft/open/paid/failed/void/refunded` | 避免自由字串 |
 | `invoices` | `due_at`、`paid_at`、`voided_at`、`refunded_at` | 對帳與客服排查 |
 
@@ -150,13 +150,13 @@ create unique index if not exists invoices_provider_invoice_uidx
 
 ## 9. 實作順序
 
-1. 補 migration：欄位、索引、enum-like check 或 domain contract。（待做）
+1. 補 migration：欄位、索引、enum-like check 或 domain contract。（Phase 62／63 已完成；跨 provider 欄位仍待評估）
 2. 補 pure state transition helper：輸入 current state + event，輸出 next state + side effects。（已完成：`functions/_shared/subscription_state.ts`）
 3. 補 unit tests：合法 transition、非法 transition、idempotent webhook replay。（已完成：`functions/_tests/subscription-state.test.ts`）
 4. 補 Care 端中央 webhook API：驗簽、去重、呼叫 state transition helper。（已完成：`functions/api/billing/webhook.ts`、`functions/_tests/billing-webhook.test.ts`）
-5. 補 provider adapter：目前由 WEDOPR 中央金流轉送標準化 payload；Care 端不保存綠界 HashKey / HashIV。（部分完成）
+5. 補 provider adapter：目前由 WEDOPR 中央金流轉送標準化 payload；Care 端不保存綠界 HashKey / HashIV。（已完成 ECPay 路徑）
 6. 補 checkout API / UI：只有 state helper 與 webhook 測試綠了，才放付款按鈕。（已完成：`functions/api/billing/checkout.ts`、`care-wedo-app/src/components/GroupSettings.jsx`）
-7. 補 staging E2E：checkout → webhook success → entitlement active；payment_failed → grace/suspended。（待做）
+7. 補 staging E2E：checkout → webhook success → entitlement active；payment_failed → grace/suspended。（尚待自動化；正式小額付款已人工驗收）
 
 ## 10. Review Gate
 

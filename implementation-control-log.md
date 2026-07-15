@@ -1,5 +1,16 @@
 # 任務執行控制日誌
 
+## 2026-07-16｜Google OAuth production build config 修正與部署
+
+- 目標：修正正式站 Google 登入按鈕未出現的原因，將 Supabase public auth config 注入 production Vite build，並部署至 Cloudflare Pages。
+- 非目標：不讀出或回傳任何 OAuth secret、service-role key、access token；不修改 Supabase schema、Auth provider 設定或金流資料。
+- 使用者明確確認：使用者已回覆「已填入，可以部署推上線了」，授權本次 production push / deployment。
+- 根因證據：正式 bundle 無 Supabase project URL，前端 `hasSupabaseAuthConfig()` 因此回傳 false；既有 workflow 只注入 LIFF ID。
+- AI 決定：以 GitHub Actions Variables 優先、同名 Secrets fallback；新增 build-time fail-closed 檢查，避免 Cloudflare Pages runtime 變數未進入已建置 dist。
+- 實際修改：`.github/workflows/deploy.yml`、`care-wedo-app/scripts/verify-vite-public-auth-config.mjs`、`care-wedo-app/src/supabase-auth-regression.test.js`、`CLOUDFLARE_SUPABASE_RUNBOOK.md`、`README.md`。
+- 驗證狀態（部署前）：前端 199/199 tests、ESLint、Stylelint、Vite build、`git diff --check` 通過；缺 env 時 guard exit 1，帶入測試值時 guard 與 build 通過。
+- 部署與回滾：推送至 `main` 後以 GitHub Actions `workflow_dispatch` 建置／部署；若 production smoke 失敗，以前一個成功 commit 重新部署或 `git revert` 回滾本次 commit。正式 bundle／健康檢查需於部署後補驗。
+
 ## 2026-07-11｜安全測試登入入口
 
 - 目標：讓三位 persona 審查員在隔離的 staging 測試家庭中，以主要照護者、家屬協作者、長輩三種角色完成登入與協作驗收。

@@ -410,6 +410,12 @@ create table if not exists public.billing_subscriptions (
   current_period_start date,
   current_period_end date,
   trial_ends_at timestamptz,
+  provider text,
+  provider_merchant_trade_no text,
+  provider_trade_no text,
+  cancel_at_period_end boolean not null default false,
+  canceled_at timestamptz,
+  cancel_reason text,
   metadata jsonb not null default '{}'::jsonb,
   updated_at timestamptz not null default now(),
   created_at timestamptz not null default now(),
@@ -524,6 +530,10 @@ create index if not exists usage_quotas_group_period_feature_idx
 create index if not exists billing_subscriptions_family_group_idx
   on public.billing_subscriptions (family_group_id);
 
+create index if not exists billing_subscriptions_provider_trade_idx
+  on public.billing_subscriptions (provider, provider_merchant_trade_no)
+  where provider is not null and provider_merchant_trade_no is not null;
+
 create index if not exists billing_events_family_created_idx
   on public.billing_events (family_group_id, created_at desc);
 
@@ -536,6 +546,10 @@ create unique index if not exists billing_events_provider_event_unique_idx
 
 create index if not exists billing_events_provider_created_idx
   on public.billing_events (provider, created_at desc)
+  where provider is not null;
+
+create index if not exists billing_events_family_provider_created_idx
+  on public.billing_events (family_group_id, provider, created_at desc)
   where provider is not null;
 
 create index if not exists invoices_family_period_idx

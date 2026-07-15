@@ -84,6 +84,14 @@ test("Frontend exposes Google OAuth login and callback without storing service-r
   assert.match(envExample, /VITE_SUPABASE_PUBLISHABLE_KEY=/);
 });
 
+test("Production build workflow injects both Supabase public auth values", () => {
+  const workflow = readProjectFile(".github/workflows/deploy.yml");
+
+  assert.match(workflow, /VITE_SUPABASE_URL:\s*\$\{\{[^\n]*\.VITE_SUPABASE_URL[^\n]*\}\}/);
+  assert.match(workflow, /VITE_SUPABASE_PUBLISHABLE_KEY:\s*\$\{\{[^\n]*\.VITE_SUPABASE_PUBLISHABLE_KEY[^\n]*\}\}/);
+  assert.match(workflow, /Validate frontend public auth config/);
+});
+
 test("Supabase JWT payload decodes UTF-8 display names without mojibake", () => {
   const bytes = new TextEncoder().encode(JSON.stringify({ user_metadata: { full_name: "林怡君" } }));
   const base64 = globalThis.btoa(String.fromCharCode(...bytes));

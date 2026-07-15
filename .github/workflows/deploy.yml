@@ -65,6 +65,15 @@ jobs:
       - name: Validate real-receipt regression pack
         run: node scripts/validate-real-receipt-pack.mjs
 
+      - name: Validate frontend public auth config
+        run: node scripts/verify-vite-public-auth-config.mjs
+        working-directory: care-wedo-app
+        env:
+          # Public client config is safe for the browser, but must be present at
+          # build time. Prefer repository/environment Variables, then Secrets.
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL || secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY || secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+
       - name: Build
         run: npm run build
         working-directory: care-wedo-app
@@ -72,6 +81,8 @@ jobs:
           # LIFF ID is a public value (not a secret), hardcoded here to ensure it's
           # always available during Vite build. Also matches wrangler.toml [vars].
           VITE_LINE_LIFF_ID: "2009972224-fQcfBXw5"
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL || secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY || secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
 
       - name: Deploy to Cloudflare Pages
         # Main pushes run quality gates only. Production deploys require an

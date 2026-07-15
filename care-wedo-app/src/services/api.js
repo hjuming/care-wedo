@@ -586,6 +586,50 @@ export async function createBillingCheckout({ idToken, groupId, actionType, retu
   return resp.json();
 }
 
+export async function cancelBillingSubscription({ idToken, groupId, reason = "user_requested" }) {
+  const resp = await fetch(`${API_BASE}/billing/cancel`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+    },
+    body: JSON.stringify({ group_id: groupId, reason }),
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw createApiError(err.error || "取消訂閱失敗", resp.status);
+  }
+  return resp.json();
+}
+
+export async function fetchBillingHistory({ idToken, groupId, limit = 50 }) {
+  const query = new URLSearchParams({ group_id: String(groupId), limit: String(limit) });
+  const resp = await fetch(`${API_BASE}/billing/history?${query.toString()}`, {
+    headers: {
+      ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+    },
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw createApiError(err.error || "無法取得交易紀錄", resp.status);
+  }
+  return resp.json();
+}
+
+export async function fetchBillingCheckoutStatus({ idToken, groupId, requestId }) {
+  const query = new URLSearchParams({ group_id: String(groupId), request_id: String(requestId) });
+  const resp = await fetch(`${API_BASE}/billing/status?${query.toString()}`, {
+    headers: {
+      ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+    },
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw createApiError(err.error || "無法確認付款狀態", resp.status);
+  }
+  return resp.json();
+}
+
 /**
  * 取得群組成員清單
  */

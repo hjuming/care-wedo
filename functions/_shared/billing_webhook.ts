@@ -45,6 +45,9 @@ type BillingSubscriptionRow = {
   care_profile_count: number | null;
   paid_collaborator_count: number | null;
   estimated_monthly_amount: number | null;
+  provider: string | null;
+  provider_merchant_trade_no: string | null;
+  provider_trade_no: string | null;
 };
 
 type BillingSnapshot = {
@@ -240,11 +243,21 @@ async function getBillingSubscription(
   env: Env,
   groupId: number,
 ): Promise<BillingSubscriptionRow | null> {
-  const rows = await supabaseFetch<BillingSubscriptionRow[]>(
-    env,
-    `billing_subscriptions?family_group_id=eq.${groupId}&select=id,family_group_id,owner_user_id,status,plan_id,care_profile_count,paid_collaborator_count,estimated_monthly_amount&limit=1`,
-  );
-  return rows[0] ?? null;
+  try {
+    const rows = await supabaseFetch<BillingSubscriptionRow[]>(
+      env,
+      `billing_subscriptions?family_group_id=eq.${groupId}&select=id,family_group_id,owner_user_id,status,plan_id,care_profile_count,paid_collaborator_count,estimated_monthly_amount,provider,provider_merchant_trade_no,provider_trade_no&limit=1`,
+    );
+    return rows[0] ?? null;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error || "");
+    if (!/column .* does not exist|schema cache|PGRST2(0|04)/i.test(message)) throw error;
+    const rows = await supabaseFetch<BillingSubscriptionRow[]>(
+      env,
+      `billing_subscriptions?family_group_id=eq.${groupId}&select=id,family_group_id,owner_user_id,status,plan_id,care_profile_count,paid_collaborator_count,estimated_monthly_amount&limit=1`,
+    );
+    return rows[0] ?? null;
+  }
 }
 
 async function upsertSubscription(
@@ -275,6 +288,9 @@ async function upsertSubscription(
         care_profile_count: snapshot.careProfileCount,
         paid_collaborator_count: snapshot.paidCollaboratorCount,
         estimated_monthly_amount: snapshot.estimatedMonthlyAmount,
+        provider: typeof metadata.provider === "string" ? metadata.provider : undefined,
+        provider_merchant_trade_no: typeof metadata.merchant_trade_no === "string" ? metadata.merchant_trade_no : undefined,
+        provider_trade_no: typeof metadata.trade_no === "string" ? metadata.trade_no : undefined,
         metadata,
         updated_at: new Date().toISOString(),
       }),

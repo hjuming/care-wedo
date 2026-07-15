@@ -64,6 +64,12 @@ export type GroupBillingEntitlement = {
   maxMembersIncludingOwner: number;
   canAddCareProfile: boolean;
   canInviteCollaborator: boolean;
+  currentPeriodStart: string | null;
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
+  canceledAt: string | null;
+  provider: string | null;
+  providerMerchantTradeNo: string | null;
 };
 
 type BillingEventType =
@@ -72,7 +78,8 @@ type BillingEventType =
   | "collaborator_joined"
   | "subscription_upgraded"
   | "subscription_downgraded"
-  | "subscription_canceled";
+  | "subscription_canceled"
+  | "subscription_cancel_requested";
 
 type BillingSnapshot = {
   groupId: number;
@@ -89,6 +96,12 @@ type BillingSubscriptionSnapshotRow = {
   care_profile_count: number | null;
   paid_collaborator_count: number | null;
   estimated_monthly_amount: number | null;
+  current_period_start: string | null;
+  current_period_end: string | null;
+  cancel_at_period_end: boolean | null;
+  canceled_at: string | null;
+  provider: string | null;
+  provider_merchant_trade_no: string | null;
 };
 
 type BillingGroupEventInput = {
@@ -162,18 +175,51 @@ export function calculateCareCircleMonthlyAmount(careProfileCount: number, paidC
   return Math.min(amount, CARE_WEDO_GROUP_MONTHLY_PRICE_MAX);
 }
 
+export function isPaidSubscriptionStatus(
+  status: string | null | undefined,
+): status is "active" | "cancel_at_period_end" {
+  return status === "active" || status === "cancel_at_period_end";
+}
+
 async function getBillingSubscriptionSnapshot(
   env: Env,
   groupId: number,
 ): Promise<BillingSubscriptionSnapshotRow | null> {
   try {
-    const rows = await supabaseFetch<BillingSubscriptionSnapshotRow[]>(
-      env,
-      `billing_subscriptions?family_group_id=eq.${groupId}&select=status,care_profile_count,paid_collaborator_count,estimated_monthly_amount&limit=1`,
-    );
-    return rows[0] ?? null;
+    try {
+      const rows = await supabaseFetch<BillingSubscriptionSnapshotRow[]>(
+        env,
+        `billing_subscriptions?family_group_id=eq.${groupId}&select=status,care_profile_count,paid_collaborator_count,estimated_monthly_amount,current_period_start,current_period_end,cancel_at_period_end,canceled_at,provider,provider_merchant_trade_no&limit=1`,
+      );
+      return rows[0] ?? null;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error || "");
+      if (!/column .* does not exist|schema cache|PGRST2(0|04)/i.test(message)) throw error;
+      const rows = await supabaseFetch<BillingSubscriptionSnapshotRow[]>(
+        env,
+        `billing_subscriptions?family_group_id=eq.${groupId}&select=status,care_profile_count,paid_collaborator_count,estimated_monthly_amount&limit=1`,
+      );
+      return rows[0] ?? null;
+    }
   } catch (error) {
-    if (!isBillingFoundationMissingError(error)) throw error;
+    if (!isBillingFoundationMissingError(error)) {
+      console.warn("Care WEDO billing subscription lookup failed", error);
+    }
+    return null;
+  }
+}
+
+async function getLatestProviderMerchantTradeNo(env: Env, groupId: number): Promise<string | null> {
+  try {
+    const rows = await supabaseFetch<Array<{ merchant_trade_no: string | null }>>(
+      env,
+      `billing_events?family_group_id=eq.${groupId}&merchant_trade_no=not.is.null&select=merchant_trade_no&order=created_at.desc&limit=1`,
+    );
+    return rows[0]?.merchant_trade_no || null;
+  } catch (error) {
+    if (!isBillingFoundationMissingError(error)) {
+      console.warn("Care WEDO billing provider reference lookup failed", error);
+    }
     return null;
   }
 }
@@ -213,14 +259,25 @@ export async function resolveGroupBillingEntitlement(
   const estimatedMonthlyAmount = isCareCircle
     ? calculateCareCircleMonthlyAmount(careProfileCount, paidCollaboratorCount)
     : 0;
-  const subscriptionStatus = subscription?.status ?? null;
-  const paidMonthlyAmount = subscriptionStatus === "active"
+  // ECPay cancellation is effective at the end of the current period. Once
+  // that boundary has passed, stop granting paid coverage even if a webhook
+  // has not yet rewritten the local row to `canceled`.
+  const periodEnded = subscription?.cancel_at_period_end === true
+    && Boolean(subscription.current_period_end)
+    && Number.isFinite(Date.parse(subscription.current_period_end as string))
+    && Date.parse(subscription.current_period_end as string) <= Date.now();
+  const subscriptionStatus = periodEnded ? "canceled" : (subscription?.status ?? null);
+  const providerMerchantTradeNo = subscription?.provider_merchant_trade_no
+    || (subscriptionStatus && isPaidSubscriptionStatus(subscriptionStatus)
+      ? await getLatestProviderMerchantTradeNo(env, groupId)
+      : null);
+  const paidMonthlyAmount = isPaidSubscriptionStatus(subscriptionStatus)
     ? Math.max(subscription?.estimated_monthly_amount || 0, 0)
     : 0;
-  const coveredCareProfileCount = subscriptionStatus === "active"
+  const coveredCareProfileCount = isPaidSubscriptionStatus(subscriptionStatus)
     ? Math.max(subscription?.care_profile_count || 0, careProfileCount)
     : careProfileCount;
-  const coveredPaidCollaboratorCount = subscriptionStatus === "active"
+  const coveredPaidCollaboratorCount = isPaidSubscriptionStatus(subscriptionStatus)
     ? Math.max(subscription?.paid_collaborator_count || 0, paidCollaboratorCount)
     : paidCollaboratorCount;
 
@@ -242,6 +299,12 @@ export async function resolveGroupBillingEntitlement(
     canAddCareProfile: careProfileCount < maxCareProfiles,
     canInviteCollaborator: paidCollaboratorCount < maxPaidCollaborators
       && members.length < maxMembersIncludingOwner,
+    currentPeriodStart: subscription?.current_period_start ?? null,
+    currentPeriodEnd: subscription?.current_period_end ?? null,
+    cancelAtPeriodEnd: subscription?.cancel_at_period_end === true && !periodEnded,
+    canceledAt: subscription?.canceled_at ?? null,
+    provider: subscription?.provider ?? null,
+    providerMerchantTradeNo,
   };
 }
 
@@ -405,7 +468,10 @@ export async function recordBillingGroupEvent(
       : null;
     const afterEntitlement = await resolveGroupBillingEntitlement(env, input.groupId);
     const afterSnapshot = serializeBillingSnapshot(afterEntitlement);
-    const subscriptionStatus = input.beforeSnapshot?.subscriptionStatus === "active" ? "active" : "beta";
+    const previousSubscriptionStatus = input.beforeSnapshot?.subscriptionStatus;
+    const subscriptionStatus = isPaidSubscriptionStatus(previousSubscriptionStatus)
+      ? previousSubscriptionStatus
+      : "beta";
     const subscriptionId = await upsertBillingSubscriptionSnapshot(env, afterSnapshot, subscriptionStatus);
     await upsertBillingInvoiceDraft(env, afterSnapshot, subscriptionId, subscriptionStatus === "active" ? "paid" : "draft");
     await supabaseFetch(env, "billing_events", {

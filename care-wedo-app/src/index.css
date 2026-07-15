@@ -5559,6 +5559,47 @@ input:focus-visible {
   opacity: 0.64;
 }
 
+.billing-cancel-button {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+
+.billing-history-block {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid rgb(94, 143, 154, 0.16);
+  padding-top: 12px;
+}
+
+.billing-history-list {
+  display: grid;
+  gap: 8px;
+}
+
+.billing-history-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 9px 10px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.billing-history-item strong {
+  display: inline;
+  color: var(--primary-dark);
+  font-size: 14px;
+}
+
+.billing-history-item small {
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
 .settings-toggle-list {
   display: grid;
   gap: 10px;
