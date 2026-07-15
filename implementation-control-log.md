@@ -1,5 +1,12 @@
 # 任務執行控制日誌
 
+## 2026-07-16｜ECPay 結果頁新增 Care WEDO 返回按鈕
+
+- 需求：Care WEDO 付款完成後，中央結果頁需提供可返回照護後台的明確入口。
+- 實作：WEDOPR 結果頁依 `CustomField1=care_wedo` 顯示 `Care WEDO` 按鈕，導向 `https://care.wedopr.com/app/settings?billing=return`；其他專案不顯示此專屬按鈕。
+- 驗證：新增回歸斷言；WEDOPR Build `29453551551` 與 Playwright `29453551485` 成功；正式 POST smoke HTTP 200 且輸出 Care WEDO href。
+- 部署 commit：WEDOPR `96aaf461` 已推送 `main`。
+
 ## 2026-07-16｜ECPay 付款成功後返回頁 405 修正
 
 - 問題：正式綠界付款與成功通知正常，但付款完成導回 WEDOPR 結果頁時出現 HTTP 405。
