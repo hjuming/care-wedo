@@ -13,6 +13,8 @@
 - 備份：刪除前快照位於 `/private/tmp/care-wedo-group-7-snapshot.json`，權限為 owner-only，未加入 Git；若需回復只能依快照人工重建。
 - 部署結果：commit `dbfc86e` 已推送 `main`；GitHub Actions workflow `29441085866` 成功完成 frontend/functions/typecheck/build、public auth config gate 與 Cloudflare Pages deploy。
 - 部署後驗證：`https://care.wedopr.com/api/health` 回傳 HTTP 200、`status=ok`、`env_ready=true`；`/login` 實際渲染 Google 登入按鈕 1 個且無 fallback note，點擊後導向 `accounts.google.com`；以合成 callback hash 驗證不再停留 `/auth/callback` 或 spinner。未輸入真實 Google 帳號完成 callback／protected-write E2E。
+- 第二次群組刪除：使用者指定刪除截圖中的 `Care WEDO 正式金流測試家庭`；正式 Supabase 唯讀核對為 `id=6`、名稱完全相符後執行 DELETE。cascade 清除 2 memberships、1 billing subscription、1 billing event、1 invoice；無 profile、appointment、medication、care document；刪除後全量群組查詢只剩 id=1..5 與 id=8，id=6 已不存在。
+- 第二次備份：刪除前快照位於 `/private/tmp/care-wedo-group-6-snapshot.json`，owner-only、未加入 Git；未刪除 Auth 使用者。
 
 ## 2026-07-16｜Google OAuth production build config 修正與部署
 
