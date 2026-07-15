@@ -1,5 +1,14 @@
 # 任務執行控制日誌
 
+## 2026-07-16｜ECPay 付款成功後返回頁 405 修正
+
+- 問題：正式綠界付款與成功通知正常，但付款完成導回 WEDOPR 結果頁時出現 HTTP 405。
+- 根因：中央 gateway 的 `OrderResultURL` 由綠界以 browser `POST` 回傳；WEDOPR production main 原本只有 GET handler，POST 因而被 Cloudflare 路由拒絕。付款入帳仍以 server callback 為準，未重複扣款。
+- 修正：WEDOPR `functions/billing/result.ts` 新增 `onRequestPost`，解析 `application/x-www-form-urlencoded` 後共用安全 HTML 結果頁；GET 行為保留。
+- 回歸測試：新增 `client/src/billing-result.test.ts`，GET/POST 2 cases 通過；WEDOPR Build workflow `29452415660` 與 Playwright workflow `29452415695` 均成功。
+- 部署：WEDOPR main 已包含 `7c534ad9`（POST 修正）與 `53a29d5e`（回歸測試）；正式 `https://www.wedopr.com/billing/result` GET/POST smoke 均 HTTP 200。
+- 注意：`https://wedopr.com/billing/result` 當下回 Cloudflare HTTP 525，屬 apex 網域 TLS/Origin 設定問題；中央金流正式 base URL 為 `https://www.wedopr.com`，需另由網域／Cloudflare 管理者處理 apex 連線，不能以程式 405 修正視為已解決。
+
 ## 2026-07-16｜Google OAuth callback race 修正與測試群組重置盤點
 
 - 目標：修正 Google OAuth callback 進入 spinner 後需手動重新整理的競態條件，並在確認精確群組 ID 後刪除指定測試家庭；重建與完整角色流程待使用者下一步確認。
