@@ -531,6 +531,14 @@ test("Family invite card keeps copy actions elder-friendly on mobile", () => {
   assert.match(css, /@media \(max-width:\s*760px\)[\s\S]*\.invite-code-row\s*\{[\s\S]*grid-template-columns:\s*1fr/);
 });
 
+test("Family invite card explains missing invitation authority instead of rendering copy controls", () => {
+  const component = readProjectFile("care-wedo-app/src/components/GroupSettings.jsx");
+  const inviteBlock = component.slice(component.indexOf('<div className="group-invite-block">'), component.indexOf('<div className="members-list">'));
+
+  assert.match(inviteBlock, /group\.invite_code \? \(/);
+  assert.match(inviteBlock, /你沒有邀請協作者的管理權限/);
+});
+
 test("Medication records expose schedule fields for elder-friendly medicine instructions", () => {
   const schema = readProjectFile("supabase/schema.sql");
   const migration = readProjectFile("supabase/migration_phase51_medication_schedule_columns.sql");

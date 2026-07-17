@@ -89,7 +89,11 @@ export default function GroupManager({ identity, onGroupChange }) {
               建立家人群組
             </button>
           </div>
+          <label htmlFor="group-action-value">
+            {action === "join" ? "家人邀請碼" : "家人群組名稱"}
+          </label>
           <input
+            id="group-action-value"
             type="text"
             placeholder={action === "join" ? "輸入家人給您的 6 位邀請碼" : "例：我的家庭照護群組"}
             value={inputVal}

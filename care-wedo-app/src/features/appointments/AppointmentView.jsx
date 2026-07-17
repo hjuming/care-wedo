@@ -191,7 +191,7 @@ export function ManualReminderModal({ mode = "create", initialAppointment = null
             </div>
             <div className="form-row-two">
               <div className="form-group">
-                <label>日期</label>
+                <label htmlFor="reminder-date">日期</label>
                 <div className="quick-choice-row">
                   <button type="button" onClick={() => setFormData({ ...formData, date: todayInTaipei() })}>今天</button>
                   <button type="button" onClick={() => setFormData({ ...formData, date: addDaysInTaipei(1) })}>明天</button>
@@ -199,6 +199,7 @@ export function ManualReminderModal({ mode = "create", initialAppointment = null
                   <button type="button" onClick={() => setFormData({ ...formData, date: addMonthsInTaipei(1) })}>下月</button>
                 </div>
                 <input
+                  id="reminder-date"
                   type="text"
                   inputMode="numeric"
                   value={formData.date}
@@ -210,7 +211,7 @@ export function ManualReminderModal({ mode = "create", initialAppointment = null
             </div>
             <div className="form-row-two">
               <div className="form-group">
-                <label>時間</label>
+                <label htmlFor="reminder-time">時間</label>
                 <div className="quick-choice-row">
                   {["上午", "下午", "晚上", "睡前", "全天"].map((timeLabel) => (
                     <button key={timeLabel} type="button" onClick={() => setFormData({ ...formData, time: timeLabel })}>
@@ -219,6 +220,7 @@ export function ManualReminderModal({ mode = "create", initialAppointment = null
                   ))}
                 </div>
                 <input
+                  id="reminder-time"
                   type="text"
                   value={formData.time}
                   onChange={(event) => setFormData({ ...formData, time: event.target.value })}
@@ -226,8 +228,9 @@ export function ManualReminderModal({ mode = "create", initialAppointment = null
                 />
               </div>
               <div className="form-group">
-                <label>醫院 / 地點</label>
+                <label htmlFor="reminder-hospital">醫院 / 地點</label>
                 <input
+                  id="reminder-hospital"
                   value={formData.hospital}
                   onChange={(event) => setFormData({ ...formData, hospital: event.target.value })}
                   placeholder="例：常去的醫院、診所或藥局"
@@ -236,16 +239,18 @@ export function ManualReminderModal({ mode = "create", initialAppointment = null
             </div>
             <div className="form-row-two">
               <div className="form-group">
-                <label>診別 / 科別</label>
+                <label htmlFor="reminder-department">診別 / 科別</label>
                 <input
+                  id="reminder-department"
                   value={formData.department}
                   onChange={(event) => setFormData({ ...formData, department: event.target.value })}
                   placeholder="例：家醫科、藥局、檢查室"
                 />
               </div>
               <div className="form-group">
-                <label>醫師</label>
+                <label htmlFor="reminder-doctor">醫師</label>
                 <input
+                  id="reminder-doctor"
                   value={formData.doctor}
                   onChange={(event) => setFormData({ ...formData, doctor: event.target.value })}
                   placeholder="例：醫師或藥師姓名"
@@ -254,8 +259,9 @@ export function ManualReminderModal({ mode = "create", initialAppointment = null
             </div>
             <div className="form-row-two">
               <div className="form-group">
-                <label>詳細地點</label>
+                <label htmlFor="reminder-location">詳細地點</label>
                 <input
+                  id="reminder-location"
                   value={formData.location}
                   onChange={(event) => setFormData({ ...formData, location: event.target.value })}
                   placeholder="例：門診區、檢查室、領藥窗口"
@@ -272,8 +278,9 @@ export function ManualReminderModal({ mode = "create", initialAppointment = null
             </label>
             {formData.fasting_required && (
               <div className="form-group">
-                <label>空腹小時數</label>
+                <label htmlFor="reminder-fasting-hours">空腹小時數</label>
                 <input
+                  id="reminder-fasting-hours"
                   type="number"
                   min="1"
                   max="24"
@@ -283,8 +290,9 @@ export function ManualReminderModal({ mode = "create", initialAppointment = null
               </div>
             )}
             <div className="form-group">
-              <label>提醒內容</label>
+              <label htmlFor="reminder-notes">提醒內容</label>
               <textarea
+                id="reminder-notes"
                 value={formData.notes}
                 onChange={(event) => setFormData({ ...formData, notes: event.target.value })}
                 placeholder="例：要帶的資料、注意事項、家人分工"

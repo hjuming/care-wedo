@@ -358,13 +358,13 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
               profileRelationship: pending.profileRelationship,
             });
           } else if (pending.type === "invite_collaborator") {
-            const group = data.groups?.find((item) => item.id === pending.groupId) || {
-              id: pending.groupId,
-              name: pending.groupName || "家庭群組",
-              invite_code: pending.inviteCode,
-            };
-            if (group.invite_code) executeInviteCopy(group, pending.copyMode || "full");
-            setSuccess("付款成功，已複製協作者邀請內容。");
+            const group = data.groups?.find((item) => item.id === pending.groupId);
+            if (group?.invite_code) {
+              executeInviteCopy(group, pending.copyMode || "full");
+              setSuccess("付款成功，已複製協作者邀請內容。");
+            } else {
+              setSuccess("付款成功。你沒有邀請協作者的管理權限，請聯絡群組管理者。");
+            }
           } else {
             setSuccess("付款成功，訂閱狀態正在同步。");
           }
@@ -414,6 +414,10 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
   function requestInviteConfirmation(group, copyMode = "full") {
     setError(null);
     setSuccess(null);
+    if (!group?.invite_code) {
+      setError("你沒有邀請協作者的管理權限。");
+      return;
+    }
     if (isCollaboratorLimitReached(group)) {
       showLimitModal("collaborator", group);
       return;
@@ -608,7 +612,6 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
           profileRelationship: action.profileRelationship,
           copyMode: action.copyMode,
           groupName: action.group?.name,
-          inviteCode: action.group?.invite_code,
         }));
         submitGatewayCheckout(checkout.checkout);
       } catch (err) {
@@ -877,39 +880,45 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
                 </div>
 
                 <div className="group-invite-block">
-                  <div className="invite-copy-head compact">
-                    <span>邀請協作者</span>
-                    <strong>{group.invite_code}</strong>
-                  </div>
-                  <p className="helper-copy">
-                    {collaboratorLimitReached
-                      ? `已達 ${groupBillingConfig.maxPaidCollaborators} 位協作者上限。超過這個，請用其他協作者帳號，另外開設家庭群組。`
-                      : "複製邀請碼或完整邀請文，貼到 LINE 給協作者。"}
-                  </p>
-                  <div className="invite-code-row">
-                    <button
-                      type="button"
-                      className="btn-copy"
-                      onClick={() => requestInviteConfirmation(group, "full")}
-                    >
-                      {copiedCode === group.invite_code ? "已複製邀請文案" : "複製完整邀請"}
-                    </button>
-                    <button type="button" className="btn-secondary-sm" onClick={() => requestInviteConfirmation(group, "code")}>
-                      只複製邀請碼
-                    </button>
-                    <a className="btn-secondary-sm invite-line-link" href={CARE_WEDO_LINE_URL} target="_blank" rel="noopener noreferrer">
-                      加入 LINE 小管家
-                    </a>
-                    {isAdmin && (
-                      <button
-                        type="button"
-                        className="btn-secondary-sm"
-                        onClick={() => handleRegenerateInvite(group.id)}
-                      >
-                        重新產生
-                      </button>
-                    )}
-                  </div>
+                  {group.invite_code ? (
+                    <>
+                      <div className="invite-copy-head compact">
+                        <span>邀請協作者</span>
+                        <strong>{group.invite_code}</strong>
+                      </div>
+                      <p className="helper-copy">
+                        {collaboratorLimitReached
+                          ? `已達 ${groupBillingConfig.maxPaidCollaborators} 位協作者上限。超過這個，請用其他協作者帳號，另外開設家庭群組。`
+                          : "複製邀請碼或完整邀請文，貼到 LINE 給協作者。"}
+                      </p>
+                      <div className="invite-code-row">
+                        <button
+                          type="button"
+                          className="btn-copy"
+                          onClick={() => requestInviteConfirmation(group, "full")}
+                        >
+                          {copiedCode === group.invite_code ? "已複製邀請文案" : "複製完整邀請"}
+                        </button>
+                        <button type="button" className="btn-secondary-sm" onClick={() => requestInviteConfirmation(group, "code")}>
+                          只複製邀請碼
+                        </button>
+                        <a className="btn-secondary-sm invite-line-link" href={CARE_WEDO_LINE_URL} target="_blank" rel="noopener noreferrer">
+                          加入 LINE 小管家
+                        </a>
+                        {isAdmin && (
+                          <button
+                            type="button"
+                            className="btn-secondary-sm"
+                            onClick={() => handleRegenerateInvite(group.id)}
+                          >
+                            重新產生
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <p className="helper-copy">你沒有邀請協作者的管理權限。</p>
+                  )}
                 </div>
 
                 <div className="members-list">

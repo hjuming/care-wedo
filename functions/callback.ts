@@ -1,4 +1,6 @@
 import { parseMedicalImages, parseMedicalText, saveParsedData, saveParsedDataToSelectedProfile, savePendingParsedDataToProfile, Env as OcrEnv } from "./_shared/medical_ocr";
+import { checkGroupOcrQuota, incrementGroupOcrQuota } from "./_shared/billing";
+import { assertGroupWriteAccess, manageableGroupIds } from "./_shared/group_permissions";
 import { logError, logEvent } from "./_shared/logger";
 import { sendProductionAlert } from "./_shared/alerts";
 import { getAccessibleProfiles, getOrCreateDefaultUser, getUserMemberships, supabaseFetch } from "./_shared/supabase";
@@ -639,6 +641,35 @@ function buildReassignQuickReply(
   };
 }
 
+async function resolveLineOcrAccess<T extends { id: number; group_id: number | null }>(
+  env: Env,
+  userId: number,
+  profiles: T[],
+  nextUploadTarget: T | null,
+) {
+  const memberships = await getUserMemberships(env, userId);
+  if (memberships.length === 0) {
+    throw new Error("請先建立照護空間與照護對象，再上傳醫療文件。");
+  }
+
+  const writableGroupIds = manageableGroupIds(memberships);
+  const groupId = nextUploadTarget?.group_id
+    ?? writableGroupIds.find((id) => profiles.some((profile) => profile.group_id === id))
+    ?? null;
+  if (!groupId) {
+    throw new Error("您沒有修改權限，此家庭資料目前為唯讀");
+  }
+
+  assertGroupWriteAccess(memberships, groupId);
+  const scopedProfiles = profiles.filter((profile) => profile.group_id === groupId);
+  if (scopedProfiles.length === 0) {
+    throw new Error("請先建立照護對象，再上傳醫療文件。");
+  }
+
+  const plan = await checkGroupOcrQuota(env, groupId);
+  return { groupId, plan, profiles: scopedProfiles };
+}
+
 /** 處理圖片 OCR（背景執行，用 Push API 回傳結果） */
 async function processImageOCR(env: Env, event: LineEvent) {
   const lineUserId = event.source.userId;
@@ -651,11 +682,13 @@ async function processImageOCR(env: Env, event: LineEvent) {
     const userId = await getOrCreateDefaultUser(env, lineUserId);
     const profiles = await getAccessibleProfiles(env, userId);
     const nextUploadTarget = await getNextUploadTargetProfile(env, userId, profiles);
+    const access = await resolveLineOcrAccess(env, userId, profiles, nextUploadTarget);
     const base64Image = await fetchLineContent(env, event.message!.id!);
     const parsedData = await parseMedicalImages(env, [{ data: base64Image, media_type: "image/jpeg" }]);
     const saved = nextUploadTarget
       ? await saveParsedDataToSelectedProfile(env, parsedData, lineUserId, nextUploadTarget.id)
-      : await saveParsedData(env, parsedData, lineUserId);
+      : await saveParsedData(env, parsedData, lineUserId, access.groupId);
+    await incrementGroupOcrQuota(env, access.groupId, access.plan);
 
     if (nextUploadTarget) {
       await clearNextUploadTargetProfile(env, userId);
@@ -666,7 +699,7 @@ async function processImageOCR(env: Env, event: LineEvent) {
         env,
         lineUserId,
         "這張要存給誰？",
-        pendingProfileQuickReply(saved.pendingDocumentId, profiles),
+        pendingProfileQuickReply(saved.pendingDocumentId, access.profiles),
       );
       logEvent("line.ocr_pending_profile_selection", {
         line_user_suffix: lineUserId.slice(-4),
@@ -681,7 +714,7 @@ async function processImageOCR(env: Env, event: LineEvent) {
 
     const aptIds = saved.appointment_ids.join(",");
     const medIds = saved.medication_ids.join(",");
-    const quickReply = buildReassignQuickReply(profiles, saved.profileName, aptIds, medIds);
+    const quickReply = buildReassignQuickReply(access.profiles, saved.profileName, aptIds, medIds);
 
     await pushText(env, lineUserId, reply, summaryQuickReply(quickReply));
     const familySummary = `家人上傳了【${saved.profileName}】的資料。\n已整理好。\n\n${reply}`;
@@ -727,10 +760,12 @@ async function processTextOCR(env: Env, event: LineEvent, incomingText: string) 
     const userId = await getOrCreateDefaultUser(env, lineUserId);
     const profiles = await getAccessibleProfiles(env, userId);
     const nextUploadTarget = await getNextUploadTargetProfile(env, userId, profiles);
+    const access = await resolveLineOcrAccess(env, userId, profiles, nextUploadTarget);
     const parsedData = await parseMedicalText(env, incomingText);
     const saved = nextUploadTarget
       ? await saveParsedDataToSelectedProfile(env, parsedData, lineUserId, nextUploadTarget.id)
-      : await saveParsedData(env, parsedData, lineUserId);
+      : await saveParsedData(env, parsedData, lineUserId, access.groupId);
+    await incrementGroupOcrQuota(env, access.groupId, access.plan);
 
     if (nextUploadTarget) {
       await clearNextUploadTargetProfile(env, userId);
@@ -741,7 +776,7 @@ async function processTextOCR(env: Env, event: LineEvent, incomingText: string) 
         env,
         lineUserId,
         "這段資料要存給誰？",
-        pendingProfileQuickReply(saved.pendingDocumentId, profiles),
+        pendingProfileQuickReply(saved.pendingDocumentId, access.profiles),
       );
       logEvent("line.text_ocr_pending_profile_selection", {
         line_user_suffix: lineUserId.slice(-4),
@@ -755,7 +790,7 @@ async function processTextOCR(env: Env, event: LineEvent, incomingText: string) 
     const reply = formatResultSummary(parsedData, saved.profileName);
     const aptIds = saved.appointment_ids.join(",");
     const medIds = saved.medication_ids.join(",");
-    const quickReply = buildReassignQuickReply(profiles, saved.profileName, aptIds, medIds);
+    const quickReply = buildReassignQuickReply(access.profiles, saved.profileName, aptIds, medIds);
 
     await pushText(env, lineUserId, reply, summaryQuickReply(quickReply));
     const familySummary = `家人上傳了【${saved.profileName}】的資料。\n已整理好。\n\n${reply}`;
@@ -810,11 +845,13 @@ async function reassignRecordsToProfile(
   if (!targetProfile) {
     throw new Error("您沒有這個照護對象的權限");
   }
+  if (!targetProfile.group_id) {
+    throw new Error("照護對象尚未加入照護空間");
+  }
+  assertGroupWriteAccess(memberships, targetProfile.group_id);
 
-  const groupIds = memberships.map((membership) => membership.group_id);
-  const accessFilters = [`user_id.eq.${userId}`];
-  if (groupIds.length > 0) accessFilters.push(`group_id.in.(${groupIds.join(",")})`);
-  const accessQuery = `or=(${accessFilters.join(",")})`;
+  const groupIds = manageableGroupIds(memberships);
+  const accessQuery = `group_id=in.(${groupIds.join(",")})`;
 
   if (appointmentIds.length > 0) {
     const rows = await supabaseFetch<Array<{ id: number }>>(

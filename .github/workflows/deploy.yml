@@ -97,3 +97,22 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Verify deployed public health readiness
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          set -euo pipefail
+          endpoint="https://care-wedo.pages.dev/api/health"
+          for attempt in 1 2 3 4 5; do
+            if response="$(curl --fail --silent --show-error --max-time 15 "$endpoint")" \
+              && printf '%s' "$response" | grep -Eq '"env_ready"[[:space:]]*:[[:space:]]*true'; then
+              echo "Health readiness passed on attempt $attempt."
+              exit 0
+            fi
+            if [ "$attempt" -lt 5 ]; then
+              echo "Health readiness not ready (attempt $attempt/5); retrying in 10 seconds."
+              sleep 10
+            fi
+          done
+          echo "Health readiness did not return env_ready=true after 5 attempts." >&2
+          exit 1

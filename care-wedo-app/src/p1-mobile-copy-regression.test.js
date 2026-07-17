@@ -109,3 +109,43 @@ test("care management is split into focused sections instead of one long page", 
   assert.match(settingsView, /資料說明/);
   assert.match(settingsView, /帳號方案/);
 });
+
+test("internal navigation leaves modified and non-primary link clicks to the browser", () => {
+  const app = readProjectFile("care-wedo-app/src/App.jsx");
+  const clickHandler = app.slice(app.indexOf("const handleClick = (e) =>"), app.indexOf("document.addEventListener(\"click\", handleClick)"));
+
+  assert.match(clickHandler, /e\.defaultPrevented \|\| e\.button !== 0 \|\| e\.metaKey \|\| e\.ctrlKey \|\| e\.shiftKey \|\| e\.altKey/);
+});
+
+test("care profile, reminder, and group entry fields have programmatic labels", () => {
+  const app = readProjectFile("care-wedo-app/src/App.jsx");
+  const appointmentView = readProjectFile("care-wedo-app/src/features/appointments/AppointmentView.jsx");
+  const groupManager = readProjectFile("care-wedo-app/src/components/GroupManager.jsx");
+
+  for (const [id, label] of [["profile-display-name", "顯示名稱"], ["profile-birth-date", "出生年月日"], ["profile-emergency-phone", "緊急聯絡電話"], ["profile-email", "EMAIL"], ["profile-notes", "重要附註"]]) {
+    assert.match(app, new RegExp(`<label htmlFor="${id}">${label}`));
+    assert.match(app, new RegExp(`id="${id}"`));
+  }
+
+  for (const [id, label] of [["reminder-date", "日期"], ["reminder-time", "時間"], ["reminder-hospital", "醫院 / 地點"], ["reminder-department", "診別 / 科別"], ["reminder-doctor", "醫師"], ["reminder-location", "詳細地點"], ["reminder-fasting-hours", "空腹小時數"], ["reminder-notes", "提醒內容"]]) {
+    assert.match(appointmentView, new RegExp(`<label htmlFor="${id}">${label}`));
+    assert.match(appointmentView, new RegExp(`id="${id}"`));
+  }
+
+  assert.match(groupManager, /<label htmlFor="group-action-value">/);
+  assert.match(groupManager, /id="group-action-value"/);
+});
+
+test("feedback submission outcomes use an assertive error and polite status live region", () => {
+  const app = readProjectFile("care-wedo-app/src/App.jsx");
+
+  assert.match(app, /role=\{feedbackStatus\.state === "error" \? "alert" : "status"\}/);
+});
+
+test("client navigation scroll respects reduced-motion preference", () => {
+  const app = readProjectFile("care-wedo-app/src/App.jsx");
+  const clickHandler = app.slice(app.indexOf("const handleClick = (e) =>"), app.indexOf("document.addEventListener(\"click\", handleClick)"));
+
+  assert.match(clickHandler, /window\.matchMedia\?\.\("\(prefers-reduced-motion: reduce\)"\)\.matches \? "auto" : "smooth"/);
+  assert.match(clickHandler, /behavior: scrollBehavior/);
+});

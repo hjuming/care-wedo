@@ -4,6 +4,7 @@ import {
   createCareProfile,
   createGroup,
   getAccessibleProfiles,
+  generateInviteCode,
   getUserGroups,
   getUserMemberships,
   joinGroupByCode,
@@ -23,7 +24,7 @@ import {
   resolveGroupBillingEntitlement,
 } from "../_shared/billing";
 import { getRequestUser } from "../_shared/auth_context";
-import { assertGroupWriteAccess, requireGroupWriteAccess } from "../_shared/group_permissions";
+import { assertGroupWriteAccess, canManageMembership, requireGroupWriteAccess } from "../_shared/group_permissions";
 
 type Env = {
   SUPABASE_URL: string;
@@ -99,8 +100,11 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
           getGroupPlan(env, group.id),
           resolveGroupBillingEntitlement(env, group.id),
         ]);
+        const membership = memberships.find((item) => item.group_id === group.id);
+        const { invite_code: inviteCode, ...groupWithoutInviteCode } = group;
         return {
-          ...group,
+          ...groupWithoutInviteCode,
+          ...(membership && canManageMembership(membership) ? { invite_code: inviteCode } : {}),
           members,
           member_count: members.length,
           care_profile_count: profileCountByGroupId.get(group.id) || 0,
@@ -397,8 +401,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       if (!body.group_id) return Response.json({ error: "請提供群組 ID" }, { status: 400 });
       await assertAdmin(env, userId, body.group_id);
 
-      const newCode = Math.random().toString(36).substring(2, 8).toUpperCase()
-        + Math.random().toString(36).substring(2, 4).toUpperCase();
+      const newCode = generateInviteCode();
 
       const updated = await supabaseFetch<Array<{ id: number; invite_code: string }>>(
         env,

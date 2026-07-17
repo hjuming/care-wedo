@@ -1,5 +1,6 @@
 import type { CareProfileRow } from "./supabase";
-import { getAccessibleProfiles, getOrCreateDefaultUser, resolveDefaultCareContext, supabaseFetch } from "./supabase";
+import { getAccessibleProfiles, getOrCreateDefaultUser, getUserMemberships, supabaseFetch } from "./supabase";
+import { assertGroupWriteAccess, requireGroupWriteAccess } from "./group_permissions";
 
 export type Env = {
   GOOGLE_API_KEY: string;
@@ -272,9 +273,10 @@ export async function resolveMatchedCareProfile(
   env: Env,
   userId: number,
   parsed: ParsedMedicalData,
+  groupId: number,
 ): Promise<{ profile: CareProfileRow | null; patientName: string; birthDate: string }> {
   const identity = extractPatientIdentity(parsed);
-  const profiles = await getAccessibleProfiles(env, userId);
+  const profiles = (await getAccessibleProfiles(env, userId)).filter((profile) => profile.group_id === groupId);
 
   if (!identity.normalizedPatientName && !identity.birthDate && !identity.birthYear) {
     return { profile: null, patientName: identity.patientName, birthDate: identity.birthDate };
@@ -380,17 +382,15 @@ export async function createPendingLineOcrDocument(
   env: Env,
   parsed: ParsedMedicalData,
   userId: number,
+  groupId: number,
 ): Promise<{ documentId: number; groupId: number | null }> {
-  const careContext = await resolveDefaultCareContext(env, userId);
-  if (!careContext.groupId) {
-    throw new Error("請先建立照護空間與照護對象，再上傳醫療文件。");
-  }
+  await requireGroupWriteAccess(env, userId, groupId);
 
   const inserted = await supabaseFetch<Array<{ id: number }>>(env, "care_documents?select=id", {
     method: "POST",
     headers: { Prefer: "return=representation" },
     body: JSON.stringify({
-      group_id: careContext.groupId,
+      group_id: groupId,
       profile_id: null,
       uploaded_by_user_id: userId,
       document_type: inferDocumentType(parsed),
@@ -402,7 +402,7 @@ export async function createPendingLineOcrDocument(
   });
 
   if (!inserted[0]?.id) throw new Error("無法建立待確認文件");
-  return { documentId: inserted[0].id, groupId: careContext.groupId };
+  return { documentId: inserted[0].id, groupId };
 }
 
 export async function saveParsedDataToProfile(
@@ -412,6 +412,9 @@ export async function saveParsedDataToProfile(
   targetProfile: CareProfileRow,
   sourceDocumentId?: number | null,
 ): Promise<SavedLineOcrData> {
+  if (!targetProfile.group_id) throw new Error("照護對象尚未加入照護空間");
+  await requireGroupWriteAccess(env, userId, targetProfile.group_id);
+
   const saved: SavedLineOcrData = {
     appointment_ids: [],
     medication_ids: [],
@@ -631,16 +634,28 @@ export async function savePendingParsedDataToProfile(
   const profiles = await getAccessibleProfiles(env, userId);
   const targetProfile = profiles.find((profile) => profile.id === targetProfileId);
   if (!targetProfile) throw new Error("您沒有這個照護對象的權限");
+  if (!targetProfile.group_id) throw new Error("照護對象尚未加入照護空間");
+  const memberships = await getUserMemberships(env, userId);
+  assertGroupWriteAccess(memberships, targetProfile.group_id);
 
-  const documents = await supabaseFetch<Array<{ id: number; ai_summary: ParsedMedicalData | null }>>(
+  const groupIds = memberships.map((membership) => membership.group_id);
+  const documentRefs = await supabaseFetch<Array<{ id: number; group_id: number }>>(
     env,
-    `care_documents?id=eq.${documentId}&uploaded_by_user_id=eq.${userId}&status=eq.pending_profile_selection&select=id,ai_summary&limit=1`,
+    `care_documents?id=eq.${documentId}&group_id=in.(${groupIds.join(",")})&uploaded_by_user_id=eq.${userId}&status=eq.pending_profile_selection&select=id,group_id&limit=1`,
+  );
+  const documentRef = documentRefs[0];
+  if (!documentRef?.group_id) throw new Error("找不到待確認文件");
+  assertGroupWriteAccess(memberships, documentRef.group_id);
+
+  const documents = await supabaseFetch<Array<{ id: number; group_id: number; ai_summary: ParsedMedicalData | null }>>(
+    env,
+    `care_documents?id=eq.${documentId}&group_id=eq.${documentRef.group_id}&uploaded_by_user_id=eq.${userId}&status=eq.pending_profile_selection&select=id,group_id,ai_summary&limit=1`,
   );
   const document = documents[0];
   if (!document?.ai_summary) throw new Error("找不到待確認文件");
 
   const saved = await saveParsedDataToProfile(env, document.ai_summary, userId, targetProfile, documentId);
-  await supabaseFetch(env, `care_documents?id=eq.${documentId}`, {
+  await supabaseFetch(env, `care_documents?id=eq.${documentId}&group_id=eq.${documentRef.group_id}&uploaded_by_user_id=eq.${userId}&status=eq.pending_profile_selection`, {
     method: "PATCH",
     body: JSON.stringify({
       group_id: targetProfile.group_id,
@@ -662,6 +677,8 @@ export async function saveParsedDataToSelectedProfile(
   const profiles = await getAccessibleProfiles(env, userId);
   const targetProfile = profiles.find((profile) => profile.id === targetProfileId);
   if (!targetProfile) throw new Error("您沒有這個照護對象的權限");
+  if (!targetProfile.group_id) throw new Error("照護對象尚未加入照護空間");
+  await requireGroupWriteAccess(env, userId, targetProfile.group_id);
 
   const inserted = await supabaseFetch<Array<{ id: number }>>(env, "care_documents?select=id", {
     method: "POST",
@@ -692,16 +709,22 @@ export async function saveParsedDataToSelectedProfile(
   return { ...saved, parsed };
 }
 
-export async function saveParsedData(env: Env, parsed: ParsedMedicalData, lineUserId?: string): Promise<SavedLineOcrData> {
+export async function saveParsedData(
+  env: Env,
+  parsed: ParsedMedicalData,
+  lineUserId: string | undefined,
+  targetGroupId: number,
+): Promise<SavedLineOcrData> {
   const userId = await getOrCreateDefaultUser(env, lineUserId);
-  const matched = await resolveMatchedCareProfile(env, userId, parsed);
+  await requireGroupWriteAccess(env, userId, targetGroupId);
+  const matched = await resolveMatchedCareProfile(env, userId, parsed, targetGroupId);
 
   if (matched.profile) {
     const saved = await saveParsedDataToProfile(env, parsed, userId, matched.profile);
     return { ...saved, matchedBy: "patient_identity" };
   }
 
-  const pending = await createPendingLineOcrDocument(env, parsed, userId);
+  const pending = await createPendingLineOcrDocument(env, parsed, userId, targetGroupId);
   return {
     appointment_ids: [],
     medication_ids: [],

@@ -34,7 +34,7 @@ Use this agent for ongoing feature development, bug fixes, refactors, and implem
 - Family groups: create, join by invite code, create care profiles
 - Care profiles: create, switch, edit, avatar upload
 - OCR pipeline: LINE Webhook → Gemini Vision → Supabase upsert → LINE reply
-- Cron reminders: 08:00 morning brief + 20:00 evening fasting alert (via GitHub Actions)
+- Cron reminders: 08:00 morning brief + 20:00 evening fasting alert (Cloudflare Cron Worker; GitHub Actions only provides manual backup triggers)
 - Dashboard API: `/api/dashboard` returns appointments, medications, care profiles
 - Frontend: full React Dashboard with calendar, meds, records, settings sections
 - Tests: 7/7 passing (routing + API service layer)

@@ -99,6 +99,16 @@ export type UserFamilyGroupRow = {
   receive_evening_alert?: boolean;
 };
 
+export function generateInviteCode(): string {
+  const bytes = new Uint8Array(16);
+  const cryptoApi = (globalThis as unknown as {
+    crypto?: { getRandomValues: (values: Uint8Array) => Uint8Array };
+  }).crypto;
+  if (!cryptoApi) throw new Error("無法安全產生邀請碼");
+  cryptoApi.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("").toUpperCase();
+}
+
 export type UserFeatureFlagRow = {
   id: number;
   user_id: number;
@@ -623,8 +633,7 @@ export async function createGroup(
   name: string,
   defaultProfile: { displayName?: string; avatarUrl?: string | null } = {},
 ): Promise<GroupRow> {
-  // Generate a random 6-character invite code
-  const inviteCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+  const inviteCode = generateInviteCode();
 
   const created = await supabaseFetch<GroupRow[]>(env, "family_groups?select=*", {
     method: "POST",
@@ -682,6 +691,8 @@ export async function joinGroupByCode(env: Env, userId: number, code: string): P
       user_id: userId,
       group_id: group.id,
       role: "member",
+      can_manage: false,
+      can_pay: false,
     }),
   });
 

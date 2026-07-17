@@ -20,6 +20,28 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: "22"
+          cache: "npm"
+
+      - name: Install root tooling
+        run: npm ci
+
+      - name: Install frontend test dependencies
+        run: npm ci
+        working-directory: care-wedo-app
+
+      - name: Typecheck functions and scheduler worker
+        run: npm run typecheck
+
+      - name: Test functions
+        run: npm run test:functions
+        env:
+          TZ: Asia/Taipei
+
+      - name: Test scheduler regression coverage
+        run: npm test
+        working-directory: care-wedo-app
+        env:
+          TZ: Asia/Taipei
 
       - name: Deploy Cloudflare Cron Worker
         run: npx wrangler@4 deploy --config workers/reminder-scheduler/wrangler.toml

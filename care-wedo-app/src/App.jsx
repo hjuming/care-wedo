@@ -1184,7 +1184,7 @@ function LandingPage({ variant = "home" }) {
             {feedbackStatus.state === "sending" ? "送出中..." : "送出回饋"}
           </button>
           {feedbackStatus.message && (
-            <p className={`feedback-status ${feedbackStatus.state === "error" ? "notice-danger" : ""}`}>
+            <p className={`feedback-status ${feedbackStatus.state === "error" ? "notice-danger" : ""}`} role={feedbackStatus.state === "error" ? "alert" : "status"}>
               {feedbackStatus.message}
             </p>
           )}
@@ -1443,6 +1443,7 @@ export default function App() {
     // 攔截所有內部 <a> 點擊，改用 pushState 客戶端導航
     // 不攔截：外部連結、mailto、tel、hash 錨點、target="_blank"
     const handleClick = (e) => {
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
       const anchor = e.target.closest("a[href]");
       if (!anchor) return;
       const href = anchor.getAttribute("href");
@@ -1456,14 +1457,15 @@ export default function App() {
       ) return;
       e.preventDefault();
       window.history.pushState(null, "", href);
+      const scrollBehavior = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
       const [pathAndSearch, hash = ""] = href.split("#", 2);
       const [path] = pathAndSearch.split("?", 2);
       setRoute(resolveRoute(path || "/"));
       const hashWithSymbol = hash ? `#${hash}` : "";
       if (hashWithSymbol) {
-        window.setTimeout(() => document.querySelector(hashWithSymbol)?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+        window.setTimeout(() => document.querySelector(hashWithSymbol)?.scrollIntoView({ behavior: scrollBehavior, block: "start" }), 0);
       } else {
-        window.scrollTo({ top: 0, behavior: "smooth" });
+        window.scrollTo({ top: 0, behavior: scrollBehavior });
       }
     };
     document.addEventListener("click", handleClick);
@@ -2748,8 +2750,9 @@ function ProfileEditModal({ profile, onClose, onSave, canPersist }) {
           {error && <p className="error-msg">{error}</p>}
 
           <div className="form-group">
-            <label>顯示名稱</label>
+            <label htmlFor="profile-display-name">顯示名稱</label>
             <input 
+              id="profile-display-name"
               value={formData.display_name} 
               onChange={(e) => setFormData({ ...formData, display_name: e.target.value })} 
               placeholder="例：家中長輩、主要照護對象"
@@ -2769,16 +2772,18 @@ function ProfileEditModal({ profile, onClose, onSave, canPersist }) {
 
           <div className="form-row-two">
             <div className="form-group">
-              <label>出生年月日</label>
+              <label htmlFor="profile-birth-date">出生年月日</label>
               <input
+                id="profile-birth-date"
                 type="date"
                 value={formData.birth_date}
                 onChange={(e) => setFormData({ ...formData, birth_date: e.target.value })}
               />
             </div>
             <div className="form-group">
-              <label>緊急聯絡電話</label>
+              <label htmlFor="profile-emergency-phone">緊急聯絡電話</label>
               <input
+                id="profile-emergency-phone"
                 type="tel"
                 value={formData.emergency_phone}
                 onChange={(e) => setFormData({ ...formData, emergency_phone: e.target.value })}
@@ -2788,8 +2793,9 @@ function ProfileEditModal({ profile, onClose, onSave, canPersist }) {
           </div>
 
           <div className="form-group">
-            <label>EMAIL</label>
+            <label htmlFor="profile-email">EMAIL</label>
             <input
+              id="profile-email"
               type="email"
               value={formData.email}
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
@@ -2798,8 +2804,9 @@ function ProfileEditModal({ profile, onClose, onSave, canPersist }) {
           </div>
 
           <div className="form-group">
-            <label>重要附註 (會顯示在側邊欄)</label>
+            <label htmlFor="profile-notes">重要附註 (會顯示在側邊欄)</label>
             <textarea 
+              id="profile-notes"
               value={formData.notes} 
               onChange={(e) => setFormData({ ...formData, notes: e.target.value })} 
               placeholder="例：過敏史、緊急聯絡方式、常用藥物"
