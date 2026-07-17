@@ -58,10 +58,9 @@ const SECTIONS = [
 
 const MOBILE_SECTIONS = [
   { id: "overview", label: "今日照護", mobileLabel: "今天", icon: "⌂" },
-  { id: "calendar", label: "照護排程", mobileLabel: "排程", icon: "□" },
-  { id: "records", label: "照護紀錄", mobileLabel: "紀錄", icon: "≡" },
+  { id: "calendar", label: "照護事項", mobileLabel: "照護事項", icon: "□" },
   { id: "meds", label: "用藥管理", mobileLabel: "用藥", icon: "○" },
-  { id: "settings", label: "照護圈", mobileLabel: "照護圈", icon: "⚙" },
+  { id: "settings", label: "照護管理", mobileLabel: "管理", icon: "⚙" },
 ];
 
 function normalizeAppointment(apt, index) {
@@ -1550,6 +1549,7 @@ function ExternalOpenPage() {
 function DashboardApp() {
   const fileInputRef = useRef(null);
   const [activeSection, setActiveSection] = useState("overview");
+  const [preferredDisplayMode, setPreferredDisplayMode] = useState("caregiver");
   const [searchQuery, setSearchQuery] = useState("");
   const [scanning, setScanning] = useState(false);
   const [ocrData, setOcrData] = useState(null);
@@ -1788,8 +1788,12 @@ function DashboardApp() {
   const canViewHistory = planPermissions.can_view_history !== false;
   const careCapabilities = deriveCareCapabilities(dashboard || {});
   const { canManageCare, canCompleteMedication, readOnly } = careCapabilities;
-  const visibleSections = canManageCare ? SECTIONS : SECTIONS.filter((section) => ["overview", "calendar", "meds"].includes(section.id));
-  const visibleMobileSections = canManageCare ? MOBILE_SECTIONS : MOBILE_SECTIONS.filter((section) => ["overview", "calendar", "meds"].includes(section.id));
+  const isElderDisplay = readOnly || preferredDisplayMode === "elder";
+  const effectiveReadOnly = readOnly || isElderDisplay;
+  const effectiveCanManageCare = canManageCare && !isElderDisplay;
+  const effectiveCanCompleteMedication = canCompleteMedication && !isElderDisplay;
+  const visibleSections = isElderDisplay ? SECTIONS.filter((section) => ["overview", "calendar", "meds"].includes(section.id)) : SECTIONS;
+  const visibleMobileSections = isElderDisplay ? MOBILE_SECTIONS.filter((section) => ["overview", "calendar", "meds"].includes(section.id)) : MOBILE_SECTIONS;
   const selectedProfile = careProfiles.find((profile) => profile.id === activeProfileId)
     || careProfiles.find((profile) => profile.group_id === activeGroupId)
     || careProfiles[0]
@@ -1889,10 +1893,10 @@ function DashboardApp() {
   const activityAudit = dashboard?.activity_audit || [];
 
   useEffect(() => {
-    if (readOnly && !visibleSections.some((section) => section.id === activeSection)) {
+    if (!visibleSections.some((section) => section.id === activeSection)) {
       setActiveSection("overview");
     }
-  }, [activeSection, readOnly, visibleSections]);
+  }, [activeSection, visibleSections]);
 
   useEffect(() => {
     setFamilyNotes(dashboard?.family_notes || []);
@@ -2411,8 +2415,8 @@ function DashboardApp() {
             groups={groups}
             activeProfileId={activeProfileId}
             onChange={handleProfileChange}
-            onReorder={canManageCare ? handleProfileOrderChange : undefined}
-            readOnly={readOnly}
+            onReorder={effectiveCanManageCare ? handleProfileOrderChange : undefined}
+            readOnly={effectiveReadOnly}
           />
 
           <nav className="section-nav">
@@ -2432,7 +2436,7 @@ function DashboardApp() {
 
           {identity.status === "authenticated" && (
             <div className="side-rail-footer">
-              {canManageCare && (
+              {effectiveCanManageCare && (
                 <button type="button" className="side-footer-action" onClick={() => setShowPlanDetails(true)}>
                   照護圈升級
                 </button>
@@ -2458,13 +2462,19 @@ function DashboardApp() {
             activeGroupName={activeGroup?.name || dashboard?.active_group_name}
             collaborators={collaborators}
             onProfileChange={handleProfileChange}
-            onGroupChange={canManageCare ? handleGroupChange : undefined}
-            onOpenProfile={canManageCare ? () => setShowEditProfile(true) : undefined}
-            onOpenFamily={canManageCare ? () => openSection("settings") : undefined}
-            readOnly={readOnly}
+            onGroupChange={effectiveCanManageCare ? handleGroupChange : undefined}
+            onOpenProfile={effectiveCanManageCare ? () => setShowEditProfile(true) : undefined}
+            onOpenFamily={effectiveCanManageCare ? () => openSection("settings") : undefined}
+            readOnly={effectiveReadOnly}
           />
 
-          {activeSection !== "overview" && activeSection !== "settings" && (
+          <CareDisplayModeSwitch
+            value={isElderDisplay ? "elder" : "caregiver"}
+            canSwitch={canManageCare && !readOnly}
+            onChange={setPreferredDisplayMode}
+          />
+
+          {["calendar", "records"].includes(activeSection) && (
             <>
             <div className="toolbar">
               <SectionHeading section={SECTIONS.find(s => s.id === activeSection)} compact />
@@ -2491,30 +2501,35 @@ function DashboardApp() {
               todayLabel={todayLabel}
               todayDate={todayDate}
               medications={medications}
-              searchQuery={searchQuery}
-              onSearchChange={setSearchQuery}
               todayTasks={todayTasks}
               hasTodayCareTasks={hasTodayCareTasks}
-              searchSuggestions={searchSuggestions}
               nextAppointment={nextAppointment}
               urgentItems={urgentItems}
               familyNotes={familyNotes}
               hasCareData={hasCareData}
               onOpenCalendar={() => openSection("calendar")}
-              onUpload={canManageCare ? handleUploadClick : undefined}
-              onComplete={canManageCare ? handleComplete : undefined}
-              readOnly={readOnly}
+              onUpload={effectiveCanManageCare ? handleUploadClick : undefined}
+              onComplete={effectiveCanManageCare ? handleComplete : undefined}
+              readOnly={effectiveReadOnly}
             />
           )}
 
           {activeSection === "calendar" && (
-            <CalendarView
-              appointments={appointments}
-              careName={selectedProfile?.display_name || patient.name}
-              onUpload={canManageCare ? handleUploadClick : undefined}
-              onAddToCalendar={handleAddAppointmentToCalendar}
-              onEditAppointment={canManageCare ? setEditingAppointment : undefined}
-            />
+            <>
+              {effectiveCanManageCare && (
+                <div className="mobile-care-items-switch" role="group" aria-label="照護事項分類">
+                  <button type="button" className="active" aria-current="page">接下來</button>
+                  <button type="button" onClick={() => openSection("records")}>過往與文件</button>
+                </div>
+              )}
+              <CalendarView
+                appointments={appointments}
+                careName={selectedProfile?.display_name || patient.name}
+                onUpload={effectiveCanManageCare ? handleUploadClick : undefined}
+                onAddToCalendar={handleAddAppointmentToCalendar}
+                onEditAppointment={effectiveCanManageCare ? setEditingAppointment : undefined}
+              />
+            </>
           )}
 
           {activeSection === "meds" && (
@@ -2527,31 +2542,39 @@ function DashboardApp() {
               copyText={copyText}
               formatDateLabel={formatDateLabel}
               onClearSearch={() => setSearchQuery("")}
-              onUpload={canManageCare ? handleUploadClick : undefined}
-              onTaken={canCompleteMedication ? handleMedicationTaken : undefined}
-              canCompleteMedication={canCompleteMedication}
-              readOnly={readOnly}
+              onUpload={effectiveCanManageCare ? handleUploadClick : undefined}
+              onTaken={effectiveCanCompleteMedication ? handleMedicationTaken : undefined}
+              canCompleteMedication={effectiveCanCompleteMedication}
+              readOnly={effectiveReadOnly}
               activityAudit={activityAudit}
             />
           )}
 
           {activeSection === "records" && (
-            <RecordsView
-              records={allAppointments}
-              documents={documents}
-              searchQuery={searchQuery}
-              onUpload={canManageCare ? handleUploadClick : undefined}
-              onUploadDocument={canManageCare ? () => setShowDocumentUpload(true) : undefined}
-              onOpenDocument={handleDocumentOpen}
-              onEditRecord={canManageCare ? setEditingAppointment : undefined}
-              readOnly={readOnly}
-              canViewHistory={canViewHistory}
-              documentNotice={documentNotice}
-              onUpgradeRequired={(reason) => showPlanUpgradePrompt(reason, "records_history")}
-            />
+            <>
+              <div className="mobile-care-items-switch" role="group" aria-label="照護事項分類">
+                <button type="button" onClick={() => openSection("calendar")}>接下來</button>
+                <button type="button" className="active" aria-current="page">過往與文件</button>
+              </div>
+              <RecordsView
+                records={allAppointments}
+                documents={documents}
+                searchQuery={searchQuery}
+                initialMode="history"
+                showFutureMode={false}
+                onUpload={effectiveCanManageCare ? handleUploadClick : undefined}
+                onUploadDocument={effectiveCanManageCare ? () => setShowDocumentUpload(true) : undefined}
+                onOpenDocument={handleDocumentOpen}
+                onEditRecord={effectiveCanManageCare ? setEditingAppointment : undefined}
+                readOnly={effectiveReadOnly}
+                canViewHistory={canViewHistory}
+                documentNotice={documentNotice}
+                onUpgradeRequired={(reason) => showPlanUpgradePrompt(reason, "records_history")}
+              />
+            </>
           )}
 
-          {activeSection === "settings" && canManageCare && (
+          {activeSection === "settings" && effectiveCanManageCare && (
             <SettingsView
               patient={patient}
               identity={identity}
@@ -2655,7 +2678,7 @@ function DashboardApp() {
 
       <MobileBottomNav
         sections={visibleMobileSections}
-        activeSection={activeSection}
+        activeSection={activeSection === "records" ? "calendar" : activeSection}
         onChange={handleMobileNavChange}
       />
     </main>
@@ -3015,6 +3038,23 @@ function GroupBadge({ groups = [], activeGroupId, activeGroupName, onChange, fal
   );
 }
 
+function CareDisplayModeSwitch({ value, canSwitch, onChange }) {
+  if (!canSwitch) {
+    return <p className="care-display-mode-status">長輩模式・只顯示查看需要的功能</p>;
+  }
+
+  return (
+    <div className="care-display-mode-switch" role="group" aria-label="顯示模式">
+      <button type="button" className={value === "caregiver" ? "active" : ""} onClick={() => onChange?.("caregiver")}>
+        照護者模式
+      </button>
+      <button type="button" className={value === "elder" ? "active" : ""} onClick={() => onChange?.("elder")}>
+        長輩模式
+      </button>
+    </div>
+  );
+}
+
 function CareContextHeader({
   identity,
   patient,
@@ -3292,11 +3332,8 @@ function OverviewView({
   todayLabel,
   todayDate,
   medications = [],
-  searchQuery,
-  onSearchChange,
   todayTasks,
   hasTodayCareTasks,
-  searchSuggestions,
   nextAppointment,
   urgentItems,
   familyNotes,
@@ -3342,16 +3379,6 @@ function OverviewView({
             <p className="today-upload-helper read-only-helper">目前是唯讀查看模式，資料由家人協作者管理。</p>
           )}
         </div>
-      </section>
-
-      <section className="today-search-panel" aria-label="照護資料搜尋">
-        <SearchField
-          value={searchQuery}
-          onChange={onSearchChange}
-          suggestions={searchSuggestions}
-          placeholder="依醫院、診別、醫師篩選"
-          className="today-search-box"
-        />
       </section>
 
       {readOnly && todayMedicationGroups.length > 0 && (
@@ -3535,8 +3562,8 @@ async function copyText(text) {
   document.body.removeChild(textarea);
 }
 
-function RecordsView({ records, documents = [], searchQuery, onUpload, onUploadDocument, onOpenDocument, onEditRecord, canViewHistory = true, documentNotice = "", onUpgradeRequired, readOnly = false }) {
-  const [mode, setMode] = useState("future");
+function RecordsView({ records, documents = [], searchQuery, initialMode = "future", showFutureMode = true, onUpload, onUploadDocument, onOpenDocument, onEditRecord, canViewHistory = true, documentNotice = "", onUpgradeRequired, readOnly = false }) {
+  const [mode, setMode] = useState(initialMode);
   const [copyNotice, setCopyNotice] = useState({ id: null, message: "" });
   const activeMode = canViewHistory ? mode : "future";
   const isDocumentMode = mode === "documents";
@@ -3555,7 +3582,7 @@ function RecordsView({ records, documents = [], searchQuery, onUpload, onUploadD
     const filteredRecords = records
       .filter((record) => record.status !== "deleted")
       .filter((record) => {
-        if (activeMode === "history") return true;
+        if (activeMode === "history") return record.status === "completed" || !isDateTodayOrFuture(record.date, today);
         return record.status !== "completed" && isDateTodayOrFuture(record.date, today);
       })
       .filter((record) => matchSearch(record, searchQuery))
@@ -3583,13 +3610,15 @@ function RecordsView({ records, documents = [], searchQuery, onUpload, onUploadD
   return (
     <div className="records-timeline-view">
       <div className="record-mode-switch" role="group" aria-label="查詢紀錄模式">
-        <button
-          type="button"
-          className={!isDocumentMode && activeMode === "future" ? "active" : ""}
-          onClick={() => handleModeChange("future")}
-        >
-          未來安排
-        </button>
+        {showFutureMode && (
+          <button
+            type="button"
+            className={!isDocumentMode && activeMode === "future" ? "active" : ""}
+            onClick={() => handleModeChange("future")}
+          >
+            未來安排
+          </button>
+        )}
         <button
           type="button"
           className={!isDocumentMode && activeMode === "history" ? "active" : ""}
@@ -3866,98 +3895,128 @@ function SettingsView({
         : "LINE 帳號";
   const accountDisplayName = identity.profile?.displayName || identity.profile?.email || accountProviderLabel;
   const normalizedPricing = normalizeCareWedoPricing(pricing);
+  const [settingsSection, setSettingsSection] = useState("care");
 
   return (
     <div className="settings-grid">
-      <div className="settings-section-label" role="heading" aria-level="2">家庭與成員</div>
-      <section className="summary-panel wide-panel collaborator-control-panel">
-        <p className="panel-eyebrow">協作者管理中心</p>
-        <h3>設定與資料整理都集中在這裡。</h3>
-        <p>長輩頁面只保留今天、行程與用藥查看；編輯資料、手動新增、家人提醒由照護圈協作者在這裡處理。</p>
-        <div className="management-action-grid">
-          <button type="button" className="primary-action" onClick={onEditProfile}>編輯照護對象</button>
-          <button type="button" className="secondary-action" onClick={onAddReminder}>手動新增提醒</button>
-          <a className="secondary-action" href={`mailto:${CARE_WEDO_SUPPORT_EMAIL}`}>資料協助</a>
-        </div>
-      </section>
+      <nav className="management-section-tabs" aria-label="照護管理分類">
+        {[
+          ["care", "照護與家庭"],
+          ["reminders", "提醒紀錄"],
+          ["data", "資料說明"],
+          ["account", "帳號方案"],
+        ].map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            className={settingsSection === id ? "active" : ""}
+            onClick={() => setSettingsSection(id)}
+            aria-current={settingsSection === id ? "page" : undefined}
+          >
+            {label}
+          </button>
+        ))}
+      </nav>
 
-      <section className="summary-panel">
-        <p className="panel-eyebrow">照護對象</p>
-        <div className="care-profile-list">
-          {careProfiles.length ? careProfiles.map((profile) => (
-            <button
-              key={profile.id}
-              type="button"
-              className={(profile.id === activeProfileId || (!activeProfileId && profile.id === selectedProfile?.id)) ? "care-profile-item active" : "care-profile-item"}
-              onClick={() => onProfileChange(profile.id)}
-            >
-              <strong>{profile.display_name}</strong>
-            </button>
-          )) : (
-            <EmptyGuide
-              title="目前還沒有其他照護對象。"
-              description="可以在下方新增爸爸、媽媽、自己，或其他需要一起管理照護資料的人。"
-            />
-          )}
-        </div>
-      </section>
-
-      <section className="summary-panel wide-panel">
-        <GroupSettings identity={identity} onProfileCreated={onGroupChange} onGroupChange={onGroupChange} />
-      </section>
-
-      <div className="settings-section-label" role="heading" aria-level="2">提醒與通知</div>
-      <ReminderAuditPanel logs={linePushAudit} />
-
-      <ActivityAuditPanel events={activityAudit} />
-
-      <section className="summary-panel wide-panel">
-        <p className="panel-eyebrow">家人要記得的事</p>
-        <FamilyNotesEditor notes={familyNotes} onChange={onFamilyNotesChange} />
-      </section>
-
-      <div className="settings-section-label" role="heading" aria-level="2">照護資料</div>
-      <section className="summary-panel wide-panel">
-        <p className="panel-eyebrow">常見照護提醒</p>
-        <div className="care-tips-grid">
-          <article className="care-tip-card">
-            <h3>過敏與禁忌</h3>
-            <p>設定照護對象的過敏史，讓所有家人在解析單據時都能獲得即時警告。</p>
-          </article>
-          <article className="care-tip-card">
-            <h3>常用醫院</h3>
-            <p>記下常去的醫院與科別，系統會自動歸納並優化之後的看診建議。</p>
-          </article>
-        </div>
-      </section>
-
-      <section className="summary-panel wide-panel trust-panel">
-        <p className="panel-eyebrow">資料怎麼保存</p>
-        <h3>保存整理後的重要文字資料，方便日後查詢。</h3>
-        <p>Care WEDO 使用雲端資料庫保存照護資料，並規劃定期備份。若資料有問題、需要匯出或刪除，可聯絡客服信箱。</p>
-        <a className="inline-action" href={`mailto:${CARE_WEDO_SUPPORT_EMAIL}`}>{CARE_WEDO_SUPPORT_EMAIL}</a>
-      </section>
-
-      <div className="settings-section-label" role="heading" aria-level="2">費用與帳號</div>
-      <section className="summary-panel wide-panel pricing-mode-panel" aria-label="目前費用模式">
-        <p className="panel-eyebrow">{reviewMode ? "STAGING 測試模式" : "正式方案"}</p>
-        <h3>{reviewMode ? "測試環境不會實際扣款" : "方案與付款"}</h3>
-        <p>{reviewMode ? CARE_WEDO_TEST_MODE_COPY : formatCareWedoPricingCopy(normalizedPricing)}</p>
-      </section>
-
-      {isPersonalMode && onLogout && (
-        <section className="summary-panel wide-panel">
-              <p className="panel-eyebrow">帳號</p>
-          <div className="account-row">
-            <div>
-              <p className="account-name">{accountDisplayName}</p>
-              <p className="account-sub">目前以 {accountProviderLabel} 登入</p>
+      {settingsSection === "care" && (
+        <>
+          <div className="settings-section-label" role="heading" aria-level="2">家庭與成員</div>
+          <section className="summary-panel wide-panel collaborator-control-panel">
+            <p className="panel-eyebrow">協作者管理中心</p>
+            <h3>設定與資料整理都集中在這裡。</h3>
+            <p>長輩頁面只保留今天、行程與用藥查看；編輯資料、手動新增、家人提醒由照護圈協作者在這裡處理。</p>
+            <div className="management-action-grid">
+              <button type="button" className="primary-action" onClick={onEditProfile}>編輯照護對象</button>
+              <button type="button" className="secondary-action" onClick={onAddReminder}>手動新增提醒</button>
+              <a className="secondary-action" href={`mailto:${CARE_WEDO_SUPPORT_EMAIL}`}>資料協助</a>
             </div>
-            <button type="button" className="btn-logout" onClick={onLogout}>
-              登出
-            </button>
-          </div>
-        </section>
+          </section>
+
+          <section className="summary-panel">
+            <p className="panel-eyebrow">照護對象</p>
+            <div className="care-profile-list">
+              {careProfiles.length ? careProfiles.map((profile) => (
+                <button
+                  key={profile.id}
+                  type="button"
+                  className={(profile.id === activeProfileId || (!activeProfileId && profile.id === selectedProfile?.id)) ? "care-profile-item active" : "care-profile-item"}
+                  onClick={() => onProfileChange(profile.id)}
+                >
+                  <strong>{profile.display_name}</strong>
+                </button>
+              )) : (
+                <EmptyGuide
+                  title="目前還沒有其他照護對象。"
+                  description="可以在下方新增爸爸、媽媽、自己，或其他需要一起管理照護資料的人。"
+                />
+              )}
+            </div>
+          </section>
+
+          <section className="summary-panel wide-panel">
+            <GroupSettings identity={identity} onProfileCreated={onGroupChange} onGroupChange={onGroupChange} />
+          </section>
+        </>
+      )}
+
+      {settingsSection === "reminders" && (
+        <>
+          <div className="settings-section-label" role="heading" aria-level="2">提醒與通知</div>
+          <ReminderAuditPanel logs={linePushAudit} />
+          <ActivityAuditPanel events={activityAudit} />
+          <section className="summary-panel wide-panel">
+            <p className="panel-eyebrow">家人要記得的事</p>
+            <FamilyNotesEditor notes={familyNotes} onChange={onFamilyNotesChange} />
+          </section>
+        </>
+      )}
+
+      {settingsSection === "data" && (
+        <>
+          <div className="settings-section-label" role="heading" aria-level="2">照護資料</div>
+          <section className="summary-panel wide-panel">
+            <p className="panel-eyebrow">常見照護提醒</p>
+            <div className="care-tips-grid">
+              <article className="care-tip-card">
+                <h3>過敏與禁忌</h3>
+                <p>設定照護對象的過敏史，讓所有家人在解析單據時都能獲得即時警告。</p>
+              </article>
+              <article className="care-tip-card">
+                <h3>常用醫院</h3>
+                <p>記下常去的醫院與科別，系統會自動歸納並優化之後的看診建議。</p>
+              </article>
+            </div>
+          </section>
+          <section className="summary-panel wide-panel trust-panel">
+            <p className="panel-eyebrow">資料怎麼保存</p>
+            <h3>保存整理後的重要文字資料，方便日後查詢。</h3>
+            <p>Care WEDO 使用雲端資料庫保存照護資料，並規劃定期備份。若資料有問題、需要匯出或刪除，可聯絡客服信箱。</p>
+            <a className="inline-action" href={`mailto:${CARE_WEDO_SUPPORT_EMAIL}`}>{CARE_WEDO_SUPPORT_EMAIL}</a>
+          </section>
+        </>
+      )}
+
+      {settingsSection === "account" && (
+        <>
+          <div className="settings-section-label" role="heading" aria-level="2">費用與帳號</div>
+          <section className="summary-panel wide-panel pricing-mode-panel" aria-label="目前費用模式">
+            <p className="panel-eyebrow">{reviewMode ? "STAGING 測試模式" : "正式方案"}</p>
+            <h3>{reviewMode ? "測試環境不會實際扣款" : "方案與付款"}</h3>
+            <p>{reviewMode ? CARE_WEDO_TEST_MODE_COPY : formatCareWedoPricingCopy(normalizedPricing)}</p>
+          </section>
+          {isPersonalMode && onLogout && (
+            <section className="summary-panel wide-panel">
+              <p className="panel-eyebrow">帳號</p>
+              <div className="account-row">
+                <div>
+                  <p className="account-name">{accountDisplayName}</p>
+                  <p className="account-sub">目前以 {accountProviderLabel} 登入</p>
+                </div>
+                <button type="button" className="btn-logout" onClick={onLogout}>登出</button>
+              </div>
+            </section>
+          )}
+        </>
       )}
     </div>
   );

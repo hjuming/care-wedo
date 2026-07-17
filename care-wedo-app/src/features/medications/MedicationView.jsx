@@ -39,6 +39,18 @@ function getMedicationShortName(name = "藥") {
     .slice(0, 4) || "藥";
 }
 
+function currentMedicationSlot() {
+  const hour = Number(new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Taipei",
+    hour: "2-digit",
+    hour12: false,
+  }).format(new Date()));
+  if (hour < 11) return "morning";
+  if (hour < 16) return "noon";
+  if (hour < 21) return "evening";
+  return "bedtime";
+}
+
 function getMedicationSlotValues(medication = {}) {
   const text = [medication.time_slot, medication.scheduled_time, medication.frequency, medication.reminder_text]
     .filter(Boolean)
@@ -290,6 +302,7 @@ export default function MedicationView({
 }) {
   const [savingSlot, setSavingSlot] = useState(null);
   const [expandedMedicationId, setExpandedMedicationId] = useState(null);
+  const [expandedSlot, setExpandedSlot] = useState(() => currentMedicationSlot());
   const [showMedicationSummary, setShowMedicationSummary] = useState(false);
   const [locallyTakenSlots, setLocallyTakenSlots] = useState(() => new Set());
   const [slotFeedback, setSlotFeedback] = useState({});
@@ -297,6 +310,11 @@ export default function MedicationView({
   const medicationGroups = useMemo(() => groupMedicationsBySchedule(medications), [medications]);
   const summaryMedications = useMemo(() => uniqueActiveMedications(medicationSummarySource), [medicationSummarySource]);
   const hasAnyMedication = medicationGroups.some((group) => group.medications.length > 0);
+  const currentExpandedSlot = expandedSlot === null
+    ? null
+    : medicationGroups.some((group) => group.slot === expandedSlot && group.medications.length > 0)
+      ? expandedSlot
+      : medicationGroups.find((group) => group.medications.length > 0)?.slot || null;
 
   function isSlotDone(group) {
     return locallyTakenSlots.has(`${todayDate}:${group.slot}`)
@@ -345,11 +363,24 @@ export default function MedicationView({
 
       {hasAnyMedication ? medicationGroups.map((group) => (
         <section key={group.slot} className="medicine-time-group">
+          {(() => {
+            const isGroupExpanded = currentExpandedSlot === group.slot;
+            return (
+              <>
           <div className="medicine-slot-head">
-            <div>
-              <p>{group.medications.length ? `${group.medications.length} 種藥` : "沒有安排"}</p>
-              <h3>{group.label}</h3>
-            </div>
+            <button
+              type="button"
+              className="medicine-slot-toggle"
+              onClick={() => setExpandedSlot(isGroupExpanded ? null : group.slot)}
+              aria-expanded={isGroupExpanded}
+              aria-controls={`medicine-slot-${group.slot}`}
+            >
+              <span>
+                <small>{group.medications.length ? `${group.medications.length} 種藥` : "沒有安排"}</small>
+                <strong>{group.label}</strong>
+              </span>
+              <span className="medicine-slot-chevron" aria-hidden="true">{isGroupExpanded ? "−" : "+"}</span>
+            </button>
             <div className="medicine-slot-actions">
               {group.medications.length > 0 && isSlotDone(group) && (
                 <span className="medicine-slot-status is-done">
@@ -374,7 +405,7 @@ export default function MedicationView({
               {slotFeedback[group.slot].message}
             </p>
           )}
-          {group.medications.length ? <div className="medicine-chip-list">
+          {isGroupExpanded && (group.medications.length ? <div className="medicine-chip-list" id={`medicine-slot-${group.slot}`}>
             {group.medications.map((med) => {
               const isExpanded = expandedMedicationId === med.id;
               return (
@@ -389,7 +420,7 @@ export default function MedicationView({
                     <span className="medicine-color" style={{ backgroundColor: med.color }} aria-hidden="true">
                       {getMedicationShortName(med.name).slice(0, 1)}
                     </span>
-                    <span>{getMedicationShortName(med.name)}</span>
+                    <span className="medicine-full-name">{med.name || "藥名待確認"}</span>
                   </button>
                   {isExpanded && (
                     <div className="medicine-card-detail">
@@ -408,8 +439,11 @@ export default function MedicationView({
               );
             })}
           </div> : (
-            <p className="medicine-slot-empty">這個時段目前沒有藥。</p>
-          )}
+            <p className="medicine-slot-empty" id={`medicine-slot-${group.slot}`}>這個時段目前沒有藥。</p>
+          ))}
+              </>
+            );
+          })()}
         </section>
       )) : (
         <EmptyMedicationGuide

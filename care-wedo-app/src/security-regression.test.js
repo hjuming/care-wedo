@@ -461,7 +461,7 @@ test("Elder read-only mode does not expose plan upgrade or editable settings cop
   const footer = app.slice(app.indexOf("<div className=\"side-rail-footer\">"), app.indexOf("</div>", app.indexOf("<div className=\"side-rail-footer\">") + 1));
   const settings = app.slice(app.indexOf("function SettingsView"), app.indexOf("function CareProfileEditor"));
 
-  assert.match(footer, /canManageCare/);
+  assert.match(footer, /effectiveCanManageCare/);
   assert.doesNotMatch(settings, /長輩頁面只保留拍照新增、查看提醒與完成確認/);
   assert.match(settings, /長輩頁面只保留今天、行程與用藥查看/);
 });
@@ -475,7 +475,7 @@ test("Family notes expose an explicit retry action after a failed save", () => {
   assert.match(editor, /onClick=\{handleSave\}/);
 });
 
-test("Records page defaults to future arrangements and loads history on demand", () => {
+test("Records view supports a merged care-items history and document workflow", () => {
   const app = readProjectFile("care-wedo-app/src/App.jsx");
   const css = readProjectFile("care-wedo-app/src/index.css");
   const dashboard = readProjectFile("functions/api/dashboard.ts");
@@ -489,7 +489,9 @@ test("Records page defaults to future arrangements and loads history on demand",
   assert.match(app, /records=\{allAppointments\}/);
   assert.match(app, /canViewHistory=\{canViewHistory\}/);
   assert.match(app, /onUpgradeRequired=\{\(reason\) => showPlanUpgradePrompt\(reason, "records_history"\)\}/);
-  assert.match(recordsView, /useState\("future"\)/);
+  assert.match(recordsView, /initialMode = "future"/);
+  assert.match(recordsView, /showFutureMode = true/);
+  assert.match(recordsView, /useState\(initialMode\)/);
   assert.match(recordsView, /歷史紀錄/);
   assert.match(recordsView, /canViewHistory = true/);
   assert.match(recordsView, /onUpgradeRequired\?\.\("history"\)/);
