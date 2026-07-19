@@ -1,4 +1,3 @@
-import { readJsonBody } from "../_shared/request_body";
 import { logError, logEvent } from "../_shared/logger";
 
 interface Env {
@@ -16,6 +15,12 @@ type FeedbackBody = {
   topic?: string;
   message?: string;
 };
+
+const MAX_BODY_BYTES = 8192;
+const MAX_NAME_LENGTH = 100;
+const MAX_EMAIL_LENGTH = 254;
+const MAX_TOPIC_LENGTH = 100;
+const MAX_MESSAGE_LENGTH = 4000;
 
 function json(data: unknown, init?: ResponseInit) {
   return Response.json(data, {
@@ -45,6 +50,32 @@ export const onRequestOptions: PagesFunction = async () => {
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   try {
+    const declaredLength = Number(request.headers.get("Content-Length"));
+    if (Number.isFinite(declaredLength) && declaredLength > MAX_BODY_BYTES) {
+      logEvent("feedback.rejected", { reason: "body_too_large", source: "content_length" });
+      return json({ error: "回饋內容過長，請精簡後再送出。" }, { status: 413 });
+    }
+
+    const bodyBytes = await request.arrayBuffer();
+    if (bodyBytes.byteLength > MAX_BODY_BYTES) {
+      logEvent("feedback.rejected", { reason: "body_too_large", body_length: bodyBytes.byteLength });
+      return json({ error: "回饋內容過長，請精簡後再送出。" }, { status: 413 });
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(new TextDecoder().decode(bodyBytes) || "{}");
+    } catch {
+      return json({ error: "回饋格式不正確，請重新填寫。" }, { status: 400 });
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return json({ error: "回饋格式不正確，請重新填寫。" }, { status: 400 });
+    }
+    const body = parsed as FeedbackBody;
+    if ([body.name, body.email, body.topic, body.message].some((value) => value !== undefined && typeof value !== "string")) {
+      return json({ error: "回饋格式不正確，請重新填寫。" }, { status: 400 });
+    }
+
     const { serviceId, templateId, publicKey } = getEmailJsConfig(env);
     if (!serviceId || !templateId || !publicKey) {
       logError("feedback.emailjs_missing_config", new Error("EmailJS runtime config is missing"), {
@@ -55,7 +86,6 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       return json({ error: "回饋信箱尚未設定，請先用 Email 聯絡我們。" }, { status: 503 });
     }
 
-    const body = await readJsonBody<FeedbackBody>(request);
     const cleanName = body.name?.trim() || "Care WEDO 使用者";
     const cleanEmail = body.email?.trim() || "";
     const cleanTopic = body.topic?.trim() || "其他建議";
@@ -66,6 +96,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     }
     if (!cleanEmail || !isValidEmail(cleanEmail)) {
       return json({ error: "請留下有效 Email，我們才寄得到確認信。" }, { status: 400 });
+    }
+    if (cleanName.length > MAX_NAME_LENGTH
+      || cleanEmail.length > MAX_EMAIL_LENGTH
+      || cleanTopic.length > MAX_TOPIC_LENGTH
+      || cleanMessage.length > MAX_MESSAGE_LENGTH) {
+      return json({ error: "回饋內容過長，請精簡後再送出。" }, { status: 400 });
     }
 
     const submittedAt = new Date();
@@ -98,11 +134,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     });
 
     if (!response.ok) {
-      const detail = await response.text().catch(() => "");
       logError("feedback.emailjs_send_failed", new Error(`EmailJS failed with ${response.status}`), {
         status: response.status,
-        detail,
-        topic: cleanTopic,
       });
       return json({ error: "回饋暫時送不出去，請稍後再試。" }, { status: 502 });
     }
