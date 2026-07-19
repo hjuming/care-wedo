@@ -300,7 +300,7 @@ test("internal navigation leaves modified and non-primary link clicks to the bro
 test("care profile, reminder, and group entry fields have programmatic labels", () => {
   const app = readProjectFile("care-wedo-app/src/App.jsx");
   const appointmentView = readProjectFile("care-wedo-app/src/features/appointments/AppointmentView.jsx");
-  const groupManager = readProjectFile("care-wedo-app/src/components/GroupManager.jsx");
+  const loginSetup = readProjectFile("care-wedo-app/src/components/LoginSetup.jsx");
 
   for (const [id, label] of [["profile-display-name", "顯示名稱"], ["profile-birth-date", "出生年月日"], ["profile-emergency-phone", "緊急聯絡電話"], ["profile-email", "EMAIL"], ["profile-notes", "重要附註"]]) {
     assert.match(app, new RegExp(`<label htmlFor="${id}">${label}`));
@@ -312,8 +312,8 @@ test("care profile, reminder, and group entry fields have programmatic labels", 
     assert.match(appointmentView, new RegExp(`id="${id}"`));
   }
 
-  assert.match(groupManager, /<label htmlFor="group-action-value">/);
-  assert.match(groupManager, /id="group-action-value"/);
+  assert.match(loginSetup, /<label htmlFor="setup-family-name">/);
+  assert.match(loginSetup, /id="setup-family-name"/);
 });
 
 test("feedback submission outcomes use an assertive error and polite status live region", () => {

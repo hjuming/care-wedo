@@ -70,8 +70,7 @@ care-wedo-app/src/
     liff.js                  ← LINE LIFF identity init (demo fallback when no LIFF_ID)
     api.js                   ← Frontend API service layer
   components/
-    GroupManager.jsx         ← Family group create/join UI
-    GroupSettings.jsx        ← Group member settings, notification prefs
+    GroupSettings.jsx        ← Group member settings, invites, notification prefs
     LoginSetup.jsx           ← Initial family setup flow
     OcrResult.jsx            ← OCR result display
 

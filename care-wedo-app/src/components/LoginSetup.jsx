@@ -192,9 +192,10 @@ export default function LoginSetup({ identity, onSetupComplete }) {
             />
           </label>
 
-          <label>
+          <label htmlFor="setup-family-name">
             家庭群組名稱（選填）
             <input
+              id="setup-family-name"
               type="text"
               value={familyName}
               onChange={(e) => setFamilyName(e.target.value)}
