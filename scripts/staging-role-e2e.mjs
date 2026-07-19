@@ -175,6 +175,33 @@ function jsonInit(method, body, extraHeaders = {}) {
   };
 }
 
+export function buildMedicationSmokeRequest({ medicationId, operationId, takenDate }) {
+  return jsonInit(
+    "POST",
+    { medication_ids: [Number(medicationId)], status: "taken", taken_date: takenDate },
+    { "Idempotency-Key": `care-wedo-role-medication-${operationId}-${takenDate}` },
+  );
+}
+
+export function verifyMedicationSmokeRetry(first, retry, medicationId) {
+  const expectedMedicationIds = [Number(medicationId)];
+  const firstLogIds = Array.isArray(first?.body?.log_ids) ? first.body.log_ids.map(Number) : [];
+  const retryLogIds = Array.isArray(retry?.body?.log_ids) ? retry.body.log_ids.map(Number) : [];
+  if (first?.status !== 200 || retry?.status !== 200 || !first.body?.success || !retry.body?.success) {
+    throw new Error("medication smoke requests did not succeed");
+  }
+  if (firstLogIds.length !== 1 || firstLogIds.some((id) => !positiveInteger(id))) {
+    throw new Error("medication smoke first response returned invalid log ids");
+  }
+  if (JSON.stringify(first?.body?.medication_ids?.map(Number)) !== JSON.stringify(expectedMedicationIds)
+    || JSON.stringify(retry?.body?.medication_ids?.map(Number)) !== JSON.stringify(expectedMedicationIds)) {
+    throw new Error("medication smoke response did not match medication ids");
+  }
+  if (retry.body?.deduplicated !== true) throw new Error("medication smoke retry was not deduplicated");
+  if (JSON.stringify(retryLogIds) !== JSON.stringify(firstLogIds)) throw new Error("medication smoke retry log ids changed");
+  return { logIds: firstLogIds, deduplicated: true };
+}
+
 async function dashboardContains(page, groupId, profileId, predicate) {
   const result = await callApi(page, `/api/dashboard?group_id=${groupId}&profile_id=${profileId}`);
   if (result.status !== 200) return { result, matched: false };
@@ -231,6 +258,7 @@ export async function runRoleE2E({ env = process.env, browserType = chromium } =
   const groupId = Number(env.CARE_WEDO_FIXTURE_GROUP_ID);
   const profileId = Number(env.CARE_WEDO_FIXTURE_PROFILE_ID);
   const medicationId = Number(env.CARE_WEDO_FIXTURE_MEDICATION_ID);
+  const medicationTakenDate = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Taipei" });
   const artifactDir = env.CARE_WEDO_E2E_ARTIFACT_DIR || DEFAULT_ARTIFACT_DIR;
   await mkdir(artifactDir, { recursive: true });
 
@@ -317,26 +345,16 @@ export async function runRoleE2E({ env = process.env, browserType = chromium } =
       throw new Error("collaborator 未讀到 primary 建立的行程");
     }
 
-    const collaboratorMedicationDashboard = await dashboardContains(
-      collaborator,
-      groupId,
-      profileId,
-      (body) => (body.medications || []).some((item) => Number(item.id) === medicationId && item.taken_status === "taken"),
-    );
-    let medicationResult = { status: 200, alreadyRecorded: collaboratorMedicationDashboard.matched };
-    if (!collaboratorMedicationDashboard.matched) {
-      const recordedMedication = await callApi(
-        collaborator,
-        "/api/medications/taken",
-        jsonInit("POST", { medication_ids: [medicationId], status: "taken" }),
-      );
-      medicationResult = { status: recordedMedication.status, alreadyRecorded: false };
-    }
-    result.collaborator.medication_status = medicationResult.status;
-    result.collaborator.medication_already_recorded = medicationResult.alreadyRecorded;
-    if (medicationResult.status !== 200) {
-      throw new Error("collaborator 記錄服藥未通過");
-    }
+    const medicationOperation = buildMedicationSmokeRequest({
+      medicationId,
+      operationId: `${groupId}-${profileId}-${medicationId}`,
+      takenDate: medicationTakenDate,
+    });
+    const medicationFirst = await callApi(collaborator, "/api/medications/taken", medicationOperation);
+    const medicationRetry = await callApi(collaborator, "/api/medications/taken", medicationOperation);
+    const medicationVerified = verifyMedicationSmokeRetry(medicationFirst, medicationRetry, medicationId);
+    result.collaborator.medication_status = medicationRetry.status;
+    result.collaborator.medication_already_recorded = medicationVerified.deduplicated;
     const primaryMedicationReadback = await dashboardContains(
       primary,
       groupId,
@@ -413,7 +431,11 @@ export async function runRoleE2E({ env = process.env, browserType = chromium } =
     }
 
     const elderAppointment = await callApi(elder, `/api/appointments/${firstId}`, jsonInit("PATCH", { status: "completed" }));
-    const elderMedication = await callApi(elder, "/api/medications/taken", jsonInit("POST", { medication_ids: [medicationId], status: "taken" }));
+    const elderMedication = await callApi(elder, "/api/medications/taken", buildMedicationSmokeRequest({
+      medicationId,
+      operationId: `elder-${groupId}-${profileId}-${medicationId}`,
+      takenDate: medicationTakenDate,
+    }));
     result.elder.appointment_status = elderAppointment.status;
     result.elder.medication_status = elderMedication.status;
     result.elder.management_controls_visible = await elder.evaluate(() => {

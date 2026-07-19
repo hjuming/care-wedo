@@ -1,3 +1,5 @@
+import { pathToFileURL } from "node:url";
+
 const args = new Set(process.argv.slice(2));
 const DRY_RUN = args.has("--dry-run");
 const API_ONLY = args.has("--api-only");
@@ -117,12 +119,43 @@ async function apiFetch(label, path, init = {}) {
   return parseJsonResponse(response, label);
 }
 
-async function apiJson(label, path, body) {
+async function apiJson(label, path, body, extraHeaders = {}) {
   return apiFetch(label, path, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...extraHeaders },
     body: JSON.stringify(body),
   });
+}
+
+export function buildGoogleMedicationSmokeRequest({ medicationId, groupId, profileId, takenDate }) {
+  return {
+    body: {
+      medication_ids: [Number(medicationId)],
+      status: "taken",
+      taken_date: takenDate,
+      time_slot: "morning",
+    },
+    headers: {
+      "Idempotency-Key": `care-wedo-google-medication-${groupId}-${profileId}-${medicationId}-${takenDate}`,
+    },
+  };
+}
+
+export function verifyGoogleMedicationSmokeRetry(first, retry, medicationId) {
+  const expectedMedicationIds = [Number(medicationId)];
+  const firstLogIds = Array.isArray(first?.log_ids) ? first.log_ids.map(Number) : [];
+  const retryLogIds = Array.isArray(retry?.log_ids) ? retry.log_ids.map(Number) : [];
+  if (!first?.success || !retry?.success) throw new Error("Medication smoke requests did not succeed");
+  if (firstLogIds.length !== 1 || firstLogIds.some((id) => !positiveNumber(id))) {
+    throw new Error("Medication smoke first response returned invalid log ids");
+  }
+  if (JSON.stringify(first?.medication_ids?.map(Number)) !== JSON.stringify(expectedMedicationIds)
+    || JSON.stringify(retry?.medication_ids?.map(Number)) !== JSON.stringify(expectedMedicationIds)) {
+    throw new Error("Medication smoke response did not match medication ids");
+  }
+  if (retry.deduplicated !== true) throw new Error("Medication smoke retry was not deduplicated");
+  if (JSON.stringify(retryLogIds) !== JSON.stringify(firstLogIds)) throw new Error("Medication smoke retry log ids changed");
+  return { logIds: firstLogIds, deduplicated: true };
 }
 
 async function supabaseGet(label, path) {
@@ -218,22 +251,18 @@ async function runMedicationTaken(candidateMedicationIds) {
     throw new Error("No medication id available. Set CARE_WEDO_SMOKE_MEDICATION_ID or use OCR text that creates a medication.");
   }
 
-  const result = await apiJson("medication_taken", "/medications/taken", {
-    medication_ids: [medicationId],
-    status: "taken",
-    taken_date: today,
-    time_slot: "morning",
-  });
-  if (!Array.isArray(result.medication_ids) || !result.medication_ids.map(Number).includes(Number(medicationId))) {
-    throw new Error("Medication taken response did not include the target medication id");
-  }
+  const operation = buildGoogleMedicationSmokeRequest({ medicationId, groupId, profileId, takenDate: today });
+  const first = await apiJson("medication_taken", "/medications/taken", operation.body, operation.headers);
+  const retry = await apiJson("medication_taken_retry", "/medications/taken", operation.body, operation.headers);
+  const verified = verifyGoogleMedicationSmokeRetry(first, retry, medicationId);
   addStep("medication_taken", "pass", {
     medication_id: medicationId,
-    log_ids: result.log_ids || [],
+    log_ids: verified.logIds,
+    retry_deduplicated: verified.deduplicated,
   });
 
   if (!API_ONLY) {
-    const logId = Array.isArray(result.log_ids) ? positiveNumber(result.log_ids[0]) : null;
+    const logId = positiveNumber(verified.logIds[0]);
     if (!logId) throw new Error("Medication taken did not return a medication_logs id for DB verification");
     const row = await supabaseGet(
       "db_medication_log_scope",
@@ -271,8 +300,10 @@ async function main() {
   console.log(JSON.stringify(report, null, 2));
 }
 
-main().catch((error) => {
-  addStep("smoke", "fail", { error: error instanceof Error ? error.message : String(error) });
-  console.error(JSON.stringify(report, null, 2));
-  process.exit(1);
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    addStep("smoke", "fail", { error: error instanceof Error ? error.message : String(error) });
+    console.error(JSON.stringify(report, null, 2));
+    process.exitCode = 1;
+  });
+}

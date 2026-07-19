@@ -133,6 +133,11 @@ test("Google protected write staging smoke covers the three P0 write paths witho
   assert.match(script, /\/medications\/taken/);
   assert.match(script, /db_appointment_scope/);
   assert.match(script, /db_medication_log_scope/);
+  assert.match(script, /export function buildGoogleMedicationSmokeRequest/);
+  assert.match(script, /export function verifyGoogleMedicationSmokeRetry/);
+  assert.match(script, /"Idempotency-Key"/);
+  assert.match(script, /deduplicated/);
+  assert.match(script, /log_ids/);
   assert.match(script, /missing_env/);
   assert.doesNotMatch(script, /console\.(log|error)\([^)]*token/i);
 

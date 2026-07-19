@@ -24,7 +24,7 @@
     "staging:migration:check": "node scripts/staging-migration-check.mjs",
     "staging:role-e2e:plan": "node scripts/staging-role-e2e.mjs",
     "staging:role-e2e": "node scripts/staging-role-e2e.mjs --confirm-staging",
-    "test:staging:tooling": "node --test scripts/staging-care-fixture.test.mjs scripts/staging-migration-check.test.mjs scripts/staging-role-e2e.test.mjs",
+    "test:staging:tooling": "node --test scripts/google-protected-write-smoke.test.mjs scripts/staging-care-fixture.test.mjs scripts/staging-migration-check.test.mjs scripts/staging-role-e2e.test.mjs",
     "rls:policy-sync": "node scripts/validate-phase59-policy-sync.mjs",
     "a11y:contrast": "node scripts/contrast-check.mjs",
     "manual:reminder": "tsx scripts/manual-reminder.ts",

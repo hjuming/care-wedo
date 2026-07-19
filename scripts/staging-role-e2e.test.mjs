@@ -1,8 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { buildRoleE2EPlan, checkCanonicalFixtureText, buildFreshContextReadback } from "./staging-role-e2e.mjs";
+import * as roleE2E from "./staging-role-e2e.mjs";
 import { FIXTURE, STAGING_TARGET } from "./staging-care-fixture.mjs";
+
+const { buildRoleE2EPlan, checkCanonicalFixtureText, buildFreshContextReadback } = roleE2E;
 
 const targetEnv = {
   SUPABASE_URL: `https://${STAGING_TARGET.projectRef}.supabase.co`,
@@ -26,6 +28,7 @@ test("role e2e plan locks the staging target and redacts credential values", () 
   assert.equal(plan.medication_id_configured, true);
   assert.equal(plan.writes_enabled, false);
   assert.equal(JSON.stringify(plan).includes("[secret]"), false);
+  assert.doesNotMatch(JSON.stringify(plan), /Idempotency-Key|care-wedo-role-medication/);
 });
 
 test("role e2e plan refuses production and reports missing credentials without network calls", () => {
@@ -94,4 +97,29 @@ test("fresh-context readback plan closes the writer context before relogin", () 
 test("role screenshots are captured after canonical dashboard hydration", async () => {
   const source = await import("node:fs/promises").then(({ readFile }) => readFile(new URL("./staging-role-e2e.mjs", import.meta.url), "utf8"));
   assert.ok(source.indexOf("const canonicalFixture = await readCanonicalFixtureText") < source.indexOf("screenshot({ path: `${artifactDir}/${persona.key}-dashboard.png`"));
+});
+
+test("role e2e medication smoke reuses one valid key and verifies the exact retry response", () => {
+  assert.equal(typeof roleE2E.buildMedicationSmokeRequest, "function");
+  assert.equal(typeof roleE2E.verifyMedicationSmokeRetry, "function");
+
+  const first = roleE2E.buildMedicationSmokeRequest({ medicationId: 300, operationId: "fixture-100-300", takenDate: "2026-07-19" });
+  const retry = roleE2E.buildMedicationSmokeRequest({ medicationId: 300, operationId: "fixture-100-300", takenDate: "2026-07-19" });
+  const other = roleE2E.buildMedicationSmokeRequest({ medicationId: 301, operationId: "fixture-100-301", takenDate: "2026-07-19" });
+  const nextDay = roleE2E.buildMedicationSmokeRequest({ medicationId: 300, operationId: "fixture-100-300", takenDate: "2026-07-20" });
+
+  assert.match(first.headers["Idempotency-Key"], /^[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$/);
+  assert.equal(retry.headers["Idempotency-Key"], first.headers["Idempotency-Key"]);
+  assert.notEqual(other.headers["Idempotency-Key"], first.headers["Idempotency-Key"]);
+  assert.notEqual(nextDay.headers["Idempotency-Key"], first.headers["Idempotency-Key"]);
+  assert.deepEqual(roleE2E.verifyMedicationSmokeRetry(
+    { status: 200, body: { success: true, log_ids: [901], medication_ids: [300], deduplicated: false } },
+    { status: 200, body: { success: true, log_ids: [901], medication_ids: [300], deduplicated: true } },
+    300,
+  ), { logIds: [901], deduplicated: true });
+  assert.throws(() => roleE2E.verifyMedicationSmokeRetry(
+    { status: 200, body: { success: true, log_ids: [901], medication_ids: [300], deduplicated: false } },
+    { status: 200, body: { success: true, log_ids: [902], medication_ids: [300], deduplicated: true } },
+    300,
+  ), /log ids/);
 });
