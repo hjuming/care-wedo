@@ -50,6 +50,9 @@ jobs:
         env:
           TZ: Asia/Taipei
 
+      - name: Test (staging tooling contracts)
+        run: npm run test:staging:tooling
+
       - name: Typecheck (functions / scripts / workers)
         run: npm run typecheck
 
