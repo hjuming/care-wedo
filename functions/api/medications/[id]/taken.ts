@@ -7,6 +7,10 @@ import {
 } from "../../../_shared/supabase";
 import { getRequestUser } from "../../../_shared/auth_context";
 import { manageableGroupIds } from "../../../_shared/group_permissions";
+import {
+  parseMedicationIdempotencyKey,
+  writeMedicationLogsIdempotently,
+} from "../../../_shared/medication_idempotency";
 
 type MedicationScopeRow = {
   id: number;
@@ -62,28 +66,28 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       ? String(body.taken_date)
       : todayInTaipei();
     const timeSlot = inferTimeSlot(medication, body.time_slot);
+    const idempotency = parseMedicationIdempotencyKey(request);
+    if (!idempotency.key) {
+      return Response.json({ error: idempotency.error }, { status: 400 });
+    }
 
-    // Do not report success unless the medication log was durably written.
-    const logs = await supabaseFetch<Array<{ id: number }>>(
+    const { logs, deduplicated } = await writeMedicationLogsIdempotently(
       env,
-      "medication_logs?select=id",
-      {
-        method: "POST",
-        headers: { Prefer: "return=representation" },
-        body: JSON.stringify({
-          medication_id: medication.id,
-          group_id: medication.group_id,
-          profile_id: medication.profile_id,
-          taken_date: takenDate,
-          time_slot: timeSlot,
-          status: "taken",
-          confirmed_by_user_id: userId,
-        }),
-      },
+      [{
+        medication_id: medication.id,
+        group_id: medication.group_id,
+        profile_id: medication.profile_id,
+        taken_date: takenDate,
+        time_slot: timeSlot,
+        status: "taken",
+        confirmed_by_user_id: userId,
+      }],
+      idempotency.key,
     );
 
     return Response.json({
       success: true,
+      deduplicated,
       log_id: logs[0]?.id,
       medication_id: medication.id,
       taken_date: takenDate,
@@ -92,10 +96,11 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "無法記錄吃藥狀態";
-    const dependencyUnavailable = /medication_logs|PGRST205|Could not find the table|Supabase request failed \((?:5\d\d|404)\)/i.test(message);
+    const idempotencyConflict = /Idempotency-Key 已用於不同的用藥紀錄/.test(message);
+    const dependencyUnavailable = /medication_logs|idempotency_key|PGRST20[45]|Could not find the table|Supabase request failed \((?:5\d\d|404)\)/i.test(message);
     return Response.json(
-      { error: dependencyUnavailable ? "服藥紀錄暫時無法儲存，請稍後重試" : message },
-      { status: message.includes("請先登入") ? 401 : dependencyUnavailable ? 503 : 500 },
+      { error: idempotencyConflict ? "這次操作內容與先前紀錄不一致，請重新整理後再試一次" : dependencyUnavailable ? "服藥紀錄暫時無法儲存，請稍後重試" : "無法記錄吃藥狀態" },
+      { status: message.includes("請先登入") ? 401 : idempotencyConflict ? 409 : dependencyUnavailable ? 503 : 500 },
     );
   }
 };

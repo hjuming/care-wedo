@@ -98,7 +98,7 @@ test("Mobile dashboard headers stay compact so care actions remain above the fol
   assert.match(mobile, /\.section-heading-row::before\s*\{[\s\S]*box-shadow: none/);
   assert.match(mobile, /\.content-search-panel\s*\{[\s\S]*margin-bottom: 14px/);
   assert.match(mobile, /\.calendar-layout\s*\{[\s\S]*gap: 12px/);
-  assert.match(mobile, /\.record-mode-switch\s*\{[\s\S]*margin-bottom: 12px/);
+  assert.match(mobile, /\.record-mode-switch\s*\{[\s\S]*margin-bottom: 0/);
   assert.doesNotMatch(mobile, /\.section-heading-row\s*\{[\s\S]*flex: 1 1 280px/);
 });
 

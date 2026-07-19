@@ -1,5 +1,9 @@
 import type { Env } from "./auth_identity";
 import { supabaseFetch } from "./supabase";
+import {
+  CARE_WEDO_GROUP_LIMITS,
+  CARE_WEDO_PRICING as SHARED_CARE_WEDO_PRICING,
+} from "../../shared/care-wedo-pricing.js";
 
 export type PlanRow = {
   id: string;
@@ -26,26 +30,19 @@ export type UsageQuotaRow = {
   created_at: string;
 };
 
-export const FREE_OCR_MONTHLY_LIMIT = 10;
+export const FREE_OCR_MONTHLY_LIMIT = SHARED_CARE_WEDO_PRICING.free_monthly_ocr_limit;
 export const MULTIPLE_FAMILY_GROUPS_FEATURE = "multiple_family_groups";
-export const CARE_WEDO_MAX_CARE_PROFILES_PER_GROUP = 4;
-export const CARE_WEDO_MAX_PAID_COLLABORATORS_PER_GROUP = 5;
-export const CARE_WEDO_MAX_MEMBERS_PER_GROUP = CARE_WEDO_MAX_PAID_COLLABORATORS_PER_GROUP + 1;
-export const CARE_WEDO_CARE_PROFILE_MONTHLY_PRICE = 30;
-export const CARE_WEDO_PAID_COLLABORATOR_MONTHLY_PRICE = 10;
-export const CARE_WEDO_GROUP_MONTHLY_PRICE_MAX = 250;
-export const CARE_WEDO_INCLUDED_CARE_PROFILES_DURING_BETA = 1;
+export const CARE_WEDO_MAX_CARE_PROFILES_PER_GROUP = CARE_WEDO_GROUP_LIMITS.max_care_profiles;
+export const CARE_WEDO_MAX_PAID_COLLABORATORS_PER_GROUP = CARE_WEDO_GROUP_LIMITS.max_paid_collaborators;
+export const CARE_WEDO_MAX_MEMBERS_PER_GROUP = CARE_WEDO_GROUP_LIMITS.max_members_including_owner;
+export const CARE_WEDO_CARE_PROFILE_MONTHLY_PRICE = SHARED_CARE_WEDO_PRICING.recipient_monthly;
+export const CARE_WEDO_PAID_COLLABORATOR_MONTHLY_PRICE = SHARED_CARE_WEDO_PRICING.collaborator_monthly;
+export const CARE_WEDO_GROUP_MONTHLY_PRICE_MAX = CARE_WEDO_GROUP_LIMITS.monthly_price_max;
+export const CARE_WEDO_INCLUDED_CARE_PROFILES_DURING_BETA = SHARED_CARE_WEDO_PRICING.included_care_profiles_during_beta;
 
 // Pricing copy must come from one backend-owned contract. Frontend clients may
 // render this summary, but must not invent a second set of add-on amounts.
-export const CARE_WEDO_PRICING = Object.freeze({
-  currency_symbol: "$",
-  recipient_monthly: CARE_WEDO_CARE_PROFILE_MONTHLY_PRICE,
-  collaborator_monthly: CARE_WEDO_PAID_COLLABORATOR_MONTHLY_PRICE,
-  included_care_profiles_during_beta: CARE_WEDO_INCLUDED_CARE_PROFILES_DURING_BETA,
-  free_monthly_ocr_limit: FREE_OCR_MONTHLY_LIMIT,
-  paid_monthly_ocr_limit: 100,
-});
+export const CARE_WEDO_PRICING = SHARED_CARE_WEDO_PRICING;
 
 export type GroupBillingEntitlement = {
   groupId: number;
@@ -131,9 +128,9 @@ type BillingCheckoutCreatedInput = {
 const FREE_PLAN_FALLBACK: PlanRow = {
   id: "free",
   name: "Free",
-  monthly_ocr_limit: 10,
+  monthly_ocr_limit: FREE_OCR_MONTHLY_LIMIT,
   max_members: 1,
-  max_recipients: 1,
+  max_recipients: CARE_WEDO_INCLUDED_CARE_PROFILES_DURING_BETA,
   family_group_enabled: false,
   price_monthly_usd: 0,
   is_active: true,

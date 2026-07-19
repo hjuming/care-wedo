@@ -5,6 +5,8 @@ import {
   getCurrentUserDocumentContext,
 } from "../../../_shared/care_documents";
 import { Env } from "../../../_shared/supabase";
+import { logError } from "../../../_shared/logger";
+import { resolvePublicApiError } from "../../../_shared/public_error";
 
 function parseDocumentId(params: Record<string, string | string[]>) {
   const id = Number(params.id);
@@ -31,8 +33,8 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       file_name: document.original_file_name || `care-document-${document.id}`,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "無法開啟原始文件";
-    const status = message.includes("請先登入") ? 401 : 500;
-    return Response.json({ error: message }, { status });
+    logError("documents.file_url_failed", error);
+    const publicError = resolvePublicApiError(error, { fallback: "無法開啟原始文件" });
+    return Response.json({ error: publicError.message }, { status: publicError.status });
   }
 };

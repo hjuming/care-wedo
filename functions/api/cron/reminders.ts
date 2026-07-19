@@ -1,5 +1,6 @@
 import { supabaseFetch, Env as SupabaseEnv } from "../../_shared/supabase";
 import { logError, logEvent } from "../../_shared/logger";
+import { resolvePublicApiError } from "../../_shared/public_error";
 import { sendProductionAlert } from "../../_shared/alerts";
 import { recordLinePushLog } from "../../_shared/line_push_logs";
 
@@ -408,6 +409,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       duration_ms: Date.now() - startedAt,
       error,
     });
-    return Response.json({ error: String(error) }, { status: 500 });
+    const publicError = resolvePublicApiError(error, { fallback: "提醒排程執行失敗" });
+    return Response.json({ error: publicError.message }, { status: publicError.status });
   }
 };

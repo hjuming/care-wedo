@@ -1,6 +1,52 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildTodayTasks, formatTaipeiTodayLabel, groupMedicationsBySchedule } from "./todayTasks.js";
+import * as todayTasksModule from "./todayTasks.js";
+import * as careFormattersModule from "../features/shared/careFormatters.js";
+
+const {
+  buildTodayTasks,
+  formatTaipeiTodayLabel,
+  getMedicationSchedule,
+  groupMedicationsBySchedule,
+} = todayTasksModule;
+
+test("findNextAppointment skips the care item already shown on today's timeline", () => {
+  assert.equal(typeof todayTasksModule.findNextAppointment, "function");
+  const appointments = [
+    { id: 1, date: "2026-07-18", time: "15:30", status: "upcoming" },
+    { id: 2, date: "2026-07-25", time: "09:00", status: "upcoming" },
+  ];
+  const visibleTasks = buildTodayTasks({ today: "2026-07-18", appointments });
+
+  assert.equal(todayTasksModule.findNextAppointment({
+    today: "2026-07-18",
+    appointments,
+    visibleTasks,
+  })?.id, 2);
+});
+
+test("formatDoctorName adds one doctor suffix without repeating an existing title", () => {
+  assert.equal(typeof careFormattersModule.formatDoctorName, "function");
+  assert.equal(careFormattersModule.formatDoctorName("陳"), "陳醫師");
+  assert.equal(careFormattersModule.formatDoctorName("陳醫師"), "陳醫師");
+  assert.equal(careFormattersModule.formatDoctorName(""), "");
+});
+
+test("sortUpcomingAppointments keeps the nearest date and time first even when API data is unordered", () => {
+  assert.equal(typeof careFormattersModule.sortUpcomingAppointments, "function");
+  const appointments = [
+    { id: 4, date: "2026-07-25", time: "09:00", status: "upcoming" },
+    { id: 2, date: "2026-07-18", time: "14:00", status: "upcoming" },
+    { id: 1, date: "2026-07-18", time: "09:00", status: "upcoming" },
+    { id: 3, date: "2026-07-18", time: "", status: "upcoming" },
+    { id: 5, date: "2026-07-17", time: "09:00", status: "completed" },
+  ];
+
+  assert.deepEqual(
+    careFormattersModule.sortUpcomingAppointments(appointments, "2026-07-18").map((item) => item.id),
+    [1, 2, 3, 4],
+  );
+});
 
 test("buildTodayTasks turns same-day care events into elder-friendly tasks without medicine detail", () => {
   const tasks = buildTodayTasks({
@@ -69,35 +115,29 @@ test("buildTodayTasks keeps undated appointment cards visible for family follow-
   assert.equal(tasks[0].needsReview, true);
 });
 
-test("buildTodayTasks falls back to the nearest future appointment when today is empty", () => {
+test("buildTodayTasks leaves future appointments out of today's tasks", () => {
+  const appointments = [
+    {
+      id: 25,
+      type: "clinic_visit",
+      date: "2026-07-25",
+      time: "09:00",
+      hospital: "示範醫院",
+      department: "眼科",
+      status: "upcoming",
+    },
+  ];
   const tasks = buildTodayTasks({
-    today: "2026-05-06",
-    appointments: [
-      {
-        id: 1,
-        type: "clinic_visit",
-        date: "2026-05-10",
-        time: "15:00",
-        hospital: "示範醫院",
-        department: "眼科",
-        status: "upcoming",
-      },
-      {
-        id: 2,
-        type: "refill_reminder",
-        date: "2026-05-08",
-        time: "09:00",
-        hospital: "台大醫院",
-        department: "藥局領藥",
-        status: "upcoming",
-      },
-    ],
+    today: "2026-07-19",
+    appointments,
   });
 
-  assert.equal(tasks.length, 1);
-  assert.equal(tasks[0].title, "藥局領藥");
-  assert.equal(tasks[0].dateLabel, "2026/05/08（五）");
-  assert.equal(tasks[0].isToday, false);
+  assert.deepEqual(tasks, []);
+  assert.equal(todayTasksModule.findNextAppointment({
+    today: "2026-07-19",
+    appointments,
+    visibleTasks: tasks,
+  })?.id, 25);
 });
 
 test("buildTodayTasks uses reminder title without overwriting department", () => {
@@ -145,6 +185,7 @@ test("buildTodayTasks shows group family notes on the today page", () => {
     time: task.time,
     detail: task.detail,
     primaryActionLabel: task.primaryActionLabel,
+    canComplete: task.canComplete,
     isToday: task.isToday,
   })), [
     {
@@ -153,7 +194,8 @@ test("buildTodayTasks shows group family notes on the today page", () => {
       title: "家庭提醒",
       time: "每天留意",
       detail: "哪些藥不能吃、以前有沒有過敏",
-      primaryActionLabel: "我知道了",
+      primaryActionLabel: null,
+      canComplete: false,
       isToday: true,
     },
   ]);
@@ -162,8 +204,42 @@ test("buildTodayTasks shows group family notes on the today page", () => {
 test("formatTaipeiTodayLabel returns a large-date friendly label", () => {
   assert.deepEqual(formatTaipeiTodayLabel("2026-05-06"), {
     headline: "今天",
-    date: "2026年05月06日（三）",
+    date: "5月6日（三）",
+    fullDate: "2026年5月6日（星期三）",
   });
+});
+
+test("getMedicationSchedule infers meal timing from supporting text while preserving an explicit value", () => {
+  const schedules = [
+    getMedicationSchedule({ time_slot: "morning", frequency: "早餐後" }),
+    getMedicationSchedule({ time_slot: "morning", reminder_text: "早餐前服用" }),
+    getMedicationSchedule({ time_slot: "morning", frequency: "早餐後", meal_timing: "before_meal" }),
+  ];
+
+  assert.deepEqual(schedules.map((schedule) => schedule.mealTimingLabel), ["飯後", "飯前", "飯前"]);
+});
+
+test("getMedicationSchedule preserves explicit Chinese meal timing over inferred text", () => {
+  const schedules = [
+    getMedicationSchedule({ meal_timing: "飯前", frequency: "早餐後" }),
+    getMedicationSchedule({ meal_timing: "飯後" }),
+  ];
+
+  assert.deepEqual(schedules.map((schedule) => schedule.mealTimingLabel), ["飯前", "飯後"]);
+});
+
+test("getMedicationSchedule preserves a normalized backend time and meal label", () => {
+  const schedule = getMedicationSchedule({
+    time_slot: "morning",
+    frequency: "早餐後",
+    schedule: {
+      timeLabel: "早上 08:00",
+      mealTimingLabel: "早餐後",
+    },
+  });
+
+  assert.equal(schedule.timeLabel, "早上 08:00");
+  assert.equal(schedule.mealTimingLabel, "早餐後");
 });
 
 test("groupMedicationsBySchedule groups active medicines by elder-friendly time slots", () => {

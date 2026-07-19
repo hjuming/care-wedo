@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildAppointmentCalendarRequest, buildDashboardRequest, buildGoogleCalendarEventUrl, buildLocalAppointmentCalendarFile, buildSessionHandoffRequest, buildSessionRequest, isAuthFailureMessage, markMedicationSlotStatus, updateFamilyNotes } from "./api.js";
+import { buildAppointmentCalendarRequest, buildDashboardRequest, buildGoogleCalendarEventUrl, buildLocalAppointmentCalendarFile, buildSessionHandoffRequest, buildSessionRequest, isAuthFailureMessage, markMedicationSlotStatus, updateActiveProfilePreference, updateFamilyNotes } from "./api.js";
 
 test("buildDashboardRequest returns the dashboard endpoint without identity data in demo mode", () => {
   assert.deepEqual(buildDashboardRequest("/api"), {
@@ -181,5 +181,36 @@ test("medication status save aborts a hanging request with an actionable timeout
       }),
     }),
     /用藥紀錄儲存逾時/,
+  );
+});
+
+test("medication status save forwards the retry-stable idempotency key", async () => {
+  let requestInit;
+  await markMedicationSlotStatus({
+    medicationIds: [11],
+    status: "taken",
+    timeSlot: "morning",
+    idempotencyKey: "medication-operation-123",
+    fetchImpl: async (_url, init) => {
+      requestInit = init;
+      return new Response(JSON.stringify({ success: true }), { status: 200 });
+    },
+  });
+
+  assert.equal(requestInit.headers["Idempotency-Key"], "medication-operation-123");
+});
+
+test("active profile preference hides an untrusted plain-text upstream error without reading the response twice", async () => {
+  await assert.rejects(
+    updateActiveProfilePreference(81, {
+      idToken: "token.123",
+      fetchImpl: async () => new Response("上游服務暫時無法使用", { status: 502 }),
+    }),
+    (error) => {
+      assert.equal(error.message, "無法更新目前照護對象");
+      assert.doesNotMatch(error.message, /上游服務/);
+      assert.equal(error.status, 502);
+      return true;
+    },
   );
 });

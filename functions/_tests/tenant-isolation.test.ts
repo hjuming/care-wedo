@@ -99,12 +99,13 @@ function makeGetRequest(path: string): Request {
   });
 }
 
-function makePostRequest(path: string, body: Record<string, unknown>): Request {
+function makePostRequest(path: string, body: Record<string, unknown>, extraHeaders: Record<string, string> = {}): Request {
   return new Request(`https://care.example${path}`, {
     method: "POST",
     headers: {
       Authorization: "Bearer line-attacker-id-token",
       "Content-Type": "application/json",
+      ...extraHeaders,
     },
     body: JSON.stringify(body),
   });
@@ -735,7 +736,7 @@ test("rejects medication taken POST when any medication is outside the user's gr
         { ...medicationRow(VICTIM_MED_ID, 200), user_id: 2 },
       ]);
     }
-    if (url.includes("/rest/v1/medication_logs?select=id") && init?.method === "POST") {
+    if (url.includes("/rest/v1/medication_logs?") && init?.method === "POST") {
       logInsertAttempted = true;
       return json([{ id: 1 }]);
     }
@@ -757,6 +758,8 @@ test("rejects medication taken POST when any medication is outside the user's gr
 test("allows medication taken POST for owned medications and writes owned group logs", async () => {
   const OWNED_MED_IDS = [980, 981];
   let logPayload: any = null;
+  let logWriteUrl = "";
+  let logWritePreference = "";
 
   await withMockedFetch((url, init) => {
     const base = baseRoutes(url);
@@ -768,9 +771,14 @@ test("allows medication taken POST for owned medications and writes owned group 
     ) {
       return json(OWNED_MED_IDS.map((id) => medicationRow(id, ATTACKER_GROUP_ID)));
     }
-    if (url.includes("/rest/v1/medication_logs?select=id") && init?.method === "POST") {
+    if (url.includes("/rest/v1/medication_logs?") && init?.method === "POST") {
+      logWriteUrl = url;
+      logWritePreference = new Headers(init.headers).get("Prefer") || "";
       logPayload = JSON.parse(String(init.body || "[]"));
       return json([{ id: 1 }, { id: 2 }]);
+    }
+    if (url.includes("/rest/v1/medication_logs?") && init?.method !== "POST") {
+      return json(logPayload.map((row: any, index: number) => ({ id: index + 1, ...row })));
     }
     throw new Error(`unexpected fetch: ${url}`);
   }, async () => {
@@ -778,7 +786,7 @@ test("allows medication taken POST for owned medications and writes owned group 
       request: makePostRequest("/api/medications/taken", {
         medication_ids: OWNED_MED_IDS,
         taken_date: "2026-06-20",
-      }),
+      }, { "Idempotency-Key": "medication-operation-123" }),
       env: ENV,
     } as any);
 
@@ -787,6 +795,64 @@ test("allows medication taken POST for owned medications and writes owned group 
     assert.deepEqual(logPayload.map((row: any) => row.medication_id), OWNED_MED_IDS);
     assert.equal(logPayload.every((row: any) => row.group_id === ATTACKER_GROUP_ID), true);
     assert.equal(logPayload.every((row: any) => row.confirmed_by_user_id === ATTACKER_USER_ID), true);
+    assert.equal(logPayload.every((row: any) => row.idempotency_key === "medication-operation-123"), true);
+    assert.match(logWriteUrl, /on_conflict=medication_id%2Cidempotency_key/);
+    assert.match(logWritePreference, /resolution=ignore-duplicates/);
+  });
+});
+
+test("replayed medication status returns the existing logs without inserting duplicates", async () => {
+  const OWNED_MED_ID = 977;
+  let writes = 0;
+
+  await withMockedFetch((url, init) => {
+    const base = baseRoutes(url);
+    if (base) return base;
+    if (url.includes(`/rest/v1/medications?id=in.(${OWNED_MED_ID})`)) {
+      return json([medicationRow(OWNED_MED_ID, ATTACKER_GROUP_ID)]);
+    }
+    if (url.includes("/rest/v1/medication_logs?") && init?.method === "POST") {
+      writes += 1;
+      return json([]);
+    }
+    if (
+      url.includes(`/rest/v1/medication_logs?medication_id=in.(${OWNED_MED_ID})`)
+      && url.includes("idempotency_key=eq.medication-operation-retry")
+    ) {
+      return json([{
+        id: 901,
+        medication_id: OWNED_MED_ID,
+        group_id: ATTACKER_GROUP_ID,
+        profile_id: 501,
+        taken_date: "2026-06-20",
+        time_slot: "morning",
+        status: "taken",
+        confirmed_by_user_id: ATTACKER_USER_ID,
+        idempotency_key: "medication-operation-retry",
+      }]);
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  }, async () => {
+    const res = await markMedicationsTaken({
+      request: makePostRequest("/api/medications/taken", {
+        medication_ids: [OWNED_MED_ID],
+        taken_date: "2026-06-20",
+        time_slot: "morning",
+        status: "taken",
+      }, { "Idempotency-Key": "medication-operation-retry" }),
+      env: ENV,
+    } as any);
+
+    assert.equal(res.status, 200);
+    assert.equal(writes, 1);
+    assert.deepEqual(await res.json(), {
+      success: true,
+      deduplicated: true,
+      log_ids: [901],
+      medication_ids: [OWNED_MED_ID],
+      taken_date: "2026-06-20",
+      status: "taken",
+    });
   });
 });
 
@@ -803,13 +869,13 @@ test("fails closed when the batch medication log write is unavailable", async ()
     ) {
       return json([medicationRow(OWNED_MED_ID, ATTACKER_GROUP_ID)]);
     }
-    if (url.includes("/rest/v1/medication_logs?select=id") && init?.method === "POST") {
+    if (url.includes("/rest/v1/medication_logs?") && init?.method === "POST") {
       return json({ code: "PGRST205", message: "Could not find the table 'public.medication_logs'" }, 404);
     }
     throw new Error(`unexpected fetch: ${url}`);
   }, async () => {
     const res = await markMedicationsTaken({
-      request: makePostRequest("/api/medications/taken", { medication_ids: [OWNED_MED_ID] }),
+      request: makePostRequest("/api/medications/taken", { medication_ids: [OWNED_MED_ID] }, { "Idempotency-Key": "medication-unavailable-batch" }),
       env: ENV,
     } as any);
 
@@ -831,13 +897,13 @@ test("fails closed when the single medication log write is unavailable", async (
     ) {
       return json([medicationRow(OWNED_MED_ID, ATTACKER_GROUP_ID)]);
     }
-    if (url.includes("/rest/v1/medication_logs?select=id") && init?.method === "POST") {
+    if (url.includes("/rest/v1/medication_logs?") && init?.method === "POST") {
       return json({ code: "PGRST205", message: "Could not find the table 'public.medication_logs'" }, 404);
     }
     throw new Error(`unexpected fetch: ${url}`);
   }, async () => {
     const res = await markMedicationTaken({
-      request: makePostRequest(`/api/medications/${OWNED_MED_ID}/taken`, {}),
+      request: makePostRequest(`/api/medications/${OWNED_MED_ID}/taken`, {}, { "Idempotency-Key": "medication-unavailable-single" }),
       env: ENV,
       params: { id: String(OWNED_MED_ID) },
     } as any);

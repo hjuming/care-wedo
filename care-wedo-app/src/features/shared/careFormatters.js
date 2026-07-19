@@ -9,6 +9,29 @@ export function isDateTodayOrFuture(dateValue, today = todayInTaipei()) {
   return dateText >= String(today);
 }
 
+export function sortUpcomingAppointments(appointments = [], today = todayInTaipei()) {
+  const items = Array.isArray(appointments) ? appointments : [];
+  return items
+    .map((appointment, originalIndex) => ({ appointment, originalIndex }))
+    .filter(({ appointment }) => appointment?.status !== "completed" && isDateTodayOrFuture(appointment?.date, today))
+    .sort((left, right) => {
+      const dateCompare = String(left.appointment.date).localeCompare(String(right.appointment.date));
+      if (dateCompare !== 0) return dateCompare;
+
+      const normalizeTime = (value) => {
+        const match = String(value || "").trim().match(/^(\d{1,2}):(\d{2})$/);
+        if (!match) return "23:59";
+        const hour = Number(match[1]);
+        const minute = Number(match[2]);
+        if (hour > 23 || minute > 59) return "23:59";
+        return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+      };
+      const timeCompare = normalizeTime(left.appointment.time).localeCompare(normalizeTime(right.appointment.time));
+      return timeCompare !== 0 ? timeCompare : left.originalIndex - right.originalIndex;
+    })
+    .map(({ appointment }) => appointment);
+}
+
 export function typeLabel(type) {
   if (type === "family_note") return "家庭提醒";
   if (type === "inspection") return "檢查";
@@ -29,6 +52,13 @@ export function buildAppointmentTitle(department, type) {
   if (!departmentText) return typeText;
   if (!typeText || departmentText === typeText) return departmentText;
   return `${departmentText}・${typeText}`;
+}
+
+export function formatDoctorName(value) {
+  const name = String(value || "").trim();
+  if (!name) return "";
+  if (/(醫師|醫生)$/u.test(name) || /^(dr\.?|doctor)\s+/iu.test(name)) return name;
+  return `${name}醫師`;
 }
 
 export function typeIcon(type) {

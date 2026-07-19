@@ -279,6 +279,18 @@ function createApiError(message, status) {
   return error;
 }
 
+async function readApiError(response) {
+  const rawBody = await response.text().catch(() => "");
+  if (!rawBody) return {};
+
+  try {
+    const parsed = JSON.parse(rawBody);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
 /**
  * 上傳圖片進行 OCR 解析
  * @param {File[]} files - 圖片檔案陣列
@@ -784,7 +796,7 @@ export async function patchAppointment(id, updates, { idToken }) {
     body: JSON.stringify(updates),
   });
   if (!response.ok) {
-    const error = await response.json().catch(async () => ({ error: await response.text() }));
+    const error = await readApiError(response);
     throw new Error(error.error || "無法更新預約");
   }
   return response.json();
@@ -799,7 +811,7 @@ export async function deleteAppointment(id, { idToken }) {
     headers,
   });
   if (!response.ok) {
-    const error = await response.json().catch(async () => ({ error: await response.text() }));
+    const error = await readApiError(response);
     throw new Error(error.error || "無法刪除預約");
   }
   return response.json();
@@ -841,7 +853,7 @@ export async function createAppointment(payload, { idToken } = {}) {
     body: JSON.stringify(payload),
   });
   if (!response.ok) {
-    const error = await response.json().catch(async () => ({ error: await response.text() }));
+    const error = await readApiError(response);
     throw new Error(error.error || "無法新增排程");
   }
   return response.json();
@@ -881,7 +893,7 @@ export async function downloadAppointmentCalendarFile(id, { idToken } = {}) {
   const { url, init } = buildAppointmentCalendarRequest(API_BASE, id, { idToken });
   const response = await fetch(url, init);
   if (!response.ok) {
-    const error = await response.json().catch(async () => ({ error: await response.text() }));
+    const error = await readApiError(response);
     throw new Error(error.error || "無法產生行事曆檔");
   }
 
@@ -939,15 +951,16 @@ export async function patchMedication(id, updates, { idToken }) {
     body: JSON.stringify(updates),
   });
   if (!response.ok) {
-    const error = await response.json().catch(async () => ({ error: await response.text() }));
+    const error = await readApiError(response);
     throw new Error(error.error || "無法更新藥物");
   }
   return response.json();
 }
 
-export async function markMedicationSlotStatus({ medicationIds, status, idToken, takenDate, timeSlot, fetchImpl = fetch, timeoutMs = 10000 } = {}) {
+export async function markMedicationSlotStatus({ medicationIds, status, idToken, takenDate, timeSlot, idempotencyKey, fetchImpl = fetch, timeoutMs = 10000 } = {}) {
   const headers = { "Content-Type": "application/json" };
   if (idToken) headers.Authorization = `Bearer ${idToken}`;
+  if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -973,7 +986,7 @@ export async function markMedicationSlotStatus({ medicationIds, status, idToken,
     clearTimeout(timeoutId);
   }
   if (!response.ok) {
-    const error = await response.json().catch(async () => ({ error: await response.text() }));
+    const error = await readApiError(response);
     throw createApiError(error.error || "無法記錄吃藥狀態", response.status);
   }
   return response.json();
@@ -994,7 +1007,7 @@ export async function updateProfile(profileId, updates, { idToken }) {
     body: JSON.stringify(updates),
   });
   if (!response.ok) {
-    const error = await response.json().catch(async () => ({ error: await response.text() }));
+    const error = await readApiError(response);
     throw new Error(error.error || "無法更新資料");
   }
   return response.json();
@@ -1012,25 +1025,25 @@ export async function updateProfileOrder(profileIds, { idToken }) {
     body: JSON.stringify({ profile_ids: profileIds }),
   });
   if (!response.ok) {
-    const error = await response.json().catch(async () => ({ error: await response.text() }));
+    const error = await readApiError(response);
     throw new Error(error.error || "無法更新照護對象排序");
   }
   return response.json();
 }
 
-export async function updateActiveProfilePreference(profileId, { idToken }) {
+export async function updateActiveProfilePreference(profileId, { idToken, fetchImpl = fetch }) {
   const headers = { "Content-Type": "application/json" };
   if (idToken) {
     headers.Authorization = `Bearer ${idToken}`;
   }
 
-  const response = await fetch(`${API_BASE}/me/active-profile`, {
+  const response = await fetchImpl(`${API_BASE}/me/active-profile`, {
     method: "PATCH",
     headers,
     body: JSON.stringify({ profile_id: profileId }),
   });
   if (!response.ok) {
-    const error = await response.json().catch(async () => ({ error: await response.text() }));
+    const error = await readApiError(response);
     throw createApiError(error.error || "無法更新目前照護對象", response.status);
   }
   return response.json();

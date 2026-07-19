@@ -7,6 +7,10 @@ import {
 } from "../../_shared/supabase";
 import { getRequestUser } from "../../_shared/auth_context";
 import { manageableGroupIds } from "../../_shared/group_permissions";
+import {
+  parseMedicationIdempotencyKey,
+  writeMedicationLogsIdempotently,
+} from "../../_shared/medication_idempotency";
 
 type MedicationScopeRow = {
   id: number;
@@ -74,29 +78,29 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       return Response.json({ error: "找不到藥物或沒有確認權限" }, { status: 403 });
     }
 
-    // A missing/unavailable medication_logs table is a failed mutation, not a
-    // successful no-op. Returning success here makes the elder-facing UI claim
-    // that a dose was recorded when no durable record exists.
-    const logs = await supabaseFetch<Array<{ id: number }>>(
+    const idempotency = parseMedicationIdempotencyKey(request);
+    if (!idempotency.key) {
+      return Response.json({ error: idempotency.error }, { status: 400 });
+    }
+
+    const writes = medications.map((medication) => ({
+      medication_id: medication.id,
+      group_id: medication.group_id,
+      profile_id: medication.profile_id,
+      taken_date: takenDate,
+      time_slot: inferTimeSlot(medication, body.time_slot),
+      status,
+      confirmed_by_user_id: userId,
+    }));
+    const { logs, deduplicated } = await writeMedicationLogsIdempotently(
       env,
-      "medication_logs?select=id",
-      {
-        method: "POST",
-        headers: { Prefer: "return=representation" },
-        body: JSON.stringify(medications.map((medication) => ({
-          medication_id: medication.id,
-          group_id: medication.group_id,
-          profile_id: medication.profile_id,
-          taken_date: takenDate,
-          time_slot: inferTimeSlot(medication, body.time_slot),
-          status: status,
-          confirmed_by_user_id: userId,
-        }))),
-      },
+      writes,
+      idempotency.key,
     );
 
     return Response.json({
       success: true,
+      deduplicated,
       log_ids: logs.map((log) => log.id),
       medication_ids: medicationIds,
       taken_date: takenDate,
@@ -104,10 +108,11 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "無法記錄吃藥狀態";
-    const dependencyUnavailable = /medication_logs|PGRST205|Could not find the table|Supabase request failed \((?:5\d\d|404)\)/i.test(message);
+    const idempotencyConflict = /Idempotency-Key 已用於不同的用藥紀錄/.test(message);
+    const dependencyUnavailable = /medication_logs|idempotency_key|PGRST20[45]|Could not find the table|Supabase request failed \((?:5\d\d|404)\)/i.test(message);
     return Response.json(
-      { error: dependencyUnavailable ? "服藥紀錄暫時無法儲存，請稍後重試" : message },
-      { status: dependencyUnavailable ? 503 : 500 },
+      { error: idempotencyConflict ? "這次操作內容與先前紀錄不一致，請重新整理後再試一次" : dependencyUnavailable ? "服藥紀錄暫時無法儲存，請稍後重試" : "無法記錄吃藥狀態" },
+      { status: idempotencyConflict ? 409 : dependencyUnavailable ? 503 : 500 },
     );
   }
 };

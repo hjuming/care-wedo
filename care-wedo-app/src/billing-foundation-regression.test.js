@@ -42,11 +42,17 @@ test("billing foundation keeps public tables protected by RLS and service-role-o
 
 test("backend entitlement helper is the source of truth for Care WEDO billing math", () => {
   const billing = readProjectFile("functions/_shared/billing.ts");
+  const pricingContract = readProjectFile("shared/care-wedo-pricing.js");
   const supabase = readProjectFile("functions/_shared/supabase.ts");
 
-  assert.match(billing, /export const CARE_WEDO_CARE_PROFILE_MONTHLY_PRICE = 30/);
-  assert.match(billing, /export const CARE_WEDO_PAID_COLLABORATOR_MONTHLY_PRICE = 10/);
-  assert.match(billing, /export const CARE_WEDO_GROUP_MONTHLY_PRICE_MAX = 250/);
+  assert.match(pricingContract, /recipient_monthly:\s*30/);
+  assert.match(pricingContract, /collaborator_monthly:\s*10/);
+  assert.match(pricingContract, /monthly_price_max:\s*250/);
+  assert.match(billing, /CARE_WEDO_CARE_PROFILE_MONTHLY_PRICE = SHARED_CARE_WEDO_PRICING\.recipient_monthly/);
+  assert.match(billing, /CARE_WEDO_PAID_COLLABORATOR_MONTHLY_PRICE = SHARED_CARE_WEDO_PRICING\.collaborator_monthly/);
+  assert.match(billing, /CARE_WEDO_GROUP_MONTHLY_PRICE_MAX = CARE_WEDO_GROUP_LIMITS\.monthly_price_max/);
+  assert.match(billing, /monthly_ocr_limit:\s*FREE_OCR_MONTHLY_LIMIT/);
+  assert.doesNotMatch(billing, /monthly_ocr_limit:\s*10/);
   assert.match(billing, /export async function resolveGroupBillingEntitlement/);
   assert.match(billing, /owner_user_id/);
   assert.match(billing, /paidCollaboratorCount/);

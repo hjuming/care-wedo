@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import aiAvatar from "../assets/ai-avatar.png";
+import { formatDoctorName } from "../features/shared/careFormatters";
 
 function normalizeAppointmentDraft(apt = {}) {
   return {
@@ -61,7 +62,7 @@ function cleanMedicationDraft(med) {
   return { ...med };
 }
 
-export default function OcrResult({ data, onClose, onSaveCorrections, onNavigate }) {
+export default function OcrResult({ data, careRecipientName = "目前照護對象", onClose, onSaveCorrections, onNavigate }) {
   const parsed = data?.data || data;
   const saved = data?.saved || {};
   const [editing, setEditing] = useState(false);
@@ -69,6 +70,7 @@ export default function OcrResult({ data, onClose, onSaveCorrections, onNavigate
   const [saveError, setSaveError] = useState("");
   const [savedMessage, setSavedMessage] = useState("");
   const [draft, setDraft] = useState({ appointments: [], medications: [] });
+  const savingRef = useRef(false);
 
   const canPersist = Boolean(onSaveCorrections)
     && ((saved.appointment_ids || []).length > 0 || (saved.medication_ids || []).length > 0);
@@ -110,8 +112,24 @@ export default function OcrResult({ data, onClose, onSaveCorrections, onNavigate
 
   if (!parsed) return null;
 
+  function requestClose() {
+    if (savingRef.current) return;
+    onClose();
+  }
+
+  function startEditing() {
+    if (savingRef.current) return;
+    setEditing(true);
+  }
+
+  function cancelEditing() {
+    if (savingRef.current) return;
+    setEditing(false);
+  }
+
   async function handleSave() {
-    if (!onSaveCorrections) return;
+    if (!onSaveCorrections || savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     setSaveError("");
     setSavedMessage("");
@@ -124,6 +142,7 @@ export default function OcrResult({ data, onClose, onSaveCorrections, onNavigate
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : "暫時無法存起來，請再試一次。");
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   }
@@ -143,7 +162,7 @@ export default function OcrResult({ data, onClose, onSaveCorrections, onNavigate
   }
 
   return (
-    <div className="ocr-result-panel">
+    <div className="ocr-result-panel" aria-busy={saving}>
       <div className="ocr-result-header">
         <div className="ocr-result-title">
           <img src={aiAvatar} alt="健康小管家" />
@@ -158,14 +177,14 @@ export default function OcrResult({ data, onClose, onSaveCorrections, onNavigate
               <button type="button" className="primary-action compact-action" onClick={handleSave} disabled={saving}>
                 {saving ? "存起來…" : "正確，存起來"}
               </button>
-              <button type="button" className="secondary-action compact-action" onClick={() => setEditing(true)} disabled={saving}>
+              <button type="button" className="secondary-action compact-action" onClick={startEditing} disabled={saving}>
                 有錯，我要修改
               </button>
             </>
           )}
           {editing && (
             <>
-              <button type="button" className="secondary-action compact-action" onClick={() => setEditing(false)} disabled={saving}>
+              <button type="button" className="secondary-action compact-action" onClick={cancelEditing} disabled={saving}>
                 取消
               </button>
               <button type="button" className="primary-action compact-action" onClick={handleSave} disabled={saving}>
@@ -173,14 +192,18 @@ export default function OcrResult({ data, onClose, onSaveCorrections, onNavigate
               </button>
             </>
           )}
-          <button type="button" className="inline-action ocr-close-action" onClick={onClose}>
+          <button type="button" className="inline-action ocr-close-action" onClick={requestClose} disabled={saving}>
             收起
           </button>
         </div>
       </div>
 
+      {saving && (
+        <div className="ocr-save-note" role="status">正在儲存校正內容，請先不要收起。</div>
+      )}
+      <div className="ocr-save-note" role="status">這次資料會存入：{careRecipientName}</div>
       {saveError && (
-        <div className="ocr-save-note danger">{saveError}</div>
+        <div className="ocr-save-note danger" role="alert">{saveError}</div>
       )}
       {savedMessage && (
         <div className="ocr-success-card">
@@ -266,7 +289,7 @@ function AppointmentPreview({ appointment }) {
   return (
     <div className="ocr-row">
       <strong>{[appointment.date, appointment.time, appointment.department || appointment.hospital].filter(Boolean).join(" · ")}</strong>
-      <span>{[appointment.hospital, appointment.doctor && `${appointment.doctor}醫師`, appointment.location].filter(Boolean).join(" · ")}</span>
+      <span>{[appointment.hospital, formatDoctorName(appointment.doctor), appointment.location].filter(Boolean).join(" · ")}</span>
       {appointment.fasting_required && <em>前 {appointment.fasting_hours || 8} 小時先不要吃東西</em>}
     </div>
   );

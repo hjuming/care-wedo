@@ -81,8 +81,8 @@ async function loginRole(context, baseUrl, persona, artifactDir, env) {
   const form = page.locator('form[aria-label="安全測試登入"]');
   await form.waitFor({ state: "visible", timeout: 15000 });
   const loginFontScale = await checkFontScale(page);
-  if (Object.values(loginFontScale).some((check) => check.horizontal_overflow || check.offscreen_control)) {
-    throw new Error(`${persona.key} 登入頁在 412px、130%/150% 字級出現溢出或不可見控制項`);
+  if (Object.values(loginFontScale).some((check) => check.horizontal_overflow || check.offscreen_control || check.bottom_nav_content_overlap)) {
+    throw new Error(`${persona.key} 登入頁在 412px、130%/150%/200% 字級出現溢出、不可見控制項或底部導覽遮擋`);
   }
   await form.locator('input[type="email"]').fill(String(env[persona.emailEnv]));
   await form.locator('input[type="password"]').fill(String(env[persona.passwordEnv]));
@@ -97,12 +97,32 @@ async function loginRole(context, baseUrl, persona, artifactDir, env) {
 async function checkFontScale(page) {
   return page.evaluate(async () => {
     const root = document.documentElement;
-    const previous = root.style.fontSize;
+    const previousWebkitTextSizeAdjust = root.style.webkitTextSizeAdjust;
+    const previousTextSizeAdjust = root.style.textSizeAdjust;
+    const previousScrollBehavior = root.style.scrollBehavior;
+    const previousScrollY = window.scrollY;
     const checks = {};
     try {
-      for (const scale of [130, 150]) {
-        root.style.fontSize = `${scale}%`;
-        await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+      root.style.scrollBehavior = "auto";
+      for (const scale of [130, 150, 200]) {
+        root.style.webkitTextSizeAdjust = `${scale}%`;
+        root.style.textSizeAdjust = `${scale}%`;
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const bottomNav = document.querySelector(".mobile-bottom-nav");
+        const contentArea = document.querySelector(".content-area");
+        const lastContentChild = contentArea?.lastElementChild;
+        let bottomNavHeight = null;
+        let bottomNavClearance = null;
+        let bottomNavContentOverlap = false;
+        if (bottomNav && lastContentChild && window.getComputedStyle(bottomNav).display !== "none") {
+          window.scrollTo({ top: root.scrollHeight, behavior: "instant" });
+          await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+          const bottomNavRect = bottomNav.getBoundingClientRect();
+          const lastContentRect = lastContentChild.getBoundingClientRect();
+          bottomNavHeight = Math.round(bottomNavRect.height);
+          bottomNavClearance = Math.round(bottomNavRect.top - lastContentRect.bottom);
+          bottomNavContentOverlap = bottomNavClearance < 0;
+        }
         const visibleControls = Array.from(document.querySelectorAll("button, a, input, select, textarea"))
           .filter((element) => {
             const style = window.getComputedStyle(element);
@@ -117,10 +137,16 @@ async function checkFontScale(page) {
           horizontal_overflow: document.documentElement.scrollWidth > window.innerWidth + 1
             || document.body.scrollWidth > window.innerWidth + 1,
           offscreen_control: offscreenControl,
+          bottom_nav_height: bottomNavHeight,
+          bottom_nav_clearance: bottomNavClearance,
+          bottom_nav_content_overlap: bottomNavContentOverlap,
         };
       }
     } finally {
-      root.style.fontSize = previous;
+      root.style.webkitTextSizeAdjust = previousWebkitTextSizeAdjust;
+      root.style.textSizeAdjust = previousTextSizeAdjust;
+      root.style.scrollBehavior = previousScrollBehavior;
+      window.scrollTo({ top: previousScrollY, behavior: "instant" });
     }
     return checks;
   });
@@ -250,8 +276,8 @@ export async function runRoleE2E({ env = process.env, browserType = chromium } =
         throw new Error(`${persona.key} dashboard 未顯示 canonical fixture 中文家庭／長輩名稱`);
       }
       await loginResult.page.screenshot({ path: `${artifactDir}/${persona.key}-dashboard.png`, fullPage: true });
-      if (Object.values(fontScale).some((check) => check.horizontal_overflow || check.offscreen_control)) {
-        throw new Error(`${persona.key} 412px 在 130%/150% 字級出現溢出或不可見控制項`);
+      if (Object.values(fontScale).some((check) => check.horizontal_overflow || check.offscreen_control || check.bottom_nav_content_overlap)) {
+        throw new Error(`${persona.key} 412px 在 130%/150%/200% 字級出現溢出、不可見控制項或底部導覽遮住頁尾內容`);
       }
     }
 

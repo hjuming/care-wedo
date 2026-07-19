@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { groupMedicationsBySchedule } from "../../services/todayTasks";
 import { medicationMutationErrorMessage } from "../../services/medicationFeedback";
+import { createRetryKeyStore } from "../../services/asyncIntent";
 
 const MEDICATION_SLOT_OPTIONS = [
   { value: "morning", label: "早" },
@@ -9,6 +10,13 @@ const MEDICATION_SLOT_OPTIONS = [
   { value: "bedtime", label: "睡前" },
   { value: "other", label: "其他" },
 ];
+const ELDER_MEDICATION_SLOT_LABELS = {
+  morning: "早上",
+  noon: "中午",
+  evening: "晚上",
+  bedtime: "睡前",
+  other: "其他時間",
+};
 const MEDICATION_SLOT_SORT_ORDER = MEDICATION_SLOT_OPTIONS.map((option) => option.value);
 
 function EmptyMedicationGuide({ title, description, primaryLabel, onPrimary, secondaryLabel, onSecondary }) {
@@ -30,25 +38,6 @@ function EmptyMedicationGuide({ title, description, primaryLabel, onPrimary, sec
       </div>
     </div>
   );
-}
-
-function getMedicationShortName(name = "藥") {
-  return String(name || "藥")
-    .replace(/[（(].*?[）)]/g, "")
-    .replace(/\s+/g, "")
-    .slice(0, 4) || "藥";
-}
-
-function currentMedicationSlot() {
-  const hour = Number(new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Asia/Taipei",
-    hour: "2-digit",
-    hour12: false,
-  }).format(new Date()));
-  if (hour < 11) return "morning";
-  if (hour < 16) return "noon";
-  if (hour < 21) return "evening";
-  return "bedtime";
 }
 
 function getMedicationSlotValues(medication = {}) {
@@ -301,37 +290,55 @@ export default function MedicationView({
   activityAudit = [],
 }) {
   const [savingSlot, setSavingSlot] = useState(null);
-  const [expandedMedicationId, setExpandedMedicationId] = useState(null);
-  const [expandedSlot, setExpandedSlot] = useState(() => currentMedicationSlot());
   const [showMedicationSummary, setShowMedicationSummary] = useState(false);
   const [locallyTakenSlots, setLocallyTakenSlots] = useState(() => new Set());
+  const [locallyCorrectedSlots, setLocallyCorrectedSlots] = useState(() => new Set());
+  const [confirmCorrectionSlot, setConfirmCorrectionSlot] = useState(null);
   const [slotFeedback, setSlotFeedback] = useState({});
   const [localRecordMeta, setLocalRecordMeta] = useState({});
+  const medicationRetryKeysRef = useRef(null);
+  if (!medicationRetryKeysRef.current) medicationRetryKeysRef.current = createRetryKeyStore();
   const medicationGroups = useMemo(() => groupMedicationsBySchedule(medications), [medications]);
+  const visibleMedicationGroups = useMemo(
+    () => medicationGroups.filter((group) => group.medications.length > 0),
+    [medicationGroups],
+  );
   const summaryMedications = useMemo(() => uniqueActiveMedications(medicationSummarySource), [medicationSummarySource]);
-  const hasAnyMedication = medicationGroups.some((group) => group.medications.length > 0);
-  const currentExpandedSlot = expandedSlot === null
-    ? null
-    : medicationGroups.some((group) => group.slot === expandedSlot && group.medications.length > 0)
-      ? expandedSlot
-      : medicationGroups.find((group) => group.medications.length > 0)?.slot || null;
+  const hasAnyMedication = visibleMedicationGroups.length > 0;
 
   function isSlotDone(group) {
-    return locallyTakenSlots.has(`${todayDate}:${group.slot}`)
+    const slotKey = `${todayDate}:${group.slot}`;
+    if (locallyCorrectedSlots.has(slotKey)) return false;
+    return locallyTakenSlots.has(slotKey)
       || group.medications.every((med) => (
-        med.taken_slots?.includes(group.slot)
-        || (med.taken_status === "taken" && med.taken_date === todayDate)
+        Array.isArray(med.taken_slots)
+          ? med.taken_slots.includes(group.slot)
+          : med.taken_status === "taken" && med.taken_date === todayDate
       ));
   }
 
   async function handleSlotStatus(group, status) {
     if (!group.medicationIds.length || !onTaken || !canCompleteMedication || readOnly) return;
+    const slotLabel = ELDER_MEDICATION_SLOT_LABELS[group.slot] || group.label;
+    const operationScope = [
+      todayDate,
+      group.slot,
+      status,
+      [...group.medicationIds].sort((left, right) => Number(left) - Number(right)).join(","),
+    ].join(":");
+    const idempotencyKey = medicationRetryKeysRef.current.get(operationScope);
     setSavingSlot(`${group.slot}-${status}`);
     setSlotFeedback((current) => ({ ...current, [group.slot]: null }));
     try {
-      const result = await onTaken?.(group, status);
+      const result = await onTaken?.(group, status, { idempotencyKey });
+      medicationRetryKeysRef.current.clear(operationScope, idempotencyKey);
       if (status === "taken") {
         setLocallyTakenSlots((prev) => new Set(prev).add(`${todayDate}:${group.slot}`));
+        setLocallyCorrectedSlots((prev) => {
+          const next = new Set(prev);
+          next.delete(`${todayDate}:${group.slot}`);
+          return next;
+        });
         setLocalRecordMeta((current) => ({
           ...current,
           [group.slot]: {
@@ -339,8 +346,24 @@ export default function MedicationView({
             recordedAt: result?.created_at || result?.taken_at || new Date().toISOString(),
           },
         }));
+      } else {
+        setLocallyTakenSlots((prev) => {
+          const next = new Set(prev);
+          next.delete(`${todayDate}:${group.slot}`);
+          return next;
+        });
+        setLocallyCorrectedSlots((prev) => new Set(prev).add(`${todayDate}:${group.slot}`));
+        setLocalRecordMeta((current) => {
+          const next = { ...current };
+          delete next[group.slot];
+          return next;
+        });
+        setConfirmCorrectionSlot(null);
       }
-      setSlotFeedback((current) => ({ ...current, [group.slot]: { kind: "success", message: `本次${group.label}服用已記錄。` } }));
+      const successMessage = status === "taken"
+        ? `本次${slotLabel}服用已記錄。`
+        : `${slotLabel}紀錄已更正為尚未服用，可以重新記錄。`;
+      setSlotFeedback((current) => ({ ...current, [group.slot]: { kind: "success", message: successMessage } }));
     } catch (error) {
       setSlotFeedback((current) => ({ ...current, [group.slot]: { kind: "error", message: medicationMutationErrorMessage(error) } }));
     } finally {
@@ -350,101 +373,112 @@ export default function MedicationView({
 
   return (
     <div className="medicine-grid">
-      {summaryMedications.length > 0 && (
-        <section className="medicine-summary-entry">
-          <div>
-            <p className="panel-eyebrow">看診時快速出示</p>
-            <h3>給醫生看的用藥總表</h3>
-            <p>不用一顆一顆點開，直接整理成全名、用途、劑量與服用時間。</p>
-          </div>
-          <button type="button" className="primary-action" onClick={() => setShowMedicationSummary(true)}>給醫生看</button>
-        </section>
-      )}
-
-      {hasAnyMedication ? medicationGroups.map((group) => (
-        <section key={group.slot} className="medicine-time-group">
-          {(() => {
-            const isGroupExpanded = currentExpandedSlot === group.slot;
-            return (
-              <>
-          <div className="medicine-slot-head">
-            <button
-              type="button"
-              className="medicine-slot-toggle"
-              onClick={() => setExpandedSlot(isGroupExpanded ? null : group.slot)}
-              aria-expanded={isGroupExpanded}
-              aria-controls={`medicine-slot-${group.slot}`}
-            >
-              <span>
-                <small>{group.medications.length ? `${group.medications.length} 種藥` : "沒有安排"}</small>
-                <strong>{group.label}</strong>
-              </span>
-              <span className="medicine-slot-chevron" aria-hidden="true">{isGroupExpanded ? "−" : "+"}</span>
-            </button>
-            <div className="medicine-slot-actions">
-              {group.medications.length > 0 && isSlotDone(group) && (
-                <span className="medicine-slot-status is-done">
-                  <strong>{formatDateLabel(todayDate)}・{group.label} 已記錄</strong>
-                  <small>
-                    {(() => {
-                      const meta = resolveSlotRecordMeta(group, activityAudit, localRecordMeta[group.slot]);
-                      return `操作者：${meta.actor}・時間：${formatRecordedAt(meta.recordedAt)}`;
-                    })()}
-                  </small>
-                </span>
-              )}
-              {group.medications.length > 0 && !isSlotDone(group) && canCompleteMedication && !readOnly && (
-                <button type="button" className="primary-action compact-action" onClick={() => handleSlotStatus(group, "taken")} disabled={savingSlot === `${group.slot}-taken`}>
-                  {savingSlot === `${group.slot}-taken` ? "記錄中…" : "標記本次已服用"}
-                </button>
-              )}
-            </div>
-          </div>
-          {slotFeedback[group.slot]?.message && (
-            <p className={slotFeedback[group.slot].kind === "error" ? "error-msg" : "success-msg"} role="status">
-              {slotFeedback[group.slot].message}
-            </p>
-          )}
-          {isGroupExpanded && (group.medications.length ? <div className="medicine-chip-list" id={`medicine-slot-${group.slot}`}>
-            {group.medications.map((med) => {
-              const isExpanded = expandedMedicationId === med.id;
-              return (
-                <article key={med.id} className={`medicine-card ${isExpanded ? "is-expanded" : ""}`}>
-                  <button
-                    type="button"
-                    className="medicine-chip-button"
-                    onClick={() => setExpandedMedicationId(isExpanded ? null : med.id)}
-                    aria-expanded={isExpanded}
-                    aria-label={`查看 ${med.name || "藥名待確認"} 說明`}
-                  >
-                    <span className="medicine-color" style={{ backgroundColor: med.color }} aria-hidden="true">
-                      {getMedicationShortName(med.name).slice(0, 1)}
-                    </span>
-                    <span className="medicine-full-name">{med.name || "藥名待確認"}</span>
-                  </button>
-                  {isExpanded && (
-                    <div className="medicine-card-detail">
-                      <dl>
-                        <div><dt>全名</dt><dd>{med.name || "藥名待確認"}</dd></div>
-                        <div><dt>份量</dt><dd>{med.dosage || "待確認"}</dd></div>
-                        {[med.schedule.timeLabel, med.schedule.mealTimingLabel].filter(Boolean).length > 0 && (
-                          <div><dt>時間</dt><dd>{[med.schedule.timeLabel, med.schedule.mealTimingLabel].filter(Boolean).join(" ｜ ")}</dd></div>
-                        )}
-                        {med.purpose && <div><dt>用途</dt><dd>{med.purpose}</dd></div>}
-                        {med.warnings && <div><dt>注意</dt><dd>{med.warnings}</dd></div>}
-                      </dl>
-                    </div>
-                  )}
-                </article>
-              );
-            })}
-          </div> : (
-            <p className="medicine-slot-empty" id={`medicine-slot-${group.slot}`}>這個時段目前沒有藥。</p>
+      {hasAnyMedication ? (readOnly ? (
+        <div className="elder-medication-list" aria-label="完整用藥說明">
+          {visibleMedicationGroups.map((group) => (
+            <section key={group.slot} className="elder-medication-time-group">
+              <div className="elder-medication-time-head">
+                <div>
+                  <p>服用時段</p>
+                  <h2>{ELDER_MEDICATION_SLOT_LABELS[group.slot] || group.label}</h2>
+                </div>
+                <span>{isSlotDone(group) ? "今天已記錄" : `${group.medications.length} 種藥`}</span>
+              </div>
+              <div className="elder-medication-cards">
+                {group.medications.map((med, index) => (
+                  <article className="elder-medication-card" key={med.id || `${group.slot}-${med.name}-${index}`}>
+                    <h3>{med.name || "藥名待家人確認"}</h3>
+                    <p className="elder-medication-instruction">
+                      <span>{med.dosage || "份量待家人確認"}</span>
+                      {med.schedule?.timeLabel && med.schedule.timeLabel !== group.label && <span>{med.schedule.timeLabel}</span>}
+                      <span>{med.schedule?.mealTimingLabel || "飯前或飯後待家人確認"}</span>
+                    </p>
+                    {med.purpose && <p className="elder-medication-purpose">用途：{med.purpose}</p>}
+                    {med.warnings && <p className="elder-medication-warning">注意：{med.warnings}</p>}
+                  </article>
+                ))}
+              </div>
+            </section>
           ))}
-              </>
+          <p className="elder-medication-safety">請照藥袋或醫師指示服用；內容不清楚時，先請家人或藥師確認。</p>
+        </div>
+      ) : (
+        <div className="medicine-caregiver-list" aria-label="今日用藥與完成記錄">
+          {visibleMedicationGroups.map((group) => {
+            const slotLabel = ELDER_MEDICATION_SLOT_LABELS[group.slot] || group.label;
+            const slotDone = isSlotDone(group);
+            return (
+              <section key={group.slot} className="medicine-time-group" aria-label={`${slotLabel}用藥`}>
+                <div className="medicine-slot-head">
+                  <div className="medicine-slot-title">
+                    <small>服用時段</small>
+                    <h2>{slotLabel}</h2>
+                  </div>
+                  <span className="medicine-slot-count">共 {group.medications.length} 種藥</span>
+                </div>
+
+                <div className="medicine-caregiver-instructions">
+                  {group.medications.map((med, index) => (
+                    <article key={med.id || `${group.slot}-${med.name}-${index}`} className="medicine-instruction-card">
+                      <h3>{med.name || "藥名待確認"}</h3>
+                      <dl>
+                        <div><dt>份量</dt><dd>{med.dosage || "份量待確認"}</dd></div>
+                        <div><dt>時間</dt><dd>{med.schedule?.timeLabel || slotLabel}</dd></div>
+                        <div><dt>餐前餐後</dt><dd>{med.schedule?.mealTimingLabel || med.frequency || "飯前或飯後待確認"}</dd></div>
+                        {med.purpose && <div><dt>用途</dt><dd>{med.purpose}</dd></div>}
+                        {med.warnings && <div className="medicine-instruction-warning"><dt>注意</dt><dd>{med.warnings}</dd></div>}
+                      </dl>
+                    </article>
+                  ))}
+                </div>
+
+                <div className="medicine-slot-actions">
+                  {slotDone ? (
+                    <>
+                      <span className="medicine-slot-status is-done">
+                        <strong>{formatDateLabel(todayDate)}・{slotLabel}已記錄</strong>
+                        <small>
+                          {(() => {
+                            const meta = resolveSlotRecordMeta(group, activityAudit, localRecordMeta[group.slot]);
+                            return `操作者：${meta.actor}・時間：${formatRecordedAt(meta.recordedAt)}`;
+                          })()}
+                        </small>
+                      </span>
+                      {canCompleteMedication && !readOnly && (
+                        confirmCorrectionSlot === group.slot ? (
+                          <section className="medicine-correction-confirmation" role="alert" aria-labelledby={`medicine-correction-${group.slot}`}>
+                            <h3 id={`medicine-correction-${group.slot}`}>要把「{slotLabel}」改成尚未服用嗎？</h3>
+                            <p>只有剛才記錯時才需要更正。更正後，這個時段會回到可以重新記錄的狀態。</p>
+                            <div className="medicine-correction-actions">
+                              <button type="button" className="secondary-action" onClick={() => setConfirmCorrectionSlot(null)} disabled={savingSlot === `${group.slot}-forgotten`}>取消更正</button>
+                              <button type="button" className="primary-action" onClick={() => handleSlotStatus(group, "forgotten")} disabled={savingSlot === `${group.slot}-forgotten`}>
+                                {savingSlot === `${group.slot}-forgotten` ? "更正中…" : "確認更正"}
+                              </button>
+                            </div>
+                          </section>
+                        ) : (
+                          <button type="button" className="secondary-action compact-action medicine-correction-trigger" onClick={() => setConfirmCorrectionSlot(group.slot)} aria-expanded="false">
+                            更正紀錄
+                          </button>
+                        )
+                      )}
+                    </>
+                  ) : canCompleteMedication && !readOnly && (
+                    <button type="button" className="primary-action compact-action" onClick={() => handleSlotStatus(group, "taken")} disabled={savingSlot === `${group.slot}-taken`} aria-label={`記錄${slotLabel}這些藥已服用`}>
+                      {savingSlot === `${group.slot}-taken` ? "記錄中…" : `記錄：${slotLabel}已服用`}
+                    </button>
+                  )}
+                </div>
+                {slotFeedback[group.slot]?.message && (
+                  <p className={slotFeedback[group.slot].kind === "error" ? "error-msg" : "success-msg"} role="status">
+                    {slotFeedback[group.slot].message}
+                  </p>
+                )}
+              </section>
             );
-          })()}
-        </section>
+          })}
+          <p className="medicine-page-safety">請先核對藥袋或醫師指示，再記錄服用狀態；內容不清楚時，先請藥師確認。</p>
+        </div>
       )) : (
         <EmptyMedicationGuide
           title={searchQuery && totalMedicationCount > 0 ? "沒有符合搜尋的藥物。" : "目前還沒有吃藥說明。"}
@@ -454,6 +488,16 @@ export default function MedicationView({
           secondaryLabel={searchQuery && totalMedicationCount > 0 && onUpload && !readOnly ? "拍照新增照護資料" : undefined}
           onSecondary={searchQuery && totalMedicationCount > 0 ? onUpload : undefined}
         />
+      )}
+      {summaryMedications.length > 0 && (
+        <section className="medicine-summary-entry">
+          <div>
+            <p className="panel-eyebrow">看診時快速出示</p>
+            <h3>給醫生看的用藥總表</h3>
+            <p>不用一顆一顆點開，直接整理成全名、用途、劑量與服用時間。</p>
+          </div>
+          <button type="button" className="primary-action" onClick={() => setShowMedicationSummary(true)}>給醫生看</button>
+        </section>
       )}
       {showMedicationSummary && (
         <MedicationSummarySheet

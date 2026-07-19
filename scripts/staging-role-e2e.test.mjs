@@ -40,9 +40,14 @@ test("role e2e plan refuses production and reports missing credentials without n
 
 test("role e2e source keeps the 412px large-text gate", async () => {
   const source = await import("node:fs/promises").then(({ readFile }) => readFile(new URL("./staging-role-e2e.mjs", import.meta.url), "utf8"));
-  assert.match(source, /\[130, 150\]/);
+  assert.match(source, /\[130, 150, 200\]/);
+  assert.match(source, /webkitTextSizeAdjust/);
+  assert.match(source, /textSizeAdjust/);
   assert.match(source, /horizontal_overflow/);
   assert.match(source, /offscreen_control/);
+  assert.match(source, /bottom_nav_content_overlap/);
+  assert.match(source, /bottom_nav_clearance/);
+  assert.match(source, /lastElementChild/);
   assert.match(source, /font_scale/);
   assert.match(source, /login_font_scale/);
 });

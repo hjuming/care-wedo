@@ -27,6 +27,7 @@ import {
 import { getRequestUser } from "../_shared/auth_context";
 import { canManageMembership } from "../_shared/group_permissions";
 import { buildActivityAudit } from "../_shared/activity_audit";
+import { resolveLatestMedicationSlotStatus } from "../_shared/medication_status";
 
 type Env = {
   SUPABASE_URL: string;
@@ -412,7 +413,7 @@ async function fetchTodayMedicationLogs(env: Env, medications: MedicationRow[]):
   try {
     rows = await supabaseFetch<MedicationLogRow[]>(
       env,
-      `medication_logs?medication_id=in.(${medicationIds.join(",")})${groupFilter}&taken_date=eq.${todayInTaipei()}&select=medication_id,status,taken_date,time_slot,confirmed_by_user_id,created_at&order=created_at.desc`,
+      `medication_logs?medication_id=in.(${medicationIds.join(",")})${groupFilter}&taken_date=eq.${todayInTaipei()}&select=id,medication_id,status,taken_date,time_slot,confirmed_by_user_id,created_at&order=created_at.desc,id.desc`,
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
@@ -623,7 +624,8 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       documents: documents.map(serializeCareDocument),
       medications: medications.map((medication) => {
         const logs = todayMedicationLogs.get(medication.id) || [];
-        const takenLog = logs.find((log) => log.status === "taken");
+        const resolvedStatus = resolveLatestMedicationSlotStatus(logs);
+        const takenLog = resolvedStatus.latestTakenLog;
         return {
           ...serializeMedication(medication),
           taken_status: takenLog?.status || "",
@@ -631,7 +633,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
           taken_at: takenLog?.created_at || null,
           taken_by_user_id: takenLog?.confirmed_by_user_id || null,
           taken_by_name: takenLog?.confirmed_by_user_id ? userNames.get(takenLog.confirmed_by_user_id) || "家庭協作者" : null,
-          taken_slots: logs.filter((log) => log.status === "taken").map((log) => log.time_slot).filter(Boolean),
+          taken_slots: resolvedStatus.takenSlots,
         };
       }),
       members,

@@ -7,7 +7,7 @@ import OcrResult from "./components/OcrResult";
 import { CalendarView, ManualReminderModal } from "./features/appointments/AppointmentView";
 import MedicationView from "./features/medications/MedicationView";
 import { CareDocumentUploadModal, ScanProgress, UploadGuide } from "./features/ocr/OcrWorkflow";
-import { buildAppointmentTitle, formatDateLabel, isDateTodayOrFuture, normalizeDateInput, todayInTaipei, typeIcon, typeLabel } from "./features/shared/careFormatters";
+import { buildAppointmentTitle, formatDateLabel, formatDoctorName, isDateTodayOrFuture, normalizeDateInput, todayInTaipei, typeIcon, typeLabel } from "./features/shared/careFormatters";
 import { patientData, medicines, timeline as initialTimeline } from "./data/patient";
 import { confirmOcrDocument, createAppointment, deleteAppointment, deleteCareDocument, downloadAppointmentCalendarFile, downloadLocalAppointmentCalendarFile, fetchDashboard, fetchDocumentDetail, fetchDocumentFileUrl, fetchSessionIdentity, joinGroup, markMedicationSlotStatus, ocrAnalyze, ocrAnalyzeText, patchAppointment, patchMedication, updateActiveProfilePreference, updateFamilyNotes, updateProfile, updateProfileOrder, uploadCareDocument } from "./services/api";
 import { buildExternalAppUrl, buildLiffEntryUrl, buildLineAppLiffFallbackUrl, initLineIdentity, isLineInAppBrowser, loginWithLine, logoutLineIdentity, openDashboardInExternalBrowserAfterLineCallback, openUrlInExternalBrowser, resetCareWedoSessionAndReturnHome, shouldOpenLiffEntryUrl } from "./services/liff";
@@ -15,13 +15,18 @@ import { completeSupabaseOAuthCallback, hasSupabaseAuthConfig, loginWithGoogle, 
 import { safeReviewLoginEnabled } from "./services/safeReviewLogin";
 import { deriveCareCapabilities } from "./services/capabilities";
 import { trackError, trackEvent } from "./services/telemetry";
-import { buildTodayTasks, formatTaipeiTodayLabel, groupMedicationsBySchedule, hasSameDayTasks } from "./services/todayTasks";
+import { buildTodayTasks, findNextAppointment, formatTaipeiTodayLabel, groupMedicationsBySchedule, hasSameDayTasks } from "./services/todayTasks";
 import { buildSearchSuggestions, matchSearch } from "./services/search";
 import { dedupeAppointments } from "./services/appointmentDedupe";
+import { createLatestIntentQueue, createLatestRequestGate } from "./services/asyncIntent";
 import PrivacyPage from "./components/PrivacyPage";
 import TermsPage from "./components/TermsPage";
 import aiAvatar from "./assets/ai-avatar.png";
 import { isLineCallbackSearch, resolveCareWedoRoute } from "./routing";
+import {
+  CARE_WEDO_GROUP_LIMITS as SHARED_CARE_WEDO_GROUP_LIMITS,
+  CARE_WEDO_PRICING as SHARED_CARE_WEDO_PRICING,
+} from "../../shared/care-wedo-pricing.js";
 
 
 const IS_PROD = import.meta.env.PROD;
@@ -102,6 +107,7 @@ function normalizeMedication(med, index) {
     time_slot: med.time_slot || "",
     meal_timing: med.meal_timing || "",
     scheduled_time: med.scheduled_time || "",
+    schedule: med.schedule || null,
     taken_status: med.taken_status || "",
     taken_date: med.taken_date || "",
     taken_slots: Array.isArray(med.taken_slots) ? med.taken_slots : [],
@@ -203,12 +209,12 @@ const AVATAR_MAX_SOURCE_SIZE = 5 * 1024 * 1024;
 const AVATAR_CANVAS_SIZE = 480;
 const CARE_WEDO_SUPPORT_EMAIL = "Care@wedopr.com";
 const CARE_WEDO_PRICING = {
-  currency_symbol: "$",
-  recipientMonthly: 30,
-  collaboratorMonthly: 10,
-  includedCareProfilesDuringBeta: 1,
-  freeMonthlyOcrLimit: 10,
-  paidMonthlyOcrLimit: 100,
+  currency_symbol: SHARED_CARE_WEDO_PRICING.currency_symbol,
+  recipientMonthly: SHARED_CARE_WEDO_PRICING.recipient_monthly,
+  collaboratorMonthly: SHARED_CARE_WEDO_PRICING.collaborator_monthly,
+  includedCareProfilesDuringBeta: SHARED_CARE_WEDO_PRICING.included_care_profiles_during_beta,
+  freeMonthlyOcrLimit: SHARED_CARE_WEDO_PRICING.free_monthly_ocr_limit,
+  paidMonthlyOcrLimit: SHARED_CARE_WEDO_PRICING.paid_monthly_ocr_limit,
 };
 const CARE_WEDO_TEST_MODE_COPY = "目前為測試模式：不會實際扣款；費用與額度僅供流程驗證，正式規則會在付款前清楚確認。";
 
@@ -228,9 +234,9 @@ function formatCareWedoPricingCopy(pricing = CARE_WEDO_PRICING) {
   return `首位照護對象 ${normalized.currency_symbol}0/月；新增照護對象每位 ${normalized.currency_symbol}${normalized.recipientMonthly}/月、協作者每位 ${normalized.currency_symbol}${normalized.collaboratorMonthly}/月，付款前會清楚確認。`;
 }
 const CARE_WEDO_GROUP_LIMITS = {
-  maxCareProfiles: 4,
-  maxPaidCollaborators: 5,
-  maxMembersIncludingOwner: 6,
+  maxCareProfiles: SHARED_CARE_WEDO_GROUP_LIMITS.max_care_profiles,
+  maxPaidCollaborators: SHARED_CARE_WEDO_GROUP_LIMITS.max_paid_collaborators,
+  maxMembersIncludingOwner: SHARED_CARE_WEDO_GROUP_LIMITS.max_members_including_owner,
 };
 
 function isQuotaLimitMessage(message = "") {
@@ -407,12 +413,12 @@ const FREE_FEATURES = [
   ["正式版月費訂閱", "$0", "首位測試期減免，增加才收費"],
 ];
 
-const PLAN_TIERS = [
-  { name: "Free", label: "免費版", price: "$0/月", copy: "1 位照護對象、每月 10 筆 AI 整理，可看未來提醒；最近 30 天資料會保存但不開放歷史查詢。", featured: false },
-  { name: "Care Circle", label: "照護圈升級", price: "首位減免，增加才收費", copy: "開放測試期首位主要照護對象減免 $30/月；新增照護對象或協作者才收費。", featured: true },
-  { name: "Helper", label: "增加照護協作者", price: "+$10/人/月", copy: "可協助上傳、編輯、查看照護資料；不可變更付款與成員權限。" },
-  { name: "Care Recipient", label: "增加照護對象", price: "+$30/人/月", copy: "每增加一位爸爸、媽媽、自己或其他照護對象，加收資料保存費。" },
-];
+const PLAN_TIERS = {
+  careCircle: {
+    analyticsName: "Care Circle",
+    recommendationLabel: "推薦方案",
+  },
+};
 
 const LANDING_FAQS = [
   {
@@ -428,8 +434,8 @@ const LANDING_FAQS = [
     answer: "目前可整理看診單、藥袋、處方箋、領藥資訊、掛號預約單與一般照護提醒。資料會存到對應照護對象底下，方便家人回頭查。",
   },
   {
-    question: "Free 和照護圈升級差在哪裡？",
-    answer: "測試期間一般測試帳號開放照護圈升級體驗。正式版會保留 Free 體驗；Free 可保存最近 30 天資料但不開放歷史查詢，照護圈升級提供每位照護對象 100 筆/月整理額度、家庭協作、多位照護對象與完整保存。",
+    question: "免費使用和照護圈升級差在哪裡？",
+    answer: "目前免費使用可保存最近 30 天資料，但不開放歷史查詢。照護圈升級提供每位照護對象 100 筆/月整理額度、家庭協作、多位照護對象與完整保存。",
   },
   {
     question: "長輩一定要會用系統嗎？",
@@ -465,6 +471,13 @@ const LANDING_FAQS = [
   },
 ];
 
+const PRICING_FAQS = LANDING_FAQS.filter((item) => [
+  "免費使用和照護圈升級差在哪裡？",
+  "測試期間需要付費嗎？",
+  "家人可以一起看同一份紀錄嗎？",
+  "圖片和紀錄會被保存嗎？",
+].includes(item.question));
+
 const FEEDBACK_TOPICS = [
   "LINE 上傳流程",
   "提醒文案是否看得懂",
@@ -480,59 +493,111 @@ function FeatureValue({ value }) {
   return <span>{value}</span>;
 }
 
-function PlanTierTable({ reviewMode = false }) {
-  if (reviewMode) {
-    return (
-      <div className="pricing-test-mode-card" role="status">
-        <strong>STAGING 測試模式</strong>
-        <p>{CARE_WEDO_TEST_MODE_COPY}</p>
-      </div>
-    );
-  }
+function PlanFeatureComparison() {
   return (
-    <div className="plan-tier-table pricing-model-table" role="table" aria-label="Care WEDO 版本 A 收費方式">
-      <div className="plan-tier-row plan-tier-head" role="row">
-        <strong>項目</strong>
-        <strong>月費</strong>
-        <strong>說明</strong>
+    <details className="plan-feature-comparison">
+      <summary>查看完整功能比較</summary>
+      <div className="plan-feature-list" role="list">
+        {FREE_FEATURES.map(([feature, free, paid]) => (
+          <div className="plan-feature-item" role="listitem" key={feature}>
+            <strong className="plan-feature-name">{feature}</strong>
+            <div className="plan-feature-value">
+              <span className="plan-feature-label">目前免費</span>
+              <FeatureValue value={free} />
+            </div>
+            <div className="plan-feature-value plan-feature-paid">
+              <span className="plan-feature-label">照護圈升級</span>
+              <FeatureValue value={paid} />
+            </div>
+          </div>
+        ))}
       </div>
-      {PLAN_TIERS.map((tier) => (
-        <div className="plan-tier-row" role="row" key={tier.name}>
-          <span className="plan-tier-name">
-            <span className="plan-tier-english">{tier.name}</span>
-            <span className="plan-tier-local">
-              {tier.label}
-              {tier.featured && <span className="plan-tier-star" aria-label="推薦方案">★</span>}
-            </span>
-          </span>
-          <span className="plan-tier-price">{tier.price}</span>
-          <span>{tier.copy}</span>
-        </div>
-      ))}
-    </div>
+    </details>
   );
 }
 
-function PlanDetailsModal({ onClose, reviewMode = safeReviewLoginEnabled() }) {
+function PlanDetailsModal({ onClose, reviewMode = safeReviewLoginEnabled(), pricing = CARE_WEDO_PRICING }) {
+  const normalizedPricing = normalizeCareWedoPricing(pricing);
+
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content plan-details-modal" role="dialog" aria-modal="true" aria-labelledby="plan-details-title" onClick={(event) => event.stopPropagation()}>
+    <div className="modal-overlay plan-details-overlay" onClick={onClose}>
+      <div className="modal-content plan-details-modal" role="dialog" aria-modal="true" aria-labelledby="plan-details-title" aria-describedby="plan-details-description" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
           <div>
-            <p className="modal-kicker">照護圈升級方案</p>
-            <h2 id="plan-details-title">功能規劃</h2>
+            <p className="modal-kicker">照護圈升級</p>
+            <h2 id="plan-details-title">升級規則與費用</h2>
+            <p className="plan-details-description" id="plan-details-description">先看升級後能使用的功能，再看什麼情況會增加月費。</p>
           </div>
           <button type="button" className="btn-close" onClick={onClose} aria-label="關閉">×</button>
         </div>
         <div className="modal-body">
-          <PlanTierTable reviewMode={reviewMode} />
           {reviewMode ? (
-            <p className="helper-copy">這個 staging 入口只用來驗證家庭協作流程，不會建立付款或扣款動作。</p>
+            <>
+              <div className="pricing-test-mode-card" role="status">
+                <strong>測試模式</strong>
+                <p>{CARE_WEDO_TEST_MODE_COPY}</p>
+              </div>
+              <p className="helper-copy">這個測試入口只用來驗證家庭協作流程，不會建立付款或扣款動作。</p>
+            </>
           ) : (
             <>
-              <div className="pricing-note-card">
-                <strong>版本 A 收費方向</strong>
-                <p>免費可以先照顧 1 位家人，最近 30 天資料會保存但不開放歷史查詢。開放測試期首位照護對象減免 $30/月；新增照護對象或協作者才會進入付款確認。</p>
+              <div className="plan-details-summary" role="note">
+                <strong>先看結論</strong>
+                <p>目前只照顧 1 位家人，不收月費。</p>
+                <p>只有新增要照顧的家人或一起管理的家人，月費才會增加。</p>
+              </div>
+              <div className="plan-details-sections">
+                <section className="plan-details-section" aria-labelledby="plan-details-free-title">
+                  <p className="plan-details-label">目前免費</p>
+                  <h3 id="plan-details-free-title">先從一位家人開始</h3>
+                  <ul className="plan-details-benefit-list">
+                    <li>可照顧 {normalizedPricing.includedCareProfilesDuringBeta} 位家人</li>
+                    <li>每月可整理 {normalizedPricing.freeMonthlyOcrLimit} 筆照護資料</li>
+                    <li>可查看未來提醒</li>
+                    <li>最近 30 天的資料會先保留</li>
+                  </ul>
+                  <p className="plan-details-muted">免費使用時只能看未來提醒；要回頭查過去紀錄，需升級照護圈。</p>
+                </section>
+
+                <section className="plan-details-section plan-details-discount" data-plan-name={PLAN_TIERS.careCircle.analyticsName} aria-labelledby="plan-details-discount-title">
+                  <p className="plan-details-label">{PLAN_TIERS.careCircle.recommendationLabel} · 開放測試期間</p>
+                  <h3 id="plan-details-discount-title">第一位要照顧的家人，目前不用付月費</h3>
+                  <p>原本每月 {normalizedPricing.currency_symbol}{normalizedPricing.recipientMonthly}。開放測試期間，第一位家人的這筆費用先不收，所以目前是 {normalizedPricing.currency_symbol}0/月。</p>
+                  <ul className="plan-details-benefit-list">
+                    <li>每位照護對象每月可整理 {normalizedPricing.paidMonthlyOcrLimit} 筆照護資料</li>
+                    <li>可查看完整歷史紀錄</li>
+                    <li>可邀請家人一起管理；新增協作者時才會增加月費</li>
+                  </ul>
+                  <p className="plan-details-muted">只有多照顧一位家人，或邀請家人一起管理，才會增加月費。</p>
+                </section>
+
+                <section className="plan-details-section" aria-labelledby="plan-details-addon-title">
+                  <p className="plan-details-label">需要加人時</p>
+                  <h3 id="plan-details-addon-title">再按月計費</h3>
+                  <ul className="plan-details-price-list">
+                    <li className="plan-details-price-item">
+                      <strong>
+                        <span className="plan-details-price-name">
+                          每增加 1 位一起管理的家人
+                          <span className="plan-details-role-note">系統稱為「協作者」</span>
+                        </span>
+                        <span className="plan-details-price-amount">+{normalizedPricing.currency_symbol}{normalizedPricing.collaboratorMonthly}/月</span>
+                      </strong>
+                      <p>可協助上傳、編輯與查看照護資料；您現在使用的主要帳號不另外收費。</p>
+                    </li>
+                    <li className="plan-details-price-item">
+                      <strong>
+                        <span className="plan-details-price-name">
+                          每增加 1 位要照顧的家人
+                          <span className="plan-details-role-note">系統稱為「照護對象」</span>
+                        </span>
+                        <span className="plan-details-price-amount">+{normalizedPricing.currency_symbol}{normalizedPricing.recipientMonthly}/月</span>
+                      </strong>
+                      <p>可為另一位家人保存與整理照護資料。</p>
+                    </li>
+                  </ul>
+                  <p className="plan-details-confirmation">付款前會先顯示新的每月費用，確認後才會進入安全付款。</p>
+                </section>
               </div>
               <p className="helper-copy">付款由綠界安全處理，Care WEDO 不保存信用卡資料。付款與資料問題可聯絡 <a href={`mailto:${CARE_WEDO_SUPPORT_EMAIL}`}>{CARE_WEDO_SUPPORT_EMAIL}</a>。</p>
             </>
@@ -547,23 +612,27 @@ function PlanUpgradeModal({ reason = "quota", onClose, onViewPlans, pricing = CA
   const isHistory = reason === "history";
   const reviewMode = safeReviewLoginEnabled();
   const normalizedPricing = normalizeCareWedoPricing(pricing);
-  const title = isHistory ? "歷史紀錄是照護圈功能" : "本月免費整理額度已用完";
+  const title = isHistory ? "歷史紀錄是照護圈功能" : "免費整理已達上限";
   const kicker = isHistory ? "歷史查詢" : "整理額度";
   const heroTitle = isHistory
-    ? "Free 會保留最近 30 天資料，但不開放歷史查詢。"
-    : "升級照護圈後可以繼續保存新資料，並查看完整歷史紀錄。";
+    ? "想看 30 天以前的資料，需要升級照護圈。"
+    : "這次資料還沒有保存，先看看接下來可以怎麼做。";
   const heroCopy = isHistory
-    ? "升級照護圈後，可以查看完整歷史紀錄與健康時間線，家人回診前也比較容易一起確認過去資料。"
-    : "開放測試期首位照護對象減免；若新增照護對象或協作者，付款前會清楚確認。也可以下個月再繼續使用免費整理額度。";
-  const secondaryActionLabel = isHistory ? "先看未來安排" : "先不要保存";
+    ? "你仍可免費查看未來提醒；升級後才會開放完整歷史紀錄與健康時間線。"
+    : "你可以查看費用後升級，或等下個月免費整理次數重置後再使用。";
+  const description = isHistory
+    ? "先看目前仍可使用的內容，再決定是否升級。"
+    : "本月免費整理次數已用完；先看升級後的功能與費用。";
+  const secondaryActionLabel = isHistory ? "回到未來安排" : "這次先不保存";
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content quota-upgrade-modal" role="dialog" aria-modal="true" aria-labelledby="quota-upgrade-title" onClick={(event) => event.stopPropagation()}>
+      <div className="modal-content quota-upgrade-modal" role="dialog" aria-modal="true" aria-labelledby="quota-upgrade-title" aria-describedby="quota-upgrade-description" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
           <div>
             <p className="modal-kicker">{kicker}</p>
             <h2 id="quota-upgrade-title">{title}</h2>
+            <p className="quota-upgrade-description" id="quota-upgrade-description">{description}</p>
           </div>
           <button type="button" className="btn-close" onClick={onClose} aria-label="關閉">×</button>
         </div>
@@ -574,33 +643,56 @@ function PlanUpgradeModal({ reason = "quota", onClose, onViewPlans, pricing = CA
           </div>
           {reviewMode ? (
             <div className="pricing-test-mode-card" role="status">
-              <strong>STAGING 測試模式</strong>
+              <strong>測試模式</strong>
               <p>{CARE_WEDO_TEST_MODE_COPY}</p>
             </div>
           ) : (
             <>
-              <div className="quota-upgrade-options" aria-label="版本 A 收費方式">
-                <article>
-                  <span>首位照護對象</span>
-                  <strong>{normalizedPricing.currency_symbol}0/月</strong>
-                  <p>開放測試期減免；啟用家庭群組協作與完整歷史保存。</p>
-                </article>
-                <article>
-                  <span>整理額度</span>
-                  <strong>{normalizedPricing.paidMonthlyOcrLimit} 筆/月</strong>
-                  <p>每位照護對象各自計算。</p>
-                </article>
-                <article>
-                  <span>增加照護對象</span>
-                  <strong>+{normalizedPricing.currency_symbol}{normalizedPricing.recipientMonthly}/人/月</strong>
-                  <p>每多照顧一位家人加一份保存空間。</p>
-                </article>
+              <div className="quota-upgrade-flow">
+                <section className="quota-upgrade-section" aria-labelledby="quota-upgrade-benefits-title">
+                  <p className="quota-upgrade-label">升級後可使用</p>
+                  <h3 id="quota-upgrade-benefits-title">整理更多資料，也能查看完整紀錄</h3>
+                  <ul className="quota-upgrade-benefit-list">
+                    <li>每位照護對象每月最多 {normalizedPricing.paidMonthlyOcrLimit} 次 AI 整理</li>
+                    <li>可查看完整歷史紀錄與健康時間線</li>
+                    <li>可依需要增加其他照護對象或協作者</li>
+                  </ul>
+                </section>
+
+                <section className="quota-upgrade-section quota-upgrade-fees" aria-labelledby="quota-upgrade-fees-title">
+                  <p className="quota-upgrade-label">費用怎麼算</p>
+                  <h3 id="quota-upgrade-fees-title">第一位照護對象目前免月費</h3>
+                  <ul className="quota-upgrade-fee-list">
+                    <li className="quota-upgrade-fee-item">
+                      <div>
+                        <strong className="quota-upgrade-fee-name">第一位照護對象</strong>
+                        <p>開放測試期間全額減免。</p>
+                      </div>
+                      <strong className="quota-upgrade-fee-price">{normalizedPricing.currency_symbol}0/月</strong>
+                    </li>
+                    <li className="quota-upgrade-fee-item">
+                      <div>
+                        <strong className="quota-upgrade-fee-name">增加協作者（例如子女或其他家人）</strong>
+                        <p>可一起上傳、編輯與查看照護資料。</p>
+                      </div>
+                      <strong className="quota-upgrade-fee-price">+{normalizedPricing.currency_symbol}{normalizedPricing.collaboratorMonthly}/人/月</strong>
+                    </li>
+                    <li className="quota-upgrade-fee-item">
+                      <div>
+                        <strong className="quota-upgrade-fee-name">增加照護對象（例如爸爸、媽媽或自己）</strong>
+                        <p>可多保存與整理一位家人的照護資料。</p>
+                      </div>
+                      <strong className="quota-upgrade-fee-price">+{normalizedPricing.currency_symbol}{normalizedPricing.recipientMonthly}/人/月</strong>
+                    </li>
+                  </ul>
+                  <p className="quota-upgrade-confirmation">主要帳號不另收費。每次付款前都會先顯示新的每月費用，確認後才會進入安全付款。</p>
+                </section>
               </div>
-              <p className="helper-copy">Free 會保留最近 30 天資料，但歷史查詢與完整保存是照護圈功能；{formatCareWedoPricingCopy(normalizedPricing)} Care WEDO 目前透過綠界安全付款，後續可再納入藍新等金流。</p>
+              <p className="helper-copy">付款由綠界安全處理，Care WEDO 不保存信用卡資料。</p>
             </>
           )}
           <div className="quota-upgrade-actions">
-            <button type="button" className="primary-action" onClick={onViewPlans}>查看方案</button>
+            <button type="button" className="primary-action" onClick={onViewPlans}>查看費用與升級方式</button>
             <button type="button" className="secondary-action" onClick={onClose}>{secondaryActionLabel}</button>
             <a className="inline-action" href={`mailto:${CARE_WEDO_SUPPORT_EMAIL}`}>聯絡客服</a>
           </div>
@@ -765,6 +857,8 @@ function LandingPage({ variant = "home" }) {
   const reviewMode = safeReviewLoginEnabled();
   const pricing = normalizeCareWedoPricing(CARE_WEDO_PRICING);
   const showDetailedContent = isDetailsPage || isGuidePage || isPricingPage;
+  const showProductStory = !isPricingPage;
+  const visibleFaqs = isPricingPage ? PRICING_FAQS : LANDING_FAQS;
   const heroMode = isGuidePage ? "guide" : isPricingPage ? "pricing" : isDetailsPage ? "features" : "home";
   const heroContent = {
     home: {
@@ -795,9 +889,9 @@ function LandingPage({ variant = "home" }) {
       secondaryLabel: "先看功能",
     },
     pricing: {
-      kicker: "Free / 照護圈升級",
+      kicker: "免費使用 / 照護圈升級",
       title: ["先免費使用，", "需要長期保存", "再升級。"],
-      desktop: "開放測試期首位照護對象減免；新增照護對象或協作者才收費。Free 可先整理近期資料，照護圈升級適合長期照顧多位家人。",
+      desktop: "開放測試期第一位照護對象免月費；只有增加照護對象或協作者才收費。每次付款前都會先顯示金額。",
       mobile: ["首位照護對象測試期減免。", "增加家人或協作者才收費。"],
       primaryLabel: "建立家庭協作",
       secondaryHref: "/guide",
@@ -894,7 +988,7 @@ function LandingPage({ variant = "home" }) {
           {loginError && <p className="notice-danger landing-login-error">{loginError}</p>}
           <p className="landing-trust-copy">Care WEDO 陪你照顧最重要的人。不取代醫師，只幫家人把照護資訊整理清楚。</p>
         </div>
-        {isGuidePage ? <OnboardingGuidePanel /> : <ProductPreviewPanel />}
+        {isGuidePage ? <OnboardingGuidePanel /> : isPricingPage ? null : <ProductPreviewPanel />}
       </section>
 
       <a className="landing-helper-fab" href="https://lin.ee/xzbyyvf" target="_blank" rel="noopener noreferrer" aria-label="聯繫 LINE 照護小管家">
@@ -903,25 +997,21 @@ function LandingPage({ variant = "home" }) {
 
       {showDetailedContent ? (
         <>
-          <section className="landing-section details-intro-section" aria-label="Care WEDO 說明">
-            <div className="section-kicker">
-              {isGuidePage ? "第一次使用" : isPricingPage ? "方案與保存" : "了解 Care WEDO"}
-            </div>
-            <h2>
-              {isGuidePage
-                ? "照著 LINE 綁定、加入小管家、拍照上傳，就能開始整理照護資料。"
-                : isPricingPage
-                  ? "先免費使用，需要長期保存與家人協作時再升級。"
+          {showProductStory && (
+            <section className="landing-section details-intro-section" aria-label="Care WEDO 說明">
+              <div className="section-kicker">{isGuidePage ? "第一次使用" : "了解 Care WEDO"}</div>
+              <h2>
+                {isGuidePage
+                  ? "照著 LINE 綁定、加入小管家、拍照上傳，就能開始整理照護資料。"
                   : "把看診、用藥與提醒整理成家人看得懂的照護資訊。"}
-            </h2>
-            <p>
-              {isGuidePage
-                ? "這頁只保留第一次上手最需要的步驟。若卡住，可以直接聯繫 LINE 照護小管家協助。"
-                : isPricingPage
-                  ? "首位照護對象測試期減免；增加家人或協作者前會清楚確認費用，不會靜默收費。"
+              </h2>
+              <p>
+                {isGuidePage
+                  ? "這頁只保留第一次上手最需要的步驟。若卡住，可以直接聯繫 LINE 照護小管家協助。"
                   : "這裡保留完整功能、方案、回饋與常見問題。第一次使用者可以先看教學，再完成 LINE 綁定。"}
-            </p>
-          </section>
+              </p>
+            </section>
+          )}
 
           {isGuidePage && (
             <section className="landing-section guide-start-section" aria-label="第一次使用流程">
@@ -956,16 +1046,16 @@ function LandingPage({ variant = "home" }) {
                 </div>
               ) : (
               <>
-              <h2>Free 先試用，照護圈升級才做長期保存。</h2>
+              <h2>先免費使用，需要增加家人或協作者時再升級。</h2>
               <div className="plan-cards">
                 <article className="plan-card">
-                  <span>Free</span>
+                  <span>目前免費</span>
                   <h3>$0/月</h3>
                   <p>適合先試用。可照顧 1 位家人，每月 10 筆 AI 整理，查看接下來的提醒；最近 30 天資料會保存但不開放歷史查詢。</p>
                   <a href="https://lin.ee/xzbyyvf" target="_blank" rel="noopener noreferrer">加入 LINE 小管家</a>
                 </article>
                 <article className="plan-card featured-plan">
-                  <button type="button" className="plan-name-trigger" onClick={() => setShowPlanDetails(true)}>版本 A 收費方式</button>
+                  <button type="button" className="plan-name-trigger" onClick={() => setShowPlanDetails(true)}>查看費用說明</button>
                   <h3>首位減免，增加才收費</h3>
                   <p>適合長期照顧父母、長輩或慢性病家人。開放測試期首位照護對象減免；{formatCareWedoPricingCopy(pricing)}</p>
                   <LineLoginAction loggingIn={loggingIn} label="建立家庭協作" onLogin={handleLineLogin} />
@@ -989,25 +1079,12 @@ function LandingPage({ variant = "home" }) {
                 </article>
               </div>
               <p className="plan-beta-note">開放測試期間，首位主要照護對象減免；增加照護對象或協作者才會進入付款確認。</p>
-              <div className="feature-table" role="table" aria-label="Care WEDO Free 與照護圈升級功能對照">
-                <div className="feature-row table-head" role="row">
-                  <strong>功能</strong>
-                  <strong>Free</strong>
-                  <strong>照護圈升級</strong>
-                </div>
-                {FREE_FEATURES.map(([feature, free, paid]) => (
-                  <div className="feature-row" role="row" key={feature}>
-                    <span>{feature}</span>
-                    <FeatureValue value={free} />
-                    <FeatureValue value={paid} />
-                  </div>
-                ))}
-              </div>
+              <PlanFeatureComparison />
               <div className="trust-note-panel">
                 <div>
                   <p className="panel-eyebrow">資料怎麼保存</p>
                   <h3>我們保存整理後的重要文字資料。</h3>
-                  <p>Care WEDO 使用雲端資料庫保存照護資料，並規劃定期備份。Free 會保留最近 30 天資料，但歷史查詢與完整保存是付費功能；若資料有問題、需要匯出或刪除，可聯絡客服信箱。</p>
+                  <p>Care WEDO 使用雲端資料庫保存照護資料，並規劃定期備份。目前免費使用會保留最近 30 天資料，但歷史查詢與完整保存是照護圈功能；若資料有問題、需要匯出或刪除，可聯絡客服信箱。</p>
                 </div>
                 <a href={`mailto:${CARE_WEDO_SUPPORT_EMAIL}`}>{CARE_WEDO_SUPPORT_EMAIL}</a>
               </div>
@@ -1016,6 +1093,8 @@ function LandingPage({ variant = "home" }) {
             </section>
           )}
 
+          {showProductStory && (
+            <>
           <section className="landing-section landing-entry-section" aria-label="快速入口">
         <div className="section-kicker">網站入口</div>
         <h2>第一次來，先看這三件事。</h2>
@@ -1071,19 +1150,18 @@ function LandingPage({ variant = "home" }) {
       </section>
       )}
 
-      {!isPricingPage && (
       <section className="landing-section plan-section" id="plans">
-        <div className="section-kicker">Free / 照護圈升級</div>
+        <div className="section-kicker">免費使用 / 照護圈升級</div>
         <h2>先免費使用，需要查歷史再升級。</h2>
         <div className="plan-cards">
           <article className="plan-card">
-            <span>Free</span>
+            <span>目前免費</span>
             <h3>$0/月</h3>
             <p>適合先試用。可照顧 1 位家人，每月 10 筆 AI 整理，查看接下來的提醒；最近 30 天資料會保存但不開放歷史查詢。</p>
             <a href="https://lin.ee/xzbyyvf" target="_blank" rel="noopener noreferrer">LINE 照護小管家</a>
           </article>
           <article className="plan-card featured-plan">
-            <button type="button" className="plan-name-trigger" onClick={() => setShowPlanDetails(true)}>版本 A 收費方式</button>
+            <button type="button" className="plan-name-trigger" onClick={() => setShowPlanDetails(true)}>查看費用說明</button>
             <h3>首位減免，增加才收費</h3>
             <p>適合長期照顧父母、長輩或慢性病家人。開放測試期首位照護對象減免；新增照護對象 $30/位/月、協作者 $10/人/月。</p>
             <LineLoginAction loggingIn={loggingIn} label="建立家庭協作" onLogin={handleLineLogin} />
@@ -1108,35 +1186,17 @@ function LandingPage({ variant = "home" }) {
         </div>
         <p className="plan-beta-note">開放測試期間，首位主要照護對象減免 $30/月；增加照護對象或協作者才會進入付款確認。</p>
 
-        <div className="feature-table" role="table" aria-label="Care WEDO Free 與照護圈升級功能對照">
-          <div className="feature-row table-head" role="row">
-            <strong>功能</strong>
-            <strong>Free</strong>
-            <strong>照護圈升級</strong>
-          </div>
-          {FREE_FEATURES.map(([feature, free, paid]) => (
-            <div className="feature-row" role="row" key={feature}>
-              <span>{feature}</span>
-              <FeatureValue value={free} />
-              <FeatureValue value={paid} />
-            </div>
-          ))}
-        </div>
+        <PlanFeatureComparison />
 
         <div className="trust-note-panel">
           <div>
             <p className="panel-eyebrow">資料怎麼保存</p>
             <h3>我們保存整理後的重要文字資料。</h3>
-            <p>Care WEDO 使用雲端資料庫保存照護資料，並規劃定期備份。Free 會保留最近 30 天資料，但歷史查詢與完整保存是付費功能；若資料有問題、需要匯出或刪除，可聯絡客服信箱。</p>
+            <p>Care WEDO 使用雲端資料庫保存照護資料，並規劃定期備份。目前免費使用會保留最近 30 天資料，但歷史查詢與完整保存是照護圈功能；若資料有問題、需要匯出或刪除，可聯絡客服信箱。</p>
           </div>
           <a href={`mailto:${CARE_WEDO_SUPPORT_EMAIL}`}>{CARE_WEDO_SUPPORT_EMAIL}</a>
         </div>
       </section>
-      )}
-
-      {showPlanDetails && (
-        <PlanDetailsModal onClose={() => setShowPlanDetails(false)} />
-      )}
 
       <section className="landing-section belief-section">
         <h2>科技不該讓照護變冷。</h2>
@@ -1190,12 +1250,18 @@ function LandingPage({ variant = "home" }) {
           )}
         </form>
       </section>
+            </>
+          )}
+
+      {showPlanDetails && (
+        <PlanDetailsModal pricing={pricing} onClose={() => setShowPlanDetails(false)} />
+      )}
 
       <section className="landing-section faq-section" id="faq">
-        <div className="section-kicker">常見問題</div>
-        <h2>開始使用前，你可能會想知道</h2>
+        <div className="section-kicker">{isPricingPage ? "方案常見問題" : "常見問題"}</div>
+        <h2>{isPricingPage ? "收費前，你可能會想知道" : "開始使用前，你可能會想知道"}</h2>
         <div className="faq-list">
-          {LANDING_FAQS.map((item) => (
+          {visibleFaqs.map((item) => (
             <details key={item.question} className="faq-item">
               <summary>{item.question}</summary>
               <p>{item.answer}</p>
@@ -1573,10 +1639,27 @@ function DashboardApp() {
   const [documentNotice, setDocumentNotice] = useState("");
   const [showFamilyNotesEditor, setShowFamilyNotesEditor] = useState(false);
   const [showPlanDetails, setShowPlanDetails] = useState(false);
-  const [familyNotes, setFamilyNotes] = useState([]);
+  const [familyNotesByGroup, setFamilyNotesByGroup] = useState({});
   const dashboardRequestSeqRef = useRef(0);
   const dashboardCacheRef = useRef(new Map());
   const dashboardShellRef = useRef(null);
+  const ocrCareContextRef = useRef(null);
+  const activeGroupIdRef = useRef(null);
+  const activeProfileIdRef = useRef(null);
+  const activeProfilePreferenceQueueRef = useRef(null);
+  const documentDetailRequestGateRef = useRef(createLatestRequestGate());
+  activeGroupIdRef.current = activeGroupId;
+  activeProfileIdRef.current = activeProfileId;
+  if (!activeProfilePreferenceQueueRef.current) {
+    activeProfilePreferenceQueueRef.current = createLatestIntentQueue(
+      ({ profileId, idToken }) => updateActiveProfilePreference(profileId, { idToken }),
+      {
+        onError: (err, intent) => trackError("frontend.active_profile_preference", err, {
+          profileId: intent.profileId,
+        }),
+      },
+    );
+  }
 
   const loadDashboard = useCallback(async (lineIdentity, profileId = null, groupId = null) => {
     const requestSeq = dashboardRequestSeqRef.current + 1;
@@ -1685,8 +1768,7 @@ function DashboardApp() {
 
   function persistActiveProfilePreference(profileId) {
     if (!identity.idToken || !profileId) return;
-    updateActiveProfilePreference(profileId, { idToken: identity.idToken })
-      .catch((err) => trackError("frontend.active_profile_preference", err, { profileId }));
+    activeProfilePreferenceQueueRef.current.push({ profileId, idToken: identity.idToken });
   }
 
   useEffect(() => {
@@ -1800,6 +1882,12 @@ function DashboardApp() {
     || careProfiles.find((profile) => profile.group_id === activeGroupId)
     || careProfiles[0]
     || null;
+  const activeCareRecipientName = selectedProfile?.display_name || "目前照護對象";
+  const isOcrContextLocked = scanning || Boolean(ocrData);
+
+  function isOcrCareContextLocked() {
+    return Boolean(ocrCareContextRef.current) || scanning || Boolean(ocrData);
+  }
 
   const patient = (isPersonalMode && dashboard) 
     ? { ...dashboard.patient, name: selectedProfile?.display_name || dashboard.patient.name, age: calculateAge(selectedProfile) } 
@@ -1855,28 +1943,18 @@ function DashboardApp() {
     }, searchQuery));
   }, [allDocuments, searchQuery]);
 
-  const searchSuggestions = useMemo(() => {
-    return buildSearchSuggestions([...allAppointments, ...allMedications, ...allDocuments.map((document) => ({
+  const appointmentSearchSuggestions = useMemo(() => {
+    return buildSearchSuggestions(allAppointments);
+  }, [allAppointments]);
+
+  const documentSearchSuggestions = useMemo(() => {
+    return buildSearchSuggestions(allDocuments.map((document) => ({
       hospital: document.source_hospital,
       department: documentTypeLabel(document.document_type),
       title: document.document_title,
       notes: document.original_file_name,
-    }))]);
-  }, [allAppointments, allMedications, allDocuments]);
-
-  const nextAppointment = useMemo(() => {
-    return appointments
-      .filter(apt => apt.status !== "completed" && isDateTodayOrFuture(apt.date, todayInTaipei()))
-      .sort((a, b) => {
-        try {
-          const dateA = new Date(a.date.includes("-") ? `${a.date}T${a.time || "00:00"}` : a.date);
-          const dateB = new Date(b.date.includes("-") ? `${b.date}T${b.time || "00:00"}` : b.date);
-          return dateA.getTime() - dateB.getTime();
-        } catch {
-          return 0;
-        }
-      })[0];
-  }, [appointments]);
+    })));
+  }, [allDocuments]);
 
   const urgentItems = appointments.filter((item) => (item.fasting_required || item.type === "refill_reminder") && item.status !== "completed" && isDateTodayOrFuture(item.date, todayInTaipei())).slice(0, 3);
   const hasCareData = dashboardHasCareData(dashboard);
@@ -1886,6 +1964,11 @@ function DashboardApp() {
     today: todayDate,
     appointments,
   }), [appointments, todayDate]);
+  const nextAppointment = useMemo(() => findNextAppointment({
+    today: todayDate,
+    appointments,
+    visibleTasks: todayTasks,
+  }), [appointments, todayDate, todayTasks]);
   const hasTodayCareTasks = useMemo(() => hasSameDayTasks({
     today: todayDate,
     appointments,
@@ -1893,6 +1976,9 @@ function DashboardApp() {
   const collaborators = dashboard?.collaborators || dashboard?.members || [];
   const linePushAudit = dashboard?.line_push_audit || [];
   const activityAudit = dashboard?.activity_audit || [];
+  const familyNotesScopeId = String(activeGroupId || dashboard?.active_group_id || "personal");
+  const familyNotesReady = Object.prototype.hasOwnProperty.call(familyNotesByGroup, familyNotesScopeId);
+  const familyNotes = familyNotesReady ? familyNotesByGroup[familyNotesScopeId] : [];
 
   useEffect(() => {
     if (!visibleSections.some((section) => section.id === activeSection)) {
@@ -1901,19 +1987,27 @@ function DashboardApp() {
   }, [activeSection, visibleSections]);
 
   useEffect(() => {
-    setFamilyNotes(dashboard?.family_notes || []);
-  }, [dashboard?.active_group_id, dashboard?.family_notes]);
+    if (!dashboard) return;
+    const dashboardGroupId = String(dashboard.active_group_id || "personal");
+    setFamilyNotesByGroup((current) => ({
+      ...current,
+      [dashboardGroupId]: dashboard?.family_notes || [],
+    }));
+  }, [dashboard]);
 
-  async function handleFamilyNotesChange(notes) {
+  async function handleFamilyNotesChange(notes, sourceGroupId = activeGroupId) {
     const nextNotes = notes.map((item) => item.trim()).filter(Boolean);
-    if (!activeGroupId) {
-      setFamilyNotes(nextNotes);
+    const targetGroupId = Number(sourceGroupId);
+    if (!Number.isFinite(targetGroupId) || targetGroupId <= 0) {
+      const targetScopeId = String(sourceGroupId ?? "personal");
+      setFamilyNotesByGroup((current) => ({ ...current, [targetScopeId]: nextNotes }));
       return;
     }
-    const result = await updateFamilyNotes({ idToken: identity.idToken, groupId: activeGroupId, notes: nextNotes });
+    const result = await updateFamilyNotes({ idToken: identity.idToken, groupId: targetGroupId, notes: nextNotes });
     const persistedNotes = Array.isArray(result?.notes) ? result.notes : nextNotes;
-    setFamilyNotes(persistedNotes);
-    await loadDashboard(identity, activeProfileId, activeGroupId);
+    setFamilyNotesByGroup((current) => ({ ...current, [String(targetGroupId)]: persistedNotes }));
+    if (String(activeGroupIdRef.current) !== String(targetGroupId)) return result;
+    await loadDashboard(identity, activeProfileIdRef.current, targetGroupId);
     return result;
   }
 
@@ -1923,6 +2017,10 @@ function DashboardApp() {
       return;
     }
     openSection(sectionId);
+    const scrollBehavior = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ? "auto" : "smooth";
+    window.requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, behavior: scrollBehavior });
+    });
   }
 
   function openSection(sectionId) {
@@ -1933,8 +2031,7 @@ function DashboardApp() {
   }
 
   async function handleComplete(aptId) {
-    // Optimistic UI update
-    updateActiveDashboard(prev => {
+    const markCompleted = () => updateActiveDashboard(prev => {
       if (!prev) return prev;
       return {
         ...prev,
@@ -1945,22 +2042,17 @@ function DashboardApp() {
     });
 
     // demo-prefixed IDs are local-only; skip API call
-    if (String(aptId).startsWith("demo-")) return;
+    if (String(aptId).startsWith("demo-")) {
+      markCompleted();
+      return;
+    }
 
     try {
       await patchAppointment(aptId, { status: "completed" }, { idToken: identity.idToken });
+      markCompleted();
     } catch (err) {
       console.error("Failed to complete task", err);
-      // Rollback optimistic update on failure
-      updateActiveDashboard(prev => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          appointments: prev.appointments.map(apt =>
-            apt.id === aptId ? { ...apt, status: "upcoming" } : apt
-          )
-        };
-      });
+      throw new Error(err.message || "這項照護事項還沒儲存成功，請再試一次。");
     }
   }
 
@@ -1971,6 +2063,9 @@ function DashboardApp() {
   }
 
   async function handleFilesSelected(files) {
+    if (isOcrCareContextLocked()) return;
+    const ocrCareContext = { profileId: activeProfileId, groupId: activeGroupId, recipientName: activeCareRecipientName };
+    ocrCareContextRef.current = ocrCareContext;
     setScanning(true);
     setOcrError(null);
     setOcrData(null);
@@ -1979,12 +2074,13 @@ function DashboardApp() {
     try {
       const result = await ocrAnalyze(files, {
         idToken: identity.idToken,
-        profileId: activeProfileId,
+        profileId: ocrCareContext.profileId,
       });
       if (result.success && result.data) {
-        setOcrData({ data: result.data, saved: result.saved });
-        await loadDashboard(identity, activeProfileId, activeGroupId);
+        setOcrData({ data: result.data, saved: result.saved, careContext: ocrCareContext });
+        await loadDashboard(identity, ocrCareContext.profileId, ocrCareContext.groupId);
       } else {
+        ocrCareContextRef.current = null;
         const message = result.error || "解析失敗";
         if (isQuotaLimitMessage(message)) {
           showPlanUpgradePrompt("quota", "image_upload", message);
@@ -1995,8 +2091,9 @@ function DashboardApp() {
     } catch (err) {
       trackError("frontend.ocr", err, {
         fileCount: files.length,
-        profileId: activeProfileId,
+        profileId: ocrCareContext.profileId,
       });
+      ocrCareContextRef.current = null;
       const message = err instanceof Error ? err.message : String(err || "解析失敗");
       if (isQuotaLimitMessage(message)) {
         showPlanUpgradePrompt("quota", "image_upload", message);
@@ -2014,6 +2111,9 @@ function DashboardApp() {
       setOcrError("請先貼上要整理的文字。");
       return;
     }
+    if (isOcrCareContextLocked()) return;
+    const ocrCareContext = { profileId: activeProfileId, groupId: activeGroupId, recipientName: activeCareRecipientName };
+    ocrCareContextRef.current = ocrCareContext;
 
     setShowUploadGuide(false);
     setScanning(true);
@@ -2024,12 +2124,13 @@ function DashboardApp() {
     try {
       const result = await ocrAnalyzeText(sourceText, {
         idToken: identity.idToken,
-        profileId: activeProfileId,
+        profileId: ocrCareContext.profileId,
       });
       if (result.success && result.data) {
-        setOcrData({ data: result.data, saved: result.saved });
-        await loadDashboard(identity, activeProfileId, activeGroupId);
+        setOcrData({ data: result.data, saved: result.saved, careContext: ocrCareContext });
+        await loadDashboard(identity, ocrCareContext.profileId, ocrCareContext.groupId);
       } else {
+        ocrCareContextRef.current = null;
         const message = result.error || "解析失敗";
         if (isQuotaLimitMessage(message)) {
           showPlanUpgradePrompt("quota", "text_upload", message);
@@ -2040,8 +2141,9 @@ function DashboardApp() {
     } catch (err) {
       trackError("frontend.ocr_text", err, {
         textLength: sourceText.length,
-        profileId: activeProfileId,
+        profileId: ocrCareContext.profileId,
       });
+      ocrCareContextRef.current = null;
       const message = err instanceof Error ? err.message : String(err || "解析失敗");
       if (isQuotaLimitMessage(message)) {
         showPlanUpgradePrompt("quota", "text_upload", message);
@@ -2107,19 +2209,33 @@ function DashboardApp() {
   }
 
   async function handleDocumentOpen(document) {
+    const requestId = documentDetailRequestGateRef.current.begin();
     setDocumentNotice("");
     setDocumentDetail(document);
-    if (!document?.id || String(document.id).startsWith("demo-")) return;
+    if (!document?.id || String(document.id).startsWith("demo-")) {
+      setDocumentDetailLoading(false);
+      return;
+    }
     setDocumentDetailLoading(true);
     try {
       const result = await fetchDocumentDetail(document.id, { idToken: identity.idToken });
+      if (!documentDetailRequestGateRef.current.isCurrent(requestId)) return;
       setDocumentDetail(result.document || document);
     } catch (err) {
+      if (!documentDetailRequestGateRef.current.isCurrent(requestId)) return;
       trackError("frontend.document_detail", err, { documentId: document.id });
       setDocumentNotice(err instanceof Error ? err.message : "無法取得文件內容。");
     } finally {
-      setDocumentDetailLoading(false);
+      if (documentDetailRequestGateRef.current.isCurrent(requestId)) {
+        setDocumentDetailLoading(false);
+      }
     }
+  }
+
+  function handleDocumentClose() {
+    documentDetailRequestGateRef.current.invalidate();
+    setDocumentDetailLoading(false);
+    setDocumentDetail(null);
   }
 
   async function handleDocumentFileOpen(document) {
@@ -2135,10 +2251,9 @@ function DashboardApp() {
 
   async function handleDocumentDelete(document) {
     if (!document?.id) return;
-    if (!window.confirm("確定要刪除這份醫療文件嗎？")) return;
     try {
       await deleteCareDocument(document.id, { idToken: identity.idToken });
-      setDocumentDetail(null);
+      handleDocumentClose();
       setDocumentNotice("文件已刪除。");
       await loadDashboard(identity, activeProfileId, activeGroupId);
     } catch (err) {
@@ -2148,6 +2263,7 @@ function DashboardApp() {
   }
 
   async function handleOcrCorrectionsSave({ appointments: correctedAppointments = [], medications: correctedMedications = [] }) {
+    const ocrCareContext = ocrData?.careContext || ocrCareContextRef.current;
     const appointmentIds = ocrData?.saved?.appointment_ids || [];
     const medicationIds = ocrData?.saved?.medication_ids || [];
     const documentId = ocrData?.saved?.document_id;
@@ -2177,16 +2293,19 @@ function DashboardApp() {
         medications: correctedMedications,
       },
     } : prev);
-    await loadDashboard(identity, activeProfileId, activeGroupId);
+    if (ocrCareContext) {
+      await loadDashboard(identity, ocrCareContext.profileId, ocrCareContext.groupId);
+    }
   }
 
-  async function handleMedicationTaken(group, status) {
+  async function handleMedicationTaken(group, status, { idempotencyKey } = {}) {
     try {
       const result = await markMedicationSlotStatus({
         medicationIds: group.medicationIds,
         status,
         idToken: identity.idToken,
         timeSlot: group.slot,
+        idempotencyKey,
       });
       await loadDashboard(identity, activeProfileId, activeGroupId);
       return result;
@@ -2304,8 +2423,10 @@ function DashboardApp() {
   }
 
   function handleProfileChange(profileId) {
+    if (isOcrCareContextLocked()) return;
     const profileGroupId = careProfiles.find((profile) => profile.id === profileId)?.group_id || activeGroupId;
     trackEvent("frontend.profile_switch", { profileId, groupId: profileGroupId });
+    setSearchQuery("");
     setActiveProfileId(profileId);
     persistActiveProfilePreference(profileId);
     if (profileGroupId) {
@@ -2323,11 +2444,13 @@ function DashboardApp() {
   }
 
   function handleGroupChange(groupId) {
+    if (isOcrCareContextLocked()) return;
     const nextGroupId = Number(groupId);
     if (!Number.isFinite(nextGroupId) || nextGroupId <= 0) return;
     const firstProfileInGroup = careProfiles.find((profile) => profile.group_id === nextGroupId);
     const nextProfileId = firstProfileInGroup?.id || activeProfileId;
     trackEvent("frontend.group_switch", { groupId: nextGroupId, profileId: nextProfileId });
+    setSearchQuery("");
     setActiveGroupId(nextGroupId);
     window.localStorage.setItem("care_wedo_active_group_id", String(nextGroupId));
     if (nextProfileId) {
@@ -2383,9 +2506,14 @@ function DashboardApp() {
           {ocrData && (
             <OcrResult
               data={ocrData}
-              onClose={() => setOcrData(null)}
+              careRecipientName={ocrData.careContext?.recipientName || activeCareRecipientName}
+              onClose={() => {
+                ocrCareContextRef.current = null;
+                setOcrData(null);
+              }}
               onSaveCorrections={handleOcrCorrectionsSave}
               onNavigate={(section) => {
+                ocrCareContextRef.current = null;
                 setOcrData(null);
                 setActiveSection(section);
               }}
@@ -2419,6 +2547,7 @@ function DashboardApp() {
             onChange={handleProfileChange}
             onReorder={effectiveCanManageCare ? handleProfileOrderChange : undefined}
             readOnly={effectiveReadOnly}
+            disabled={isOcrContextLocked}
           />
 
           <nav className="section-nav">
@@ -2465,35 +2594,45 @@ function DashboardApp() {
             collaborators={collaborators}
             onProfileChange={handleProfileChange}
             onGroupChange={effectiveCanManageCare ? handleGroupChange : undefined}
-            onOpenProfile={effectiveCanManageCare ? () => setShowEditProfile(true) : undefined}
             onOpenFamily={effectiveCanManageCare ? () => openSection("settings") : undefined}
             readOnly={effectiveReadOnly}
-          />
-
-          <CareDisplayModeSwitch
-            value={isElderDisplay ? "elder" : "caregiver"}
-            canSwitch={canManageCare && !readOnly}
-            onChange={setPreferredDisplayMode}
+            disabled={isOcrContextLocked}
+            displayMode={isElderDisplay ? "elder" : "caregiver"}
+            canSwitchDisplayMode={canManageCare && !readOnly}
+            onDisplayModeChange={setPreferredDisplayMode}
           />
 
           {["calendar", "records"].includes(activeSection) && (
-            <>
-            <div className="toolbar">
+            <div className={`toolbar ${activeSection === "calendar" ? "care-items-toolbar" : ""}`.trim()}>
               <SectionHeading section={SECTIONS.find(s => s.id === activeSection)} compact />
+              {activeSection === "calendar" && effectiveCanManageCare && (
+                <div className="calendar-entry-actions" aria-label="新增照護事項">
+                  <button type="button" className="primary-action calendar-primary-upload" onClick={handleUploadClick} aria-label="拍照新增照護資料">
+                    <span className="calendar-upload-label-desktop">拍照新增照護資料</span>
+                    <span className="calendar-upload-label-mobile" aria-hidden="true">拍照新增</span>
+                  </button>
+                  <button type="button" className="secondary-action calendar-manual-reminder" onClick={() => setShowManualReminder(true)} aria-label="手動新增提醒">
+                    <span className="calendar-manual-label-desktop">手動新增提醒</span>
+                    <span className="calendar-manual-label-mobile" aria-hidden="true">手動新增</span>
+                  </button>
+                </div>
+              )}
             </div>
+          )}
+
+          {activeSection === "calendar" && !isElderDisplay && (
             <section className="today-search-panel content-search-panel" aria-label={`${SECTIONS.find(s => s.id === activeSection)?.label || "照護資料"}搜尋`}>
               <SearchField
                 value={searchQuery}
                 onChange={setSearchQuery}
-                suggestions={searchSuggestions}
-                placeholder="依醫院、診別、藥名篩選"
+                suggestions={appointmentSearchSuggestions}
+                placeholder="依醫院、診別或醫師篩選"
               />
             </section>
-            </>
           )}
 
           {activeSection === "settings" && (
-            <div className="toolbar">
+            <div className="toolbar management-toolbar">
               <SectionHeading section={SECTIONS.find(s => s.id === activeSection)} badge={permissionVersion} compact />
             </div>
           )}
@@ -2527,9 +2666,9 @@ function DashboardApp() {
               <CalendarView
                 appointments={appointments}
                 careName={selectedProfile?.display_name || patient.name}
-                onUpload={effectiveCanManageCare ? handleUploadClick : undefined}
                 onAddToCalendar={handleAddAppointmentToCalendar}
                 onEditAppointment={effectiveCanManageCare ? setEditingAppointment : undefined}
+                readOnly={effectiveReadOnly}
               />
             </>
           )}
@@ -2554,14 +2693,19 @@ function DashboardApp() {
 
           {activeSection === "records" && (
             <>
-              <div className="mobile-care-items-switch" role="group" aria-label="照護事項分類">
-                <button type="button" onClick={() => openSection("calendar")}>接下來</button>
-                <button type="button" className="active" aria-current="page">過往與文件</button>
+              <div className="mobile-care-items-return">
+                <button type="button" onClick={() => openSection("calendar")} aria-label="返回接下來的照護事項">
+                  <span aria-hidden="true">←</span>
+                  返回接下來
+                </button>
               </div>
               <RecordsView
                 records={allAppointments}
                 documents={documents}
                 searchQuery={searchQuery}
+                onSearchChange={setSearchQuery}
+                appointmentSearchSuggestions={appointmentSearchSuggestions}
+                documentSearchSuggestions={documentSearchSuggestions}
                 initialMode="history"
                 showFutureMode={false}
                 onUpload={effectiveCanManageCare ? handleUploadClick : undefined}
@@ -2578,21 +2722,17 @@ function DashboardApp() {
 
           {activeSection === "settings" && effectiveCanManageCare && (
             <SettingsView
-              patient={patient}
               identity={identity}
               isPersonalMode={isPersonalMode}
-              careProfiles={careProfiles}
-              collaborators={collaborators}
-              selectedProfile={selectedProfile}
-              activeProfileId={activeProfileId}
-              onProfileChange={handleProfileChange}
               onGroupChange={() => loadDashboard(identity, activeProfileId, activeGroupId)}
               onEditProfile={() => setShowEditProfile(true)}
-              onAddReminder={() => setShowManualReminder(true)}
+              onPreviewElder={() => setPreferredDisplayMode("elder")}
               linePushAudit={linePushAudit}
               activityAudit={activityAudit}
               pricing={pricing}
               familyNotes={familyNotes}
+              familyNotesScopeId={familyNotesScopeId}
+              familyNotesLoading={!familyNotesReady}
               onFamilyNotesChange={handleFamilyNotesChange}
               onLogout={logoutLineIdentity}
             />
@@ -2611,6 +2751,7 @@ function DashboardApp() {
 
       {showUploadGuide && (
         <UploadGuide
+          careRecipientName={activeCareRecipientName}
           onConfirm={handleUploadConfirm}
           onTextSubmit={handleTextUpload}
           onClose={() => setShowUploadGuide(false)}
@@ -2619,6 +2760,7 @@ function DashboardApp() {
 
       {showDocumentUpload && (
         <CareDocumentUploadModal
+          careRecipientName={activeCareRecipientName}
           onClose={() => setShowDocumentUpload(false)}
           onSave={handleCareDocumentUpload}
         />
@@ -2629,7 +2771,7 @@ function DashboardApp() {
           document={documentDetail}
           loading={documentDetailLoading}
           notice={documentNotice}
-          onClose={() => setDocumentDetail(null)}
+          onClose={handleDocumentClose}
           onOpenFile={() => handleDocumentFileOpen(documentDetail)}
           onDelete={() => handleDocumentDelete(documentDetail)}
         />
@@ -2637,6 +2779,7 @@ function DashboardApp() {
 
       {showManualReminder && (
         <ManualReminderModal
+          careRecipientName={activeCareRecipientName}
           onClose={() => setShowManualReminder(false)}
           onSave={handleManualReminderSave}
         />
@@ -2646,6 +2789,7 @@ function DashboardApp() {
         <ManualReminderModal
           mode="edit"
           initialAppointment={editingAppointment}
+          careRecipientName={activeCareRecipientName}
           onClose={() => setEditingAppointment(null)}
           onSave={handleAppointmentUpdateSave}
           onDelete={handleAppointmentDelete}
@@ -2655,15 +2799,17 @@ function DashboardApp() {
 
       {showFamilyNotesEditor && (
         <FamilyNotesModal
+          scopeId={familyNotesScopeId}
           groupName={activeGroup?.name || dashboard?.active_group_name || "照護圈"}
           notes={familyNotes}
+          loading={!familyNotesReady}
           onClose={() => setShowFamilyNotesEditor(false)}
           onSave={handleFamilyNotesChange}
         />
       )}
 
       {showPlanDetails && (
-        <PlanDetailsModal onClose={() => setShowPlanDetails(false)} />
+        <PlanDetailsModal pricing={pricing} onClose={() => setShowPlanDetails(false)} />
       )}
 
       {planUpgradePrompt && (
@@ -2689,7 +2835,7 @@ function DashboardApp() {
 }
 
 function ProfileEditModal({ profile, onClose, onSave, canPersist }) {
-  const [formData, setFormData] = useState({
+  const initialFormDataRef = useRef({
     display_name: profile?.display_name || "",
     avatar_url: profile?.avatar_url || "",
     birth_date: profile?.birth_date || "",
@@ -2697,15 +2843,33 @@ function ProfileEditModal({ profile, onClose, onSave, canPersist }) {
     email: profile?.email || "",
     notes: profile?.notes || "",
   });
+  const [formData, setFormData] = useState(initialFormDataRef.current);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [error, setError] = useState("");
+  const busyRef = useRef(false);
+  const isBusy = saving || uploading;
+  const isDirty = Object.keys(initialFormDataRef.current).some(
+    (key) => formData[key] !== initialFormDataRef.current[key],
+  );
+
+  function requestClose() {
+    if (busyRef.current) return;
+    if (isDirty) {
+      setConfirmDiscard(true);
+      return;
+    }
+    onClose();
+  }
 
   async function handleAvatarUpload(event) {
+    if (busyRef.current) return;
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
 
+    busyRef.current = true;
     setUploading(true);
     setError("");
     try {
@@ -2714,11 +2878,14 @@ function ProfileEditModal({ profile, onClose, onSave, canPersist }) {
     } catch (err) {
       setError(err.message);
     } finally {
+      busyRef.current = false;
       setUploading(false);
     }
   }
 
   async function handleSave() {
+    if (busyRef.current) return;
+    busyRef.current = true;
     setSaving(true);
     setError("");
     try {
@@ -2732,23 +2899,30 @@ function ProfileEditModal({ profile, onClose, onSave, canPersist }) {
     } catch (err) {
       setError(err.message || "無法儲存修改");
     } finally {
+      busyRef.current = false;
       setSaving(false);
     }
   }
 
   return (
     <div className="modal-overlay">
-      <div className="modal-content profile-edit-modal">
+      <div className="modal-content profile-edit-modal" role="dialog" aria-modal="true" aria-labelledby="profile-edit-title" aria-busy={isBusy}>
         <div className="modal-header">
-          <h2>修改照護對象資訊</h2>
-          <button type="button" onClick={onClose} className="btn-close" aria-label="關閉">✕</button>
+          <h2 id="profile-edit-title">修改照護對象資訊</h2>
+          <button type="button" onClick={requestClose} className="btn-close" aria-label="關閉" disabled={isBusy}>✕</button>
         </div>
         <div className="modal-body">
           {!canPersist && (
-            <p className="error-msg">{IS_PROD ? "請先重新登入 LINE，才能儲存修改。" : "目前是範例畫面。請先從 LINE 登入並建立照護對象，才能把修改存進資料庫。"}</p>
+            <p className="error-msg" role="alert">{IS_PROD ? "請先重新登入 LINE，才能儲存修改。" : "目前是範例畫面。請先從 LINE 登入並建立照護對象，才能把修改存進資料庫。"}</p>
           )}
-          {error && <p className="error-msg">{error}</p>}
+          {error && <p className="error-msg" role="alert">{error}</p>}
+          {isBusy && (
+            <p className="profile-save-status" role="status">
+              {uploading ? "正在處理頭像，請先不要關閉。" : "正在儲存照護資料，請先不要關閉。"}
+            </p>
+          )}
 
+          <fieldset className="profile-edit-fields" disabled={isBusy || confirmDiscard}>
           <div className="form-group">
             <label htmlFor="profile-display-name">顯示名稱</label>
             <input 
@@ -2763,7 +2937,7 @@ function ProfileEditModal({ profile, onClose, onSave, canPersist }) {
             <label className={`avatar-preview-frame avatar-replace-control ${uploading ? "is-uploading" : ""}`}>
               <img src={formData.avatar_url || aiAvatar} alt="照護對象頭像預覽" />
               <span>{uploading ? "處理中" : "點選替換"}</span>
-              <input type="file" accept="image/jpeg,image/png,image/webp" onChange={handleAvatarUpload} disabled={uploading} />
+              <input type="file" accept="image/jpeg,image/png,image/webp" onChange={handleAvatarUpload} disabled={isBusy || confirmDiscard} />
             </label>
             <div className="avatar-controls">
               <p className="helper-copy">點頭像即可重新上傳並直接替換。沒有上傳時，會先使用 LINE 頭像或系統預設圖示。</p>
@@ -2813,12 +2987,28 @@ function ProfileEditModal({ profile, onClose, onSave, canPersist }) {
               rows={4}
             />
           </div>
+          </fieldset>
         </div>
         <div className="modal-footer">
-          <button type="button" className="secondary-action" onClick={onClose} disabled={saving}>取消</button>
-          <button type="button" className="primary-action" onClick={handleSave} disabled={saving || uploading}>
-            {saving ? "儲存中..." : "儲存修改"}
-          </button>
+          {confirmDiscard ? (
+            <div className="profile-discard-confirmation" role="alertdialog" aria-labelledby="profile-discard-title" aria-describedby="profile-discard-description">
+              <div>
+                <strong id="profile-discard-title">要放棄尚未儲存的修改嗎？</strong>
+                <p id="profile-discard-description">剛才填寫的內容不會保留。</p>
+              </div>
+              <div className="profile-discard-actions">
+                <button type="button" className="secondary-action" onClick={() => setConfirmDiscard(false)}>繼續編輯</button>
+                <button type="button" className="inline-danger-action" onClick={onClose}>放棄修改</button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <button type="button" className="secondary-action" onClick={requestClose} disabled={isBusy}>取消</button>
+              <button type="button" className="primary-action" onClick={handleSave} disabled={isBusy}>
+                {saving ? "儲存中..." : uploading ? "處理頭像中..." : "儲存修改"}
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -2878,7 +3068,7 @@ function groupProfilesForSwitcher(profiles = [], groups = []) {
   return [...knownSections, ...extraSections];
 }
 
-function ProfileSwitcher({ profiles, groups = [], activeProfileId, onChange, onReorder, readOnly = false }) {
+function ProfileSwitcher({ profiles, groups = [], activeProfileId, onChange, onReorder, readOnly = false, disabled = false }) {
   const [dragState, setDragState] = useState(null);
   const longPressTimerRef = useRef(null);
   const pointerDragRef = useRef(null);
@@ -2903,6 +3093,7 @@ function ProfileSwitcher({ profiles, groups = [], activeProfileId, onChange, onR
   }
 
   function requestReorder(groupId, fromId, toId) {
+    if (disabled) return;
     if (!fromId || !toId || Number(fromId) === Number(toId)) return;
     const section = sections.find((item) => String(item.id) === String(groupId));
     if (!section) return;
@@ -2911,6 +3102,7 @@ function ProfileSwitcher({ profiles, groups = [], activeProfileId, onChange, onR
   }
 
   function handlePointerDown(event, profile) {
+    if (disabled) return;
     if (event.pointerType === "mouse") return;
     clearLongPressTimer();
     longPressTimerRef.current = setTimeout(() => {
@@ -2961,7 +3153,8 @@ function ProfileSwitcher({ profiles, groups = [], activeProfileId, onChange, onR
                 <button
                   key={profile.id}
                   type="button"
-                  draggable={!readOnly}
+                  draggable={!readOnly && !disabled}
+                  disabled={disabled}
                   data-profile-id={profile.id}
                   data-group-id={profile.group_id || "ungrouped"}
                   className={[
@@ -2971,27 +3164,27 @@ function ProfileSwitcher({ profiles, groups = [], activeProfileId, onChange, onR
                     isDropTarget ? "is-drop-target" : "",
                   ].filter(Boolean).join(" ")}
                   onClick={() => {
-                    if (suppressClickRef.current) return;
+                    if (disabled || suppressClickRef.current) return;
                     onChange(profile.id);
                   }}
                   onDragStart={(event) => {
-                    if (readOnly) return;
+                    if (readOnly || disabled) return;
                     event.dataTransfer.effectAllowed = "move";
                     event.dataTransfer.setData("text/plain", String(profile.id));
                     setDragState({ profileId: profile.id, groupId: profile.group_id || "ungrouped", targetId: profile.id });
                   }}
-                  onDragOver={(event) => { if (!readOnly) event.preventDefault(); }}
+                  onDragOver={(event) => { if (!readOnly && !disabled) event.preventDefault(); }}
                   onDrop={(event) => {
-                    if (readOnly) return;
+                    if (readOnly || disabled) return;
                     event.preventDefault();
                     requestReorder(profile.group_id || "ungrouped", dragState?.profileId || event.dataTransfer.getData("text/plain"), profile.id);
                     setDragState(null);
                   }}
                   onDragEnd={() => setDragState(null)}
-                  onPointerDown={(event) => { if (!readOnly) handlePointerDown(event, profile); }}
-                  onPointerMove={(event) => { if (!readOnly) handlePointerMove(event); }}
-                  onPointerCancel={readOnly ? undefined : handlePointerEnd}
-                  onPointerUp={readOnly ? undefined : handlePointerEnd}
+                  onPointerDown={(event) => { if (!readOnly && !disabled) handlePointerDown(event, profile); }}
+                  onPointerMove={(event) => { if (!readOnly && !disabled) handlePointerMove(event); }}
+                  onPointerCancel={readOnly || disabled ? undefined : handlePointerEnd}
+                  onPointerUp={readOnly || disabled ? undefined : handlePointerEnd}
                 >
                   <span className="profile-option-name">{profile.display_name}</span>
                   {!readOnly && <span className="profile-drag-handle" aria-hidden="true">☰</span>}
@@ -3005,7 +3198,7 @@ function ProfileSwitcher({ profiles, groups = [], activeProfileId, onChange, onR
   );
 }
 
-function GroupBadge({ groups = [], activeGroupId, activeGroupName, onChange, fallbackLabel = "照護圈" }) {
+function GroupBadge({ groups = [], activeGroupId, activeGroupName, onChange, fallbackLabel = "照護圈", disabled = false }) {
   const [open, setOpen] = useState(false);
   const label = activeGroupName || groups.find((group) => group.id === activeGroupId)?.name || fallbackLabel;
 
@@ -3018,7 +3211,8 @@ function GroupBadge({ groups = [], activeGroupId, activeGroupName, onChange, fal
       <button
         type="button"
         className="group-context-badge"
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => { if (!disabled) setOpen((current) => !current); }}
+        disabled={disabled}
         aria-haspopup="listbox"
         aria-expanded={open}
       >
@@ -3031,7 +3225,9 @@ function GroupBadge({ groups = [], activeGroupId, activeGroupName, onChange, fal
               key={group.id}
               type="button"
               className={group.id === activeGroupId ? "active" : ""}
+              disabled={disabled}
               onClick={() => {
+                if (disabled) return;
                 setOpen(false);
                 onChange?.(group.id);
               }}
@@ -3046,19 +3242,22 @@ function GroupBadge({ groups = [], activeGroupId, activeGroupName, onChange, fal
 }
 
 function CareDisplayModeSwitch({ value, canSwitch, onChange }) {
+  const isElderMode = value === "elder";
+
   if (!canSwitch) {
-    return <p className="care-display-mode-status">長輩模式・只顯示查看需要的功能</p>;
+    return <p className="care-display-mode-status" aria-label="長輩版，只能查看資料">長輩版</p>;
   }
 
   return (
-    <div className="care-display-mode-switch" role="group" aria-label="顯示模式">
-      <button type="button" className={value === "caregiver" ? "active" : ""} onClick={() => onChange?.("caregiver")}>
-        照護者模式
-      </button>
-      <button type="button" className={value === "elder" ? "active" : ""} onClick={() => onChange?.("elder")}>
-        長輩模式
-      </button>
-    </div>
+    <button
+      type="button"
+      className="care-display-mode-switch"
+      aria-pressed={isElderMode}
+      aria-label={isElderMode ? "返回照護者模式" : "預覽長輩模式"}
+      onClick={() => onChange?.(isElderMode ? "caregiver" : "elder")}
+    >
+      {isElderMode ? "返回照護者" : "看長輩版"}
+    </button>
   );
 }
 
@@ -3073,9 +3272,12 @@ function CareContextHeader({
   collaborators = [],
   onProfileChange,
   onGroupChange,
-  onOpenProfile,
   onOpenFamily,
   readOnly = false,
+  disabled = false,
+  displayMode = "caregiver",
+  canSwitchDisplayMode = false,
+  onDisplayModeChange,
 }) {
   const careName = selectedProfile?.display_name || patient?.name || "照護對象";
   const careTitle = getCareTodayTitle(selectedProfile, careName);
@@ -3098,23 +3300,17 @@ function CareContextHeader({
   return (
     <section className="care-context-header" aria-label={careTitle}>
       <div className="care-context-main">
-        {onOpenProfile ? (
-          <button type="button" className="care-context-avatar" onClick={onOpenProfile} aria-label="編輯照護者資料">
-            <img src={selectedProfile?.avatar_url || aiAvatar} alt={`${careName} 頭像`} />
-          </button>
-        ) : (
-          <div className="care-context-avatar" aria-hidden="true">
-            <img src={selectedProfile?.avatar_url || aiAvatar} alt={`${careName} 頭像`} />
-          </div>
-        )}
+        <div className="care-context-avatar" aria-hidden="true">
+          <img src={selectedProfile?.avatar_url || aiAvatar} alt="" />
+        </div>
         <div className="care-context-copy">
           <p className="care-context-eyebrow">正在照護</p>
           <h2>{careName}</h2>
           <p className="care-context-meta">{careMeta}</p>
           {profiles.length > 1 && !readOnly && (
             <label className="care-profile-quick-switch">
-              <span>切換照護者</span>
-              <select value={selectedProfile?.id || ""} onChange={(event) => onProfileChange?.(Number(event.target.value))}>
+              <span>切換照護對象</span>
+              <select value={selectedProfile?.id || ""} disabled={disabled} onChange={(event) => onProfileChange?.(Number(event.target.value))}>
                 {profiles.map((profile) => (
                   <option key={profile.id} value={profile.id}>{profile.display_name}</option>
                 ))}
@@ -3122,6 +3318,11 @@ function CareContextHeader({
             </label>
           )}
         </div>
+        <CareDisplayModeSwitch
+          value={displayMode}
+          canSwitch={canSwitchDisplayMode}
+          onChange={onDisplayModeChange}
+        />
       </div>
 
       <div className="care-context-details" aria-label="目前帳號與照護圈">
@@ -3133,6 +3334,7 @@ function CareContextHeader({
             activeGroupName={activeGroupName}
             onChange={onGroupChange}
             fallbackLabel="尚未建立照護圈"
+            disabled={disabled}
           />
         </div>
         {onOpenFamily ? (
@@ -3207,7 +3409,10 @@ function briefingList(summary, key) {
 }
 
 function CareDocumentDetailModal({ document, loading, notice, onClose, onOpenFile, onDelete }) {
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const summary = document.ai_summary || {};
+  const documentTitle = document.document_title || "醫療文件";
   const briefingSections = [
     ["major_history", "重大病史"],
     ["recent_symptoms", "近期狀況"],
@@ -3221,68 +3426,109 @@ function CareDocumentDetailModal({ document, loading, notice, onClose, onOpenFil
   const medications = document.linked_medications || [];
   const sourceWarning = summary?.doctor_briefing?.source_warning || summary?.source_warning || "";
 
+  async function handleConfirmedDelete() {
+    if (deleting) return;
+    setDeleting(true);
+    try {
+      await onDelete();
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  function handleModalClose() {
+    if (!deleting) onClose();
+  }
+
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content care-document-detail-modal" role="dialog" aria-modal="true" aria-labelledby="care-document-detail-title" onClick={(event) => event.stopPropagation()}>
+    <div className="modal-overlay care-document-detail-overlay" onClick={handleModalClose}>
+      <div className={`modal-content care-document-detail-modal${confirmingDelete ? " is-confirming-delete" : ""}`} role="dialog" aria-modal="true" aria-labelledby="care-document-detail-title" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
           <div>
             <p className="modal-kicker">{documentTypeLabel(document.document_type)}</p>
-            <h2 id="care-document-detail-title">{document.document_title || "醫療文件"}</h2>
+            <h2 id="care-document-detail-title">
+              <span className="document-detail-title-full">{confirmingDelete ? "請再次確認" : documentTitle}</span>
+              <span className="document-detail-title-mobile">{confirmingDelete ? "請再次確認" : "醫療文件內容"}</span>
+            </h2>
           </div>
-          <button type="button" className="btn-close" onClick={onClose} aria-label="關閉">×</button>
+          <button type="button" className="btn-close" onClick={handleModalClose} aria-label="關閉" disabled={deleting}>×</button>
         </div>
         <div className="modal-body">
-          <div className="document-meta-strip">
-            <span>{document.source_hospital || "院所待確認"}</span>
-            <span>{document.document_date ? formatDateLabel(document.document_date) : "日期待確認"}</span>
-            {document.page_count && <span>{document.page_count} 頁</span>}
-          </div>
-          {loading && <p className="helper-copy">正在讀取文件內容...</p>}
-          {notice && <p className="calendar-action-notice">{notice}</p>}
-          {sourceWarning && <p className="document-source-warning">{sourceWarning}</p>}
-
-          <section className="doctor-briefing-panel" aria-label="醫師快速摘要">
-            <h3>醫師快速摘要</h3>
-            {briefingSections.length ? (
-              <div className="doctor-briefing-grid">
-                {briefingSections.map((section) => (
-                  <article key={section.key} className="briefing-block">
-                    <strong>{section.label}</strong>
-                    <ul>
-                      {section.items.map((item, index) => <li key={`${section.key}-${index}`}>{item}</li>)}
-                    </ul>
-                  </article>
-                ))}
+          {confirmingDelete ? (
+            <section className="document-delete-confirmation" role="alert" aria-labelledby="document-delete-confirmation-title">
+              <p className="modal-kicker">永久刪除</p>
+              <h3 id="document-delete-confirmation-title">要刪除「{documentTitle}」嗎？</h3>
+              <p>刪除後，這份文件與整理內容會從 Care WEDO 移除，無法復原。</p>
+              <p className="document-delete-reassurance">如果還不確定，請先選擇「取消，保留文件」。</p>
+              {notice && <p className="calendar-action-notice" role="alert">{notice}</p>}
+            </section>
+          ) : (
+            <>
+              <h3 className="document-detail-mobile-heading">{documentTitle}</h3>
+              <div className="document-meta-strip">
+                <span>{document.source_hospital || "院所待確認"}</span>
+                <span>{document.document_date ? formatDateLabel(document.document_date) : "日期待確認"}</span>
+                {document.page_count && <span>{document.page_count} 頁</span>}
               </div>
-            ) : (
-              <p className="helper-copy">這份文件尚未產生摘要。</p>
-            )}
-          </section>
+              {loading && <p className="helper-copy">正在讀取文件內容...</p>}
+              {notice && <p className="calendar-action-notice">{notice}</p>}
+              {sourceWarning && <p className="document-source-warning">{sourceWarning}</p>}
 
-          <section className="document-linked-section" aria-label="關聯資料">
-            <h3>已帶入照護資料</h3>
-            <div className="document-linked-grid">
-              <article>
-                <strong>行程</strong>
-                {appointments.length ? appointments.slice(0, 4).map((apt) => (
-                  <span key={apt.id}>{formatDateLabel(apt.date, apt.time)}・{apt.title || apt.department || typeLabel(apt.type)}</span>
-                )) : <span>沒有新增行程</span>}
-              </article>
-              <article>
-                <strong>用藥</strong>
-                {medications.length ? medications.slice(0, 5).map((med) => (
-                  <span key={med.id}>{med.name || "藥名待確認"}・{med.dosage || med.frequency || "用法待確認"}</span>
-                )) : <span>沒有新增用藥</span>}
-              </article>
-            </div>
-          </section>
-        </div>
-        <div className="modal-footer care-document-actions">
-          {document.has_original_file && (
-            <button type="button" className="primary-action" onClick={onOpenFile}>開啟原始檔</button>
+              <section className="doctor-briefing-panel" aria-label="醫師快速摘要">
+                <h3>醫師快速摘要</h3>
+                {briefingSections.length ? (
+                  <div className="doctor-briefing-grid">
+                    {briefingSections.map((section) => (
+                      <article key={section.key} className="briefing-block">
+                        <strong>{section.label}</strong>
+                        <ul>
+                          {section.items.map((item, index) => <li key={`${section.key}-${index}`}>{item}</li>)}
+                        </ul>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="helper-copy">這份文件尚未產生摘要。</p>
+                )}
+              </section>
+
+              <section className="document-linked-section" aria-label="關聯資料">
+                <h3>已帶入照護資料</h3>
+                <div className="document-linked-grid">
+                  <article>
+                    <strong>行程</strong>
+                    {appointments.length ? appointments.slice(0, 4).map((apt) => (
+                      <span key={apt.id}>{formatDateLabel(apt.date, apt.time)}・{apt.title || apt.department || typeLabel(apt.type)}</span>
+                    )) : <span>沒有新增行程</span>}
+                  </article>
+                  <article>
+                    <strong>用藥</strong>
+                    {medications.length ? medications.slice(0, 5).map((med) => (
+                      <span key={med.id}>{med.name || "藥名待確認"}・{med.dosage || med.frequency || "用法待確認"}</span>
+                    )) : <span>沒有新增用藥</span>}
+                  </article>
+                </div>
+              </section>
+            </>
           )}
-          <button type="button" className="secondary-action" onClick={onClose}>關閉</button>
-          <button type="button" className="inline-danger-action" onClick={onDelete}>刪除</button>
+        </div>
+        <div className={`modal-footer care-document-actions${confirmingDelete ? " document-delete-confirmation-actions" : ""}`}>
+          {confirmingDelete ? (
+            <>
+              <button type="button" className="secondary-action" onClick={() => setConfirmingDelete(false)} disabled={deleting}>取消，保留文件</button>
+              <button type="button" className="inline-danger-action" onClick={handleConfirmedDelete} disabled={deleting}>
+                {deleting ? "正在刪除..." : "確認永久刪除"}
+              </button>
+            </>
+          ) : (
+            <>
+              {document.has_original_file && (
+                <button type="button" className="primary-action" onClick={onOpenFile}>開啟原始檔</button>
+              )}
+              <button type="button" className="secondary-action" onClick={handleModalClose}>關閉</button>
+              <button type="button" className="inline-danger-action" onClick={() => setConfirmingDelete(true)}>刪除文件</button>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -3311,20 +3557,39 @@ function EmptyGuide({ title, description, primaryLabel, onPrimary, secondaryLabe
 }
 
 function SearchField({ value, onChange, suggestions = [], placeholder = "搜尋", className = "" }) {
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
   return (
-    <div className={`search-box ${className}`.trim()}>
+    <div
+      className={`search-box ${className}`.trim()}
+      onFocusCapture={() => setShowSuggestions(true)}
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) {
+          setShowSuggestions(false);
+        }
+      }}
+    >
       <span>搜尋</span>
       <input
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
+        aria-label={placeholder}
+        aria-expanded={showSuggestions && suggestions.length > 0}
       />
-      {suggestions.length > 0 && (
+      {showSuggestions && suggestions.length > 0 && (
         <div className="search-suggestions" aria-label="常用搜尋關鍵字">
           {suggestions.map((suggestion) => {
             const label = typeof suggestion === "string" ? suggestion : suggestion.label;
             return (
-              <button type="button" key={label} onClick={() => onChange(label)}>
+              <button
+                type="button"
+                key={label}
+                onClick={() => {
+                  onChange(label);
+                  setShowSuggestions(false);
+                }}
+              >
                 <span className="search-suggestion-label">{label}</span>
               </button>
             );
@@ -3351,41 +3616,63 @@ function OverviewView({
   readOnly = false,
 }) {
   const [locallyDoneTaskIds, setLocallyDoneTaskIds] = useState(() => new Set());
+  const [pendingTaskId, setPendingTaskId] = useState(null);
+  const [submittingTaskId, setSubmittingTaskId] = useState(null);
+  const [taskActionError, setTaskActionError] = useState(null);
   const todayMedicationGroups = useMemo(
     () => groupMedicationsBySchedule(medications).filter((group) => group.medications.length > 0),
     [medications],
   );
 
   function handlePrimaryAction(task) {
-    if (readOnly || !onComplete) return;
-    setLocallyDoneTaskIds((prev) => new Set(prev).add(task.id));
-    if (task.kind === "appointment") {
-      onComplete(task.sourceId);
+    if (readOnly || !onComplete || !task.isToday || task.canComplete === false) return;
+    setTaskActionError(null);
+    setPendingTaskId(task.id);
+  }
+
+  async function handleConfirmedTask(task) {
+    if (readOnly || !onComplete || pendingTaskId !== task.id || submittingTaskId) return;
+    setTaskActionError(null);
+    setSubmittingTaskId(task.id);
+    try {
+      if (task.kind === "appointment") {
+        await onComplete(task.sourceId);
+      }
+      setLocallyDoneTaskIds((prev) => new Set(prev).add(task.id));
+      setPendingTaskId(null);
+    } catch (err) {
+      setTaskActionError(err.message || "這項照護事項還沒儲存成功，請再試一次。");
+    } finally {
+      setSubmittingTaskId(null);
     }
   }
+
+  const todayStatusCopy = todayTasks.length
+    ? (hasTodayCareTasks
+      ? (readOnly
+        ? `今天有 ${todayTasks.length} 件事，照順序查看。`
+        : `今天有 ${todayTasks.length} 件事。先看清楚，需要回報的事項再記錄完成。`)
+      : "今天沒有新事項。下面是最近安排。")
+    : (readOnly ? "今天還沒有照護事項。" : "拍照上傳，系統會幫你整理。");
 
   return (
     <div className="today-care-view">
       <section className="today-hero-panel">
         <div className="today-count-block">
-          <span className="today-date-text">{todayLabel.date}</span>
-          <strong>今天要照顧的事</strong>
-          <p>
-            {todayTasks.length
-              ? (hasTodayCareTasks ? `今天有 ${todayTasks.length} 件事，照時間慢慢做就好。` : "今天沒有新事項，先幫你接上最近的下一筆。")
-              : "拍藥袋、處方箋、掛號單或提醒單，Care WEDO 會幫你整理。"}
-          </p>
+          <time className="today-date-text" dateTime={todayDate} aria-label={todayLabel.fullDate}>{todayLabel.date}</time>
+          <strong>今天照護</strong>
         </div>
         <div className="today-main-actions" aria-label="今天常用操作">
           {onUpload ? (
             <>
-              <button type="button" className="primary-action" onClick={onUpload}>拍照新增照護資料</button>
-              <p className="today-upload-helper">用藥、回診、處方箋、掛號單都從這裡開始。</p>
+              <button type="button" className="primary-action" onClick={onUpload}>拍照新增</button>
+              <p className="today-upload-helper">藥袋、處方箋、掛號單都可以拍。</p>
             </>
           ) : (
-            <p className="today-upload-helper read-only-helper">目前是唯讀查看模式，資料由家人協作者管理。</p>
+            <p className="today-upload-helper read-only-helper">家人會幫你更新照護資料。</p>
           )}
         </div>
+        <p className="today-hero-status">{todayStatusCopy}</p>
       </section>
 
       {readOnly && todayMedicationGroups.length > 0 && (
@@ -3395,7 +3682,7 @@ function OverviewView({
               <p className="panel-eyebrow">今天先看</p>
               <h3>今天用藥</h3>
             </div>
-            <span className="today-medication-date">{todayLabel.date}</span>
+            <time className="today-medication-date" dateTime={todayDate} aria-label={todayLabel.fullDate}>{todayLabel.date}</time>
           </div>
           <div className="today-medication-list">
             {todayMedicationGroups.map((group) => {
@@ -3403,15 +3690,35 @@ function OverviewView({
                 medication.taken_slots?.includes(group.slot)
                 || (medication.taken_status === "taken" && medication.taken_date === todayDate)
               ));
+              const groupLabel = {
+                早: "早上",
+                中: "中午",
+                晚: "晚上",
+                其他: "其他時間",
+              }[group.label] || group.label;
               return (
                 <article key={group.slot} className={`today-medication-row ${completed ? "is-done" : ""}`}>
-                  <strong>{group.label}</strong>
-                  <span>{group.medications.map((medication) => medication.name || "藥名待確認").join("、")}</span>
-                  <em>{completed ? "已記錄" : "請依藥袋服用"}</em>
+                  <div className="today-medication-row-head">
+                    <strong>{groupLabel}</strong>
+                    <span className="today-medication-status">{completed ? "今天已記錄" : "請照指示服用"}</span>
+                  </div>
+                  <ul className="today-medication-items">
+                    {group.medications.map((medication, index) => (
+                      <li className="today-medication-item" key={medication.id || `${group.slot}-${medication.name}-${index}`}>
+                        <strong>{medication.name || "藥名待家人確認"}</strong>
+                        <span className="today-medication-instruction">
+                          {medication.dosage || "份量待家人確認"}
+                          <span aria-hidden="true">・</span>
+                          {medication.schedule?.mealTimingLabel || "飯前或飯後待家人確認"}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
                 </article>
               );
             })}
           </div>
+          <p className="today-medication-safety">請照藥袋或醫師指示服用；內容不清楚時，先請家人或藥師確認。</p>
         </section>
       )}
 
@@ -3420,6 +3727,8 @@ function OverviewView({
           <div className="elder-task-list">
             {todayTasks.map((task) => {
               const isDone = locallyDoneTaskIds.has(task.id) || task.status === "completed";
+              const isPending = pendingTaskId === task.id;
+              const isSubmitting = submittingTaskId === task.id;
               return (
                 <article key={task.id} className={`elder-task-card ${isDone ? "is-done" : ""} ${task.needsReview ? "needs-review" : ""}`}>
                   <div className="elder-task-time">
@@ -3431,13 +3740,39 @@ function OverviewView({
                     <h3>{task.title}</h3>
                     {task.subtitle && <p>{task.subtitle}</p>}
                     {task.detail && <p className="elder-task-detail">{task.detail}</p>}
+                    {task.canComplete === false && <p className="elder-task-persistent-note">這是每天都要留意的提醒，不用按完成。</p>}
                     {task.needsReview && <p className="elder-task-warning">這筆資料還需要家人確認日期或內容。</p>}
                   </div>
                   <div className="elder-task-actions">
-                    {!readOnly && onComplete && (
-                      <button type="button" className="primary-action elder-primary-action" onClick={() => handlePrimaryAction(task)} disabled={isDone}>
-                        {isDone ? "已記好了" : task.primaryActionLabel}
-                      </button>
+                    {task.isToday && task.canComplete !== false && !readOnly && onComplete && (
+                      isPending ? (
+                        <div className="today-task-confirmation">
+                          <h4>要記錄「{task.title}」已完成嗎？</h4>
+                          <p>確認後，家人會看到這件事已完成。</p>
+                          {taskActionError && <p className="today-task-action-error" role="alert">{taskActionError}</p>}
+                          <div className="today-task-confirmation-actions">
+                            <button
+                              type="button"
+                              className="secondary-action"
+                              onClick={() => {
+                                if (isSubmitting) return;
+                                setPendingTaskId(null);
+                                setTaskActionError(null);
+                              }}
+                              disabled={isSubmitting}
+                            >
+                              取消，還沒完成
+                            </button>
+                            <button type="button" className="primary-action" onClick={() => handleConfirmedTask(task)} disabled={isSubmitting}>
+                              {isSubmitting ? "正在儲存..." : "確認已完成"}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button type="button" className="primary-action elder-primary-action" onClick={() => handlePrimaryAction(task)} disabled={isDone}>
+                          {isDone ? "已記好了" : task.primaryActionLabel}
+                        </button>
+                      )
                     )}
                   </div>
                 </article>
@@ -3453,7 +3788,9 @@ function OverviewView({
         ) : (
           <EmptyGuide
             title="今天還沒有照護事項。"
-            description="可以先拍藥袋、處方箋或掛號單，Care WEDO 會自動分類並整理成照護待辦。"
+            description={readOnly
+              ? "家人新增行程或用藥後，會顯示在這裡。"
+              : "可以先拍藥袋、處方箋或掛號單，Care WEDO 會自動分類並整理成照護待辦。"}
           />
         )}
       </section>
@@ -3465,7 +3802,7 @@ function OverviewView({
             <>
               <div className="date-badge">{formatDateLabel(nextAppointment.date, nextAppointment.time)}</div>
               <h3>{nextAppointment.title || nextAppointment.department}</h3>
-              <p>{[nextAppointment.hospital, nextAppointment.doctor && `${nextAppointment.doctor}醫師`].filter(Boolean).join(" ｜ ")}</p>
+              <p>{[nextAppointment.hospital, formatDoctorName(nextAppointment.doctor)].filter(Boolean).join(" ｜ ")}</p>
               <button type="button" className="inline-action" onClick={onOpenCalendar}>查看排程</button>
             </>
           ) : (
@@ -3538,7 +3875,7 @@ function recordDateParts(record = {}) {
 function buildRecordReminderCopy(record = {}) {
   const dateParts = recordDateParts(record);
   const title = typeLabel(record.type);
-  const carePlace = [record.hospital, record.department, record.doctor && `${record.doctor}醫師`].filter(Boolean).join(" ｜ ");
+  const carePlace = [record.hospital, record.department, formatDoctorName(record.doctor)].filter(Boolean).join(" ｜ ");
   const note = record.notes || record.reminder_text;
   return [
     "請記得這筆照護提醒：",
@@ -3569,22 +3906,24 @@ async function copyText(text) {
   document.body.removeChild(textarea);
 }
 
-function RecordsView({ records, documents = [], searchQuery, initialMode = "future", showFutureMode = true, onUpload, onUploadDocument, onOpenDocument, onEditRecord, canViewHistory = true, documentNotice = "", onUpgradeRequired, readOnly = false }) {
+function RecordsView({ records, documents = [], searchQuery, onSearchChange, appointmentSearchSuggestions = [], documentSearchSuggestions = [], initialMode = "future", showFutureMode = true, onUpload, onUploadDocument, onOpenDocument, onEditRecord, canViewHistory = true, documentNotice = "", onUpgradeRequired, readOnly = false }) {
   const [mode, setMode] = useState(initialMode);
   const [copyNotice, setCopyNotice] = useState({ id: null, message: "" });
-  const activeMode = canViewHistory ? mode : "future";
+  const activeMode = mode;
   const isDocumentMode = mode === "documents";
+  const isHistoryLocked = activeMode === "history" && !canViewHistory;
   const modeLabel = isDocumentMode ? "醫療文件" : activeMode === "history" ? "歷史紀錄" : "未來安排";
 
   function handleModeChange(nextMode) {
+    setMode(nextMode);
     if (nextMode === "history" && !canViewHistory) {
       onUpgradeRequired?.("history");
       return;
     }
-    setMode(nextMode);
   }
 
   const grouped = useMemo(() => {
+    if (isHistoryLocked || isDocumentMode) return [];
     const today = todayInTaipei();
     const filteredRecords = records
       .filter((record) => record.status !== "deleted")
@@ -3603,7 +3942,7 @@ function RecordsView({ records, documents = [], searchQuery, initialMode = "futu
       groups[monthStr].push(record);
     });
     return Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [records, searchQuery, activeMode]);
+  }, [records, searchQuery, activeMode, isDocumentMode, isHistoryLocked]);
 
   async function handleCopyReminder(record) {
     try {
@@ -3641,6 +3980,16 @@ function RecordsView({ records, documents = [], searchQuery, initialMode = "futu
           醫療文件
         </button>
       </div>
+      {!isHistoryLocked && (
+        <section className="today-search-panel content-search-panel records-mode-search" aria-label={`${modeLabel}搜尋`}>
+          <SearchField
+            value={searchQuery}
+            onChange={onSearchChange}
+            suggestions={isDocumentMode ? documentSearchSuggestions : appointmentSearchSuggestions}
+            placeholder={isDocumentMode ? "搜尋已上傳的醫療文件" : "搜尋歷史照護紀錄"}
+          />
+        </section>
+      )}
       {documentNotice && <p className="calendar-action-notice">{documentNotice}</p>}
       {isDocumentMode ? (
         <DocumentLibraryView
@@ -3649,13 +3998,23 @@ function RecordsView({ records, documents = [], searchQuery, initialMode = "futu
           onUploadDocument={readOnly ? undefined : onUploadDocument}
           onOpenDocument={onOpenDocument}
         />
+      ) : isHistoryLocked ? (
+        <section className="history-locked-card" aria-labelledby="history-locked-title">
+          <p className="history-locked-label">免費版</p>
+          <h3 id="history-locked-title">完整歷史紀錄尚未開放</h3>
+          <p>免費版仍可查看未來安排，也可以開啟已上傳的醫療文件。若要查看完整歷史紀錄與健康時間線，可以先了解照護圈升級方式。</p>
+          <div className="history-locked-actions">
+            <button type="button" className="primary-action" onClick={() => onUpgradeRequired?.("history")}>查看費用與升級方式</button>
+            <button type="button" className="secondary-action" onClick={() => handleModeChange("documents")}>查看醫療文件</button>
+          </div>
+        </section>
       ) : grouped.length ? grouped.map(([month, items]) => (
         <section key={month} className="record-month-group">
           <h3 className="month-divider">{month.replace("-", " 年 ")} 月</h3>
           <div className="records-stack">
             {items.map(record => {
               const dateParts = recordDateParts(record);
-              const carePlace = [record.hospital, record.department, record.doctor && `${record.doctor}醫師`].filter(Boolean).join(" ｜ ");
+              const carePlace = [record.hospital, record.department, formatDoctorName(record.doctor)].filter(Boolean).join(" ｜ ");
               const title = typeLabel(record.type);
               const note = record.notes || record.reminder_text;
               return (
@@ -3877,17 +4236,15 @@ function ActivityAuditPanel({ events = [] }) {
 function SettingsView({
   identity,
   isPersonalMode,
-  careProfiles,
-  selectedProfile,
-  activeProfileId,
-  onProfileChange,
   onGroupChange,
   onEditProfile,
-  onAddReminder,
+  onPreviewElder,
   linePushAudit = [],
   activityAudit = [],
   pricing = CARE_WEDO_PRICING,
   familyNotes,
+  familyNotesScopeId,
+  familyNotesLoading,
   onFamilyNotesChange,
   onLogout,
 }) {
@@ -3931,32 +4288,11 @@ function SettingsView({
           <section className="summary-panel wide-panel collaborator-control-panel">
             <p className="panel-eyebrow">協作者管理中心</p>
             <h3>設定與資料整理都集中在這裡。</h3>
-            <p>長輩頁面只保留今天、行程與用藥查看；編輯資料、手動新增、家人提醒由照護圈協作者在這裡處理。</p>
+            <p>長輩頁面只保留今天、行程與用藥查看；編輯資料與家人提醒由照護圈協作者在這裡處理。</p>
             <div className="management-action-grid">
               <button type="button" className="primary-action" onClick={onEditProfile}>編輯照護對象</button>
-              <button type="button" className="secondary-action" onClick={onAddReminder}>手動新增提醒</button>
+              <button type="button" className="secondary-action mobile-preview-action" onClick={onPreviewElder}>看長輩版</button>
               <a className="secondary-action" href={`mailto:${CARE_WEDO_SUPPORT_EMAIL}`}>資料協助</a>
-            </div>
-          </section>
-
-          <section className="summary-panel">
-            <p className="panel-eyebrow">照護對象</p>
-            <div className="care-profile-list">
-              {careProfiles.length ? careProfiles.map((profile) => (
-                <button
-                  key={profile.id}
-                  type="button"
-                  className={(profile.id === activeProfileId || (!activeProfileId && profile.id === selectedProfile?.id)) ? "care-profile-item active" : "care-profile-item"}
-                  onClick={() => onProfileChange(profile.id)}
-                >
-                  <strong>{profile.display_name}</strong>
-                </button>
-              )) : (
-                <EmptyGuide
-                  title="目前還沒有其他照護對象。"
-                  description="可以在下方新增爸爸、媽媽、自己，或其他需要一起管理照護資料的人。"
-                />
-              )}
             </div>
           </section>
 
@@ -3973,7 +4309,7 @@ function SettingsView({
           <ActivityAuditPanel events={activityAudit} />
           <section className="summary-panel wide-panel">
             <p className="panel-eyebrow">家人要記得的事</p>
-            <FamilyNotesEditor notes={familyNotes} onChange={onFamilyNotesChange} />
+            <FamilyNotesEditor notes={familyNotes} scopeId={familyNotesScopeId} loading={familyNotesLoading} onChange={onFamilyNotesChange} />
           </section>
         </>
       )}
@@ -4029,84 +4365,183 @@ function SettingsView({
   );
 }
 
-function FamilyNotesEditor({ notes, onChange }) {
-  const [drafts, setDrafts] = useState(notes.length ? notes : [""]);
+function FamilyNotesEditor({ notes = [], scopeId, loading = false, onChange }) {
+  const scopeKey = String(scopeId ?? "personal");
+  const initialDrafts = useMemo(() => (notes.length ? notes : [""]), [notes]);
+  const scopeDraftsRef = useRef(new Map());
+  const activeScopeRef = useRef(String(scopeId ?? "personal"));
+  const savingRef = useRef(false);
+  const savedTimerRef = useRef(null);
+  const [drafts, setDrafts] = useState(initialDrafts);
+  const [removedDraftIndexes, setRemovedDraftIndexes] = useState([]);
+  const [dirty, setDirty] = useState(false);
+  const [restoredDraft, setRestoredDraft] = useState(false);
   const [saved, setSaved] = useState(false);
   const [savedAt, setSavedAt] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const scopeReady = activeScopeRef.current === scopeKey && !loading;
 
   useEffect(() => {
-    setDrafts(notes.length ? notes : [""]);
-  }, [notes]);
+    if (activeScopeRef.current !== scopeKey) {
+      if (savedTimerRef.current) {
+        clearTimeout(savedTimerRef.current);
+        savedTimerRef.current = null;
+      }
+      const cached = scopeDraftsRef.current.get(scopeKey);
+      activeScopeRef.current = scopeKey;
+      setDrafts(cached?.drafts || initialDrafts);
+      setRemovedDraftIndexes(cached?.removedDraftIndexes || []);
+      setDirty(Boolean(cached?.dirty));
+      setRestoredDraft(Boolean(cached?.dirty));
+      setSaved(false);
+      setSavedAt(null);
+      setError("");
+      return;
+    }
+    if (!dirty) {
+      setDrafts(initialDrafts);
+      setRemovedDraftIndexes([]);
+    }
+  }, [dirty, initialDrafts, scopeKey]);
+
+  useEffect(() => () => {
+    if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+  }, []);
+
+  function rememberDraft(nextDrafts, nextRemovedDraftIndexes) {
+    scopeDraftsRef.current.set(scopeKey, {
+      drafts: nextDrafts,
+      removedDraftIndexes: nextRemovedDraftIndexes,
+      dirty: true,
+    });
+    setDirty(true);
+    setRestoredDraft(false);
+    setSaved(false);
+    setError("");
+  }
 
   function updateDraft(index, value) {
-    setDrafts((current) => current.map((item, itemIndex) => (itemIndex === index ? value : item)));
+    const next = drafts.map((item, itemIndex) => (itemIndex === index ? value : item));
+    setDrafts(next);
+    rememberDraft(next, removedDraftIndexes);
   }
 
   function addDraft() {
-    setDrafts((current) => [...current, ""]);
+    const next = [...drafts, ""];
+    setDrafts(next);
+    rememberDraft(next, removedDraftIndexes);
   }
 
   function removeDraft(index) {
-    setDrafts((current) => {
-      const next = current.filter((_, itemIndex) => itemIndex !== index);
-      return next.length ? next : [""];
-    });
+    const next = removedDraftIndexes.includes(index) ? removedDraftIndexes : [...removedDraftIndexes, index];
+    setRemovedDraftIndexes(next);
+    rememberDraft(drafts, next);
+  }
+
+  function restoreDraft(index) {
+    const next = removedDraftIndexes.filter((itemIndex) => itemIndex !== index);
+    setRemovedDraftIndexes(next);
+    rememberDraft(drafts, next);
   }
 
   async function handleSave() {
+    if (!scopeReady || savingRef.current) return;
+    savingRef.current = true;
+    const nextDrafts = drafts.filter((_draft, index) => !removedDraftIndexes.includes(index));
     setSaving(true);
     setError("");
     setSaved(false);
     try {
-      await onChange(drafts);
+      await onChange(nextDrafts, scopeId);
+      scopeDraftsRef.current.delete(scopeKey);
+      if (activeScopeRef.current !== scopeKey) return;
+      setDrafts(nextDrafts.length ? nextDrafts : [""]);
+      setRemovedDraftIndexes([]);
+      setDirty(false);
+      setRestoredDraft(false);
       setSaved(true);
       setSavedAt(new Date());
-      setTimeout(() => setSaved(false), 2400);
+      if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+      savedTimerRef.current = setTimeout(() => {
+        if (activeScopeRef.current === scopeKey) setSaved(false);
+        savedTimerRef.current = null;
+      }, 2400);
     } catch (err) {
-      setSavedAt(null);
-      setError(err.message || "儲存失敗，請再試一次");
+      if (activeScopeRef.current === scopeKey) {
+        setSavedAt(null);
+        setError(err.message || "儲存失敗，請再試一次");
+      }
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   }
 
   return (
     <div className="family-notes-editor">
-      <div className="family-note-draft-list">
-        {drafts.map((draft, index) => (
-          <article className="family-note-draft-card" key={`family-note-draft-${index}`}>
-            <label htmlFor={`family-note-draft-${index}`}>提醒 {index + 1}</label>
-            <textarea
-              id={`family-note-draft-${index}`}
-              value={draft}
-              onChange={(event) => updateDraft(index, event.target.value)}
-              rows={3}
-              aria-label={`家庭群組提醒 ${index + 1}`}
-              placeholder="例如：回診前 8 小時不要吃東西、記得帶健保卡"
-            />
-            <button type="button" className="secondary-action note-delete-action" onClick={() => removeDraft(index)}>
-              刪除
+      {!scopeReady && <p className="helper-copy" role="status">正在切換照護圈提醒…</p>}
+      {scopeReady && (
+        <>
+          <div className="family-note-draft-list">
+            {drafts.map((draft, index) => {
+              const isRemoved = removedDraftIndexes.includes(index);
+              return (
+                <article className={`family-note-draft-card${isRemoved ? " is-removed" : ""}`} key={`family-note-draft-${index}`}>
+                  {isRemoved ? (
+                    <div className="family-note-removed" role="status">
+                      <div>
+                        <strong>已移除「{draft || `提醒 ${index + 1}`}」</strong>
+                        <p>現在還沒有刪除。按「儲存變更」後，才會從家庭提醒移除。</p>
+                      </div>
+                      <div className="family-note-removed-actions">
+                        <button type="button" className="secondary-action" onClick={() => restoreDraft(index)}>
+                          復原
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <label htmlFor={`family-note-draft-${index}`}>提醒 {index + 1}</label>
+                      <textarea
+                        id={`family-note-draft-${index}`}
+                        value={draft}
+                        onChange={(event) => updateDraft(index, event.target.value)}
+                        rows={3}
+                        aria-label={`家庭群組提醒 ${index + 1}`}
+                        placeholder="例如：回診前 8 小時不要吃東西、記得帶健保卡"
+                        disabled={saving || !scopeReady}
+                      />
+                      <button type="button" className="secondary-action note-delete-action" onClick={() => removeDraft(index)} disabled={saving || !scopeReady}>
+                        移除這則提醒
+                      </button>
+                    </>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+          {removedDraftIndexes.length > 0 && (
+            <p className="family-note-save-warning" role="status">待移除的提醒會在按下「儲存變更」後才刪除；按「復原」即可保留。</p>
+          )}
+          {restoredDraft && <p className="family-note-save-warning" role="status">已恢復這個照護圈尚未儲存的提醒。</p>}
+          {error && <p className="error-msg" role="alert">{error}</p>}
+          {saved && <p className="success-msg" role="status">已儲存{savedAt ? `・${savedAt.toLocaleTimeString("zh-TW", { hour: "2-digit", minute: "2-digit" })}` : ""}，家庭成員重新整理後即可看到。</p>}
+          <div className="family-notes-actions">
+            <button type="button" className="secondary-action" onClick={addDraft} disabled={saving || !scopeReady}>
+              新增
             </button>
-          </article>
-        ))}
-      </div>
-      {error && <p className="error-msg">{error}</p>}
-      {saved && <p className="success-msg" role="status">已儲存{savedAt ? `・${savedAt.toLocaleTimeString("zh-TW", { hour: "2-digit", minute: "2-digit" })}` : ""}，家庭成員重新整理後即可看到。</p>}
-      <div className="family-notes-actions">
-        <button type="button" className="secondary-action" onClick={addDraft}>
-          新增
-        </button>
-        <button type="button" className="inline-action" onClick={handleSave} disabled={saving}>
-          {saving ? "儲存中..." : error ? "重試儲存" : saved ? "已儲存" : "儲存"}
-        </button>
-      </div>
+            <button type="button" className="inline-action" onClick={handleSave} disabled={saving || !scopeReady}>
+              {saving ? "儲存中..." : error ? "重試儲存" : saved ? "已儲存" : "儲存變更"}
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
 
-function FamilyNotesModal({ groupName, notes, onClose, onSave }) {
+function FamilyNotesModal({ scopeId, groupName, notes, loading, onClose, onSave }) {
   return (
     <div className="modal-overlay">
       <div className="modal-content family-notes-modal">
@@ -4119,7 +4554,7 @@ function FamilyNotesModal({ groupName, notes, onClose, onSave }) {
         </div>
         <div className="modal-body">
           <p className="helper-copy">每一則會成為一張家庭提醒卡，儲存在目前家庭群組，切換群組後會顯示各自的提醒。</p>
-          <FamilyNotesEditor notes={notes} onChange={onSave} />
+          <FamilyNotesEditor notes={notes} scopeId={scopeId} loading={loading} onChange={onSave} />
         </div>
       </div>
     </div>

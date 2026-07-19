@@ -86,3 +86,28 @@ test("frontend exposes document library upload and doctor display mode", () => {
   assert.match(css, /\.document-library-card/);
   assert.match(css, /\.doctor-briefing-panel/);
 });
+
+test("document upload cannot be dismissed or submitted twice while the medical file is being stored", () => {
+  const ocrWorkflow = readProjectFile("care-wedo-app/src/features/ocr/OcrWorkflow.jsx");
+  const css = readProjectFile("care-wedo-app/src/index.css");
+  const uploadModal = ocrWorkflow.slice(
+    ocrWorkflow.indexOf("export function CareDocumentUploadModal"),
+  );
+
+  assert.match(uploadModal, /const savingRef = useRef\(false\)/);
+  assert.match(uploadModal, /function requestClose\(\)[\s\S]*if \(savingRef\.current\) return;[\s\S]*onClose\(\)/);
+  assert.match(uploadModal, /if \(savingRef\.current\) return;/);
+  assert.match(uploadModal, /savingRef\.current = true/);
+  assert.match(uploadModal, /savingRef\.current = false/);
+  assert.match(uploadModal, /className="modal-overlay" onClick=\{requestClose\}/);
+  assert.match(uploadModal, /aria-busy=\{saving\}/);
+  assert.match(uploadModal, /className="btn-close" onClick=\{requestClose\} aria-label="關閉" disabled=\{saving\}/);
+  assert.match(uploadModal, /id="care-document-file"[\s\S]*disabled=\{saving\}/);
+  assert.match(uploadModal, /id="care-document-type"[\s\S]*disabled=\{saving\}/);
+  assert.match(uploadModal, /checked=\{preserveOriginalFile\}[\s\S]*disabled=\{saving\}/);
+  assert.match(uploadModal, /role="status"[\s\S]*文件正在上傳並整理，請先不要關閉/);
+  assert.ok(uploadModal.indexOf("care-document-upload-status") < uploadModal.indexOf('id="care-document-file"'));
+  assert.match(uploadModal, /className="notice-danger" role="alert"/);
+  assert.match(uploadModal, /className="secondary-action" onClick=\{requestClose\} disabled=\{saving\}/);
+  assert.match(css, /\.care-document-upload-status\s*\{[\s\S]*min-width:\s*0[\s\S]*overflow-wrap:\s*anywhere/);
+});

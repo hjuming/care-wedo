@@ -25,6 +25,7 @@ import { saveParsedDataToProfile } from "../../_shared/medical_ocr";
 import { logError, logEvent } from "../../_shared/logger";
 import { sendProductionAlert } from "../../_shared/alerts";
 import { requireGroupWriteAccess } from "../../_shared/group_permissions";
+import { resolvePublicApiError } from "../../_shared/public_error";
 
 type Env = SupabaseEnv & {
   GOOGLE_API_KEY: string;
@@ -87,23 +88,6 @@ const careDocumentPrompt = `你是 Care WEDO 的醫療文件整理助理。
     }
   ]
 }`;
-
-function documentUploadStatus(message: string) {
-  if (message.includes("請先登入")) return 401;
-  if (message.includes("權限")) return 403;
-  if (message.includes("次數") || message.includes("額度")) return 429;
-  if (
-    message.includes("請使用表單")
-    || message.includes("請選擇")
-    || message.includes("目前只支援")
-    || message.includes("單一文件不可超過")
-    || message.includes("檔案內容與格式不符")
-    || message.includes("照護對象")
-  ) {
-    return 400;
-  }
-  return 500;
-}
 
 function bytesToBase64(bytes: Uint8Array) {
   let binary = "";
@@ -252,13 +236,25 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
         body: JSON.stringify({
           status: "failed",
           summary_status: "failed",
-          ai_summary: { error: error instanceof Error ? error.message : "文件解析失敗" },
+          ai_summary: { error: "文件處理失敗，請稍後重試。" },
         }),
       }).catch(() => null);
     }
     logError("documents.upload_failed", error, { document_id: documentId, duration_ms: Date.now() - startedAt });
     await sendProductionAlert(env, "documents.upload_failed", { document_id: documentId, error });
-    const message = error instanceof Error ? error.message : "文件上傳失敗";
-    return Response.json({ error: message, document_id: documentId }, { status: documentUploadStatus(message) });
+    const publicError = resolvePublicApiError(error, {
+      fallback: "文件上傳失敗，請稍後重試。",
+      rules: [
+        { pattern: /沒有修改權限/, message: "沒有上傳文件的權限", status: 403 },
+        { pattern: /^本月免費次數已用完（\d+ 次）/, preserveMessage: true, status: 429 },
+        { pattern: /^目前只支援 PDF、JPG、PNG 或 WebP 文件。$/, preserveMessage: true, status: 400 },
+        { pattern: /^單一文件不可超過 25MB。$/, preserveMessage: true, status: 400 },
+        { pattern: /^檔案內容與格式不符，請重新匯出或拍照後再上傳。$/, preserveMessage: true, status: 400 },
+      ],
+    });
+    return Response.json(
+      { error: publicError.message, document_id: documentId },
+      { status: publicError.status },
+    );
   }
 };

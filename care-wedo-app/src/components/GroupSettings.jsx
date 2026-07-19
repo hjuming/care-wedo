@@ -13,12 +13,13 @@ import {
 import { buildCollaboratorContact } from "../services/contact";
 import { resetCareWedoSessionAndReturnHome } from "../services/liff";
 import { safeReviewLoginEnabled } from "../services/safeReviewLogin";
+import { CARE_WEDO_GROUP_LIMITS as SHARED_CARE_WEDO_GROUP_LIMITS } from "../../../shared/care-wedo-pricing.js";
 
 const CARE_WEDO_LINE_URL = "https://lin.ee/xzbyyvf";
 const GROUP_LIMITS = {
-  maxCareProfiles: 4,
-  maxPaidCollaborators: 5,
-  maxMembersIncludingOwner: 6,
+  maxCareProfiles: SHARED_CARE_WEDO_GROUP_LIMITS.max_care_profiles,
+  maxPaidCollaborators: SHARED_CARE_WEDO_GROUP_LIMITS.max_paid_collaborators,
+  maxMembersIncludingOwner: SHARED_CARE_WEDO_GROUP_LIMITS.max_members_including_owner,
 };
 
 // Pricing is returned by the backend contract on both dashboard and groups
@@ -284,6 +285,61 @@ function PaidActionConfirmationModal({ action, onCancel, onConfirm, submitting =
   );
 }
 
+function GroupSafetyConfirmationModal({ action, onCancel, onConfirm, submitting = false, errorMessage = null }) {
+  if (!action) return null;
+
+  const isMemberRemoval = action.type === "remove_member";
+  const closeSafely = () => {
+    if (!submitting) onCancel();
+  };
+
+  return (
+    <div className="modal-overlay" onClick={closeSafely}>
+      <div
+        className="modal-content group-safety-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="group-safety-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="modal-header">
+          <div>
+            <p className="modal-kicker">請再確認一次</p>
+            <h2 id="group-safety-title">
+              {isMemberRemoval
+                ? <>要移除「{action.memberName}」嗎？</>
+                : <>要換掉「{action.groupName}」的邀請碼嗎？</>}
+            </h2>
+          </div>
+          <button type="button" className="btn-close" onClick={closeSafely} aria-label="關閉" disabled={submitting}>×</button>
+        </div>
+        <div className="modal-body group-safety-confirmation">
+          {isMemberRemoval ? (
+            <>
+              <p>移除後，這位協作者將無法再查看「{action.groupName}」的照護資料，也不會再收到這個群組的提醒。</p>
+              <p className="group-safety-reassurance">照護紀錄不會被刪除。之後若要重新加入，需要使用新的邀請碼。</p>
+            </>
+          ) : (
+            <>
+              <p>舊邀請碼會立即失效。之前傳給家人的加入連結，也會無法繼續使用。</p>
+              <p className="group-safety-reassurance">換新後，請重新複製邀請內容，再傳給尚未加入的家人。</p>
+            </>
+          )}
+          {errorMessage && <p className="error-msg" role="alert">{errorMessage}</p>}
+          <div className="group-safety-confirmation-actions">
+            <button type="button" className="secondary-action" onClick={closeSafely} disabled={submitting}>
+              {isMemberRemoval ? "取消，保留成員" : "取消，保留原邀請碼"}
+            </button>
+            <button type="button" className="inline-danger-action" onClick={onConfirm} disabled={submitting}>
+              {submitting ? "處理中..." : isMemberRemoval ? "確認移除" : "確認換新邀請碼"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function GroupSettings({ identity, onGroupChange, onProfileCreated }) {
   const [data, setData] = useState({ groups: [], care_profiles: [], user_memberships: [] });
   const [selectedGroupId, setSelectedGroupId] = useState(null);
@@ -299,6 +355,9 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
   const [cancelingGroupId, setCancelingGroupId] = useState(null);
   const [billingHistoryByGroup, setBillingHistoryByGroup] = useState({});
   const [historyLoadingGroupId, setHistoryLoadingGroupId] = useState(null);
+  const [pendingGroupAction, setPendingGroupAction] = useState(null);
+  const [groupActionSubmitting, setGroupActionSubmitting] = useState(false);
+  const [groupActionError, setGroupActionError] = useState(null);
   const reviewMode = safeReviewLoginEnabled();
 
   const loadGroups = useCallback(async () => {
@@ -719,37 +778,59 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
     }
   }
 
-  async function handleRemoveMember(groupId, targetUserId) {
-    if (!window.confirm("確定要移除這位成員嗎？移除後他們將無法再查看此群組的資料。")) return;
+  function requestMemberRemoval(group, member, memberName) {
     setError(null);
     setSuccess(null);
-    try {
-      await removeMember({ idToken: identity.idToken, groupId, targetUserId });
-      setSuccess("成員已移除。");
-      await loadGroups();
-    } catch (err) {
-      if (err.code === "AUTH_REQUIRED") {
-        await resetCareWedoSessionAndReturnHome();
-        return;
-      }
-      setError(err.message || "移除成員失敗");
-    }
+    setGroupActionError(null);
+    setPendingGroupAction({
+      type: "remove_member",
+      groupId: group.id,
+      groupName: group.name || "家庭群組",
+      targetUserId: member.user_id,
+      memberName: memberName || "這位協作者",
+    });
   }
 
-  async function handleRegenerateInvite(groupId) {
-    if (!window.confirm("確定要重新產生邀請碼嗎？舊的邀請碼將立即失效。")) return;
+  function requestInviteRegeneration(group) {
     setError(null);
     setSuccess(null);
+    setGroupActionError(null);
+    setPendingGroupAction({
+      type: "regenerate_invite",
+      groupId: group.id,
+      groupName: group.name || "家庭群組",
+    });
+  }
+
+  async function runConfirmedGroupAction() {
+    if (!pendingGroupAction || groupActionSubmitting) return;
+    const action = pendingGroupAction;
+    setError(null);
+    setSuccess(null);
+    setGroupActionError(null);
+    setGroupActionSubmitting(true);
     try {
-      await regenerateInvite({ idToken: identity.idToken, groupId });
-      setSuccess("邀請碼已更新。");
+      if (action.type === "remove_member") {
+        await removeMember({
+          idToken: identity.idToken,
+          groupId: action.groupId,
+          targetUserId: action.targetUserId,
+        });
+        setSuccess(`「${action.memberName}」已從「${action.groupName}」移除。`);
+      } else {
+        await regenerateInvite({ idToken: identity.idToken, groupId: action.groupId });
+        setSuccess(`「${action.groupName}」已換成新的邀請碼，請重新複製後再分享。`);
+      }
       await loadGroups();
+      setPendingGroupAction(null);
     } catch (err) {
       if (err.code === "AUTH_REQUIRED") {
         await resetCareWedoSessionAndReturnHome();
         return;
       }
-      setError(err.message || "重新產生邀請碼失敗");
+      setGroupActionError(err.message || (action.type === "remove_member" ? "移除成員失敗，請稍後再試。" : "更換邀請碼失敗，原邀請碼仍可使用。"));
+    } finally {
+      setGroupActionSubmitting(false);
     }
   }
 
@@ -879,7 +960,9 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
                   )}
                 </div>
 
-                <div className="group-invite-block">
+                <details className="group-settings-disclosure">
+                  <summary>邀請協作者</summary>
+                  <div className="group-invite-block">
                   {group.invite_code ? (
                     <>
                       <div className="invite-copy-head compact">
@@ -909,7 +992,7 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
                           <button
                             type="button"
                             className="btn-secondary-sm"
-                            onClick={() => handleRegenerateInvite(group.id)}
+                            onClick={() => requestInviteRegeneration(group)}
                           >
                             重新產生
                           </button>
@@ -919,11 +1002,13 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
                   ) : (
                     <p className="helper-copy">你沒有邀請協作者的管理權限。</p>
                   )}
-                </div>
+                  </div>
+                </details>
 
-                <div className="members-list">
-                  <label>照護協作者</label>
-                  <div className="members-grid">
+                <details className="group-settings-disclosure">
+                  <summary>照護協作者名單（{members.length} 人）</summary>
+                  <div className="members-list">
+                    <div className="members-grid">
                     {members.map((m, idx) => {
                       const displayName = getMemberDisplayName(m, idx, membership);
                       const avatarUrl = getMemberAvatar(m, displayName, membership);
@@ -949,7 +1034,7 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
                             <button
                               type="button"
                               className="btn-danger-sm"
-                              onClick={() => handleRemoveMember(group.id, m.user_id)}
+                              onClick={() => requestMemberRemoval(group, m, displayName)}
                             >
                               移除
                             </button>
@@ -957,27 +1042,30 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
                         </div>
                       );
                     })}
+                    </div>
                   </div>
-                </div>
+                </details>
 
-                <div className="settings-toggle-list">
-                  <label>我的通知設定</label>
-                  {[
-                    { field: "receive_daily_brief", label: "今日行程提醒" },
-                    { field: "receive_evening_alert", label: "晚間提醒" },
-                    { field: "receive_upload_summary", label: "上傳摘要通知" },
-                  ].map((item) => (
-                    <label key={item.field} className="settings-toggle">
-                      <span>{item.label}</span>
-                      <input
-                        type="checkbox"
-                        checked={Boolean(membership?.[item.field])}
-                        disabled={updatingGroupId === group.id}
-                        onChange={(event) => handleToggle(group.id, item.field, event.target.checked)}
-                      />
-                    </label>
-                  ))}
-                </div>
+                <details className="group-settings-disclosure">
+                  <summary>我的通知設定</summary>
+                  <div className="settings-toggle-list">
+                    {[
+                      { field: "receive_daily_brief", label: "今日行程提醒" },
+                      { field: "receive_evening_alert", label: "晚間提醒" },
+                      { field: "receive_upload_summary", label: "上傳摘要通知" },
+                    ].map((item) => (
+                      <label key={item.field} className="settings-toggle">
+                        <span>{item.label}</span>
+                        <input
+                          type="checkbox"
+                          checked={Boolean(membership?.[item.field])}
+                          disabled={updatingGroupId === group.id}
+                          onChange={(event) => handleToggle(group.id, item.field, event.target.checked)}
+                        />
+                      </label>
+                    ))}
+                  </div>
+                </details>
               </div>
             );
           })
@@ -987,10 +1075,12 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
       </div>
 
       <div className="group-settings-card">
-        <p className="panel-eyebrow">新增主要照護對象</p>
-        <p className="helper-copy">這裡新增的是被照顧的人。每個家庭群組最多 {selectedRecipientLimit || GROUP_LIMITS.maxCareProfiles} 位；超過時請另外開設家庭群組。</p>
-        {data.groups?.length ? (
-          <form className="profile-create-form" onSubmit={requestProfileCreationConfirmation}>
+        <details className="group-settings-disclosure">
+          <summary>新增照護對象</summary>
+          <div className="group-settings-disclosure-body">
+            <p className="helper-copy">這裡新增的是被照顧的人。每個家庭群組最多 {selectedRecipientLimit || GROUP_LIMITS.maxCareProfiles} 位；超過時請另外開設家庭群組。</p>
+            {data.groups?.length ? (
+              <form className="profile-create-form" onSubmit={requestProfileCreationConfirmation}>
             <label>
               目標群組
               <select value={selectedGroupId || ""} onChange={(event) => setSelectedGroupId(Number(event.target.value))}>
@@ -1024,10 +1114,12 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
             <button type="submit" className="btn-submit" disabled={loading}>
               {loading ? "儲存中..." : "新增照護對象"}
             </button>
-          </form>
-        ) : (
-          <p className="helper-copy">請先建立或加入家人群組，再新增照護對象。</p>
-        )}
+              </form>
+            ) : (
+              <p className="helper-copy">請先建立或加入家人群組，再新增照護對象。</p>
+            )}
+          </div>
+        </details>
       </div>
       <PaidActionConfirmationModal
         action={pendingPaidAction}
@@ -1038,6 +1130,17 @@ export default function GroupSettings({ identity, onGroupChange, onProfileCreate
         onConfirm={runConfirmedPaidAction}
         submitting={billingSubmitting}
         errorMessage={error}
+      />
+      <GroupSafetyConfirmationModal
+        action={pendingGroupAction}
+        onCancel={() => {
+          if (groupActionSubmitting) return;
+          setPendingGroupAction(null);
+          setGroupActionError(null);
+        }}
+        onConfirm={runConfirmedGroupAction}
+        submitting={groupActionSubmitting}
+        errorMessage={groupActionError}
       />
     </div>
   );

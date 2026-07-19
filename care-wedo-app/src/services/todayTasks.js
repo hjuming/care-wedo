@@ -1,3 +1,5 @@
+import { formatDoctorName } from "../features/shared/careFormatters.js";
+
 const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"];
 
 const SLOT_ORDER = {
@@ -43,7 +45,6 @@ function timeRank(value = "") {
 }
 
 function appointmentActionLabel(type) {
-  if (type === "family_note") return "我知道了";
   if (type === "refill_reminder") return "我已領藥";
   if (type === "inspection") return "我已完成";
   if (["reminder", "medication", "measurement", "document", "rehab", "exercise", "other"].includes(type)) return "我知道了";
@@ -77,7 +78,8 @@ function isSameDate(dateValue, today) {
 }
 
 export function getMedicationSchedule(medication = {}) {
-  const rawSlot = medication.time_slot || medication.scheduled_time || medication.frequency || "";
+  const normalizedSchedule = medication.schedule || {};
+  const rawSlot = medication.time_slot || normalizedSchedule.slot || medication.scheduled_time || normalizedSchedule.timeLabel || medication.frequency || "";
   const slotText = String(rawSlot || "");
   const lowerSlot = slotText.toLowerCase();
   let slot = "other";
@@ -95,19 +97,27 @@ export function getMedicationSchedule(medication = {}) {
   const mealTimingText = {
     before_meal: "飯前",
     after_meal: "飯後",
+    飯前: "飯前",
+    飯後: "飯後",
     with_meal: "隨餐",
     bedtime: "睡前",
     as_needed: "需要時",
-  }[medication.meal_timing] || "";
-  const inferredMealTiming = slotText.match(/飯前|飯後|隨餐|睡前|需要時/)?.[0]
-    || (slotText.match(/早餐後|午餐後|晚餐後/) ? "飯後" : "")
-    || (slotText.match(/早餐前|午餐前|晚餐前/) ? "飯前" : "")
+  }[medication.meal_timing] || normalizedSchedule.mealTimingLabel || "";
+  const mealTimingSource = [
+    medication.time_slot,
+    medication.scheduled_time,
+    medication.frequency,
+    medication.reminder_text,
+  ].filter(Boolean).join(" ");
+  const inferredMealTiming = mealTimingSource.match(/飯前|飯後|隨餐|睡前|需要時/)?.[0]
+    || (mealTimingSource.match(/早餐後|午餐後|晚餐後/) ? "飯後" : "")
+    || (mealTimingSource.match(/早餐前|午餐前|晚餐前/) ? "飯前" : "")
     || "";
 
   return {
     slot,
     slotLabel: MEDICATION_SLOT_LABELS[slot] || "其他",
-    timeLabel: medication.scheduled_time || MEDICATION_SLOT_LABELS[slot] || medication.frequency || "時間待確認",
+    timeLabel: medication.scheduled_time || normalizedSchedule.timeLabel || MEDICATION_SLOT_LABELS[slot] || medication.frequency || "時間待確認",
     mealTimingLabel: mealTimingText || inferredMealTiming,
   };
 }
@@ -198,12 +208,13 @@ function buildAppointmentTask(appointment, today) {
     type: appointment.type || "clinic_visit",
     label: appointmentKindLabel(appointment.type),
     title: isFamilyNote ? "家庭提醒" : appointment.title || appointment.department || appointment.hospital || appointmentKindLabel(appointment.type),
-    subtitle: [appointment.time, appointment.hospital, appointment.doctor && `${appointment.doctor}醫師`].filter(Boolean).join(" ｜ "),
+    subtitle: [appointment.time, appointment.hospital, formatDoctorName(appointment.doctor)].filter(Boolean).join(" ｜ "),
     detail: appointment.reminder_text || appointment.notes || appointment.location || "",
     time: isFamilyNote ? "每天留意" : needsReview ? "日期待確認" : (appointment.time || "時間待確認"),
     date: appointment.date || "",
     dateLabel: appointment.date ? formatShortDateLabel(appointment.date) : "",
-    primaryActionLabel: appointmentActionLabel(appointment.type),
+    primaryActionLabel: isFamilyNote ? null : appointmentActionLabel(appointment.type),
+    canComplete: !isFamilyNote,
     status: appointment.status || "upcoming",
     needsReview,
     rank: isFamilyNote ? 85000000 : needsReview ? SLOT_ORDER["日期待確認"] * 10000 : appointmentRank(appointment),
@@ -227,12 +238,14 @@ function appointmentRank(appointment = {}) {
 
 export function formatTaipeiTodayLabel(today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Taipei" })) {
   const date = parseTaipeiDate(today);
-  if (!date) return { headline: "今天", date: today };
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
+  if (!date) return { headline: "今天", date: today, fullDate: today };
+  const month = date.getMonth() + 1;
+  const day = date.getDate();
+  const weekday = WEEKDAYS[date.getDay()];
   return {
     headline: "今天",
-    date: `${date.getFullYear()}年${month}月${day}日（${WEEKDAYS[date.getDay()]}）`,
+    date: `${month}月${day}日（${weekday}）`,
+    fullDate: `${date.getFullYear()}年${month}月${day}日（星期${weekday}）`,
   };
 }
 
@@ -242,19 +255,30 @@ export function buildTodayTasks({ today, appointments = [] }) {
     .filter((appointment) => !appointment.date || isSameDate(appointment.date, today))
     .map((appointment) => buildAppointmentTask(appointment, today));
 
-  const appointmentTasks = sameDayTasks.length ? sameDayTasks : activeAppointments
-    .filter((appointment) => appointment.date && appointment.date > today)
-    .sort((a, b) => appointmentRank(a) - appointmentRank(b))
-    .slice(0, 1)
-    .map((appointment) => buildAppointmentTask(appointment, today));
-
-  return appointmentTasks
+  return sameDayTasks
     .sort((a, b) => a.rank - b.rank || a.title.localeCompare(b.title, "zh-Hant"))
     .map((task) => {
       const publicTask = { ...task };
       delete publicTask.rank;
       return publicTask;
     });
+}
+
+export function findNextAppointment({ today, appointments = [], visibleTasks = [] }) {
+  const visibleAppointmentIds = new Set(
+    visibleTasks
+      .filter((task) => task.kind === "appointment")
+      .map((task) => String(task.sourceId)),
+  );
+
+  return appointments
+    .filter((appointment) => (
+      isActiveAppointment(appointment)
+      && appointment.date
+      && appointment.date >= today
+      && !visibleAppointmentIds.has(String(appointment.id))
+    ))
+    .sort((a, b) => appointmentRank(a) - appointmentRank(b))[0] || null;
 }
 
 export function hasSameDayTasks({ today, appointments = [] }) {

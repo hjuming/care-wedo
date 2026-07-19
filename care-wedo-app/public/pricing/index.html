@@ -6,10 +6,10 @@
     <meta name="robots" content="index, follow, max-image-preview:large" />
     <meta
       name="description"
-      content="Care WEDO 收費說明：Free 先試用，照護圈升級 $30/月起。主要照護對象 $30/位/月，共同協作者 $10/位/月，每個家庭群組 $30-250/月。"
+      content="Care WEDO 收費說明：目前免費照顧 1 位家人；開放測試期間第一位照護對象每月減免 $30。每增加 1 位照護對象 $30/月、協作者 $10/月。"
     />
     <link rel="canonical" href="https://care.wedopr.com/pricing" />
-    <title>Care WEDO 收費說明｜Free 先試用，照護圈升級 $30/月起</title>
+    <title>Care WEDO 收費說明｜第一位照護對象測試期免月費</title>
     <style>
       :root {
         color-scheme: light;
@@ -68,7 +68,7 @@
       .hero,
       .card,
       .note,
-      table {
+      .price-item {
         border: 1px solid var(--line);
         background: var(--surface);
       }
@@ -167,25 +167,29 @@
         color: rgb(255, 255, 255, 0.82);
       }
 
-      table {
-        width: 100%;
-        border-collapse: collapse;
+      .price-list {
+        display: grid;
+        gap: 12px;
+      }
+
+      .price-item {
+        min-width: 0;
+        display: grid;
+        grid-template-columns: minmax(190px, 1fr) minmax(120px, auto) minmax(240px, 1.4fr);
+        align-items: start;
+        gap: 12px 20px;
         border-radius: 12px;
-        overflow: hidden;
+        padding: 18px;
       }
 
-      th,
-      td {
-        border-bottom: 1px solid var(--line);
-        padding: 14px;
-        text-align: left;
-        vertical-align: top;
-      }
-
-      th {
-        background: var(--soft);
+      .price-item strong {
         color: var(--brand);
+        font-size: 1.25rem;
         font-weight: 900;
+      }
+
+      .price-item p {
+        margin: 0;
       }
 
       .note {
@@ -243,33 +247,9 @@
           grid-template-columns: 1fr;
         }
 
-        table,
-        thead,
-        tbody,
-        tr,
-        th,
-        td {
-          display: block;
-        }
-
-        thead {
-          display: none;
-        }
-
-        tr {
-          border-bottom: 1px solid var(--line);
-        }
-
-        td {
-          border-bottom: 0;
-          padding: 10px 14px;
-        }
-
-        td::before {
-          content: attr(data-label);
-          display: block;
-          color: var(--accent);
-          font-weight: 900;
+        .price-item {
+          grid-template-columns: minmax(0, 1fr);
+          gap: 4px;
         }
       }
     </style>
@@ -284,9 +264,9 @@
       </nav>
 
       <section class="hero">
-        <p class="eyebrow">Free / 照護圈升級</p>
+        <p class="eyebrow">照護圈費用</p>
         <h1>先免費使用，需要長期保存再升級。</h1>
-        <p>測試期間一般帳號開放照護圈體驗；正式收費前會再次通知。Free 可先整理近期資料，照護圈升級適合長期照顧多位家人。</p>
+        <p>目前免費包含 1 位照護對象、每月 10 次 AI 整理、未來提醒與近 30 天資料保存。增加家人或協作者前，會先顯示月費。</p>
         <div class="actions">
           <a class="cta primary" href="https://lin.ee/xzbyyvf">加入 LINE 小管家</a>
           <a class="cta" href="/guide">看第一次使用流程</a>
@@ -301,54 +281,45 @@
 
       <section class="section" aria-labelledby="plans-title" data-pricing-production>
         <p class="eyebrow">費用先講清楚</p>
-        <h2 id="plans-title">Free 先試用，照護圈升級 $30/月起。</h2>
+        <h2 id="plans-title">第一位家人先免費使用。</h2>
         <div class="plans">
           <article class="card">
-            <span>Free</span>
+            <span>目前免費</span>
             <h3>$0/月</h3>
             <p>適合先試用。可照顧 1 位家人，每月 10 筆 AI 整理，查看接下來的提醒；最近 30 天資料會保存但不開放歷史查詢。</p>
           </article>
           <article class="card featured">
-            <span>照護圈升級</span>
-            <h3>$30/月起</h3>
-            <p>適合長期照顧父母、長輩或慢性病家人。每個家庭群組最多 4 位主要照護對象、5 位協作者，月費清楚落在 $30-250/月。</p>
+            <span>開放測試優惠</span>
+            <h3>第一位照護對象免月費</h3>
+            <p>開放測試期間第一位照護對象每月減免 $30。只有增加照護對象或協作者時，才會在付款前確認費用。</p>
           </article>
         </div>
       </section>
 
       <section class="section" aria-labelledby="calc-title" data-pricing-production>
-        <h2 id="calc-title">正式收費算法</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>項目</th>
-              <th>月費</th>
-              <th>說明</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td data-label="項目">主要照護對象</td>
-              <td data-label="月費">$30 / 位 / 月</td>
-              <td data-label="說明">每多照顧一位家人，就增加一份長期資料保存空間。最多 4 位。</td>
-            </tr>
-            <tr>
-              <td data-label="項目">共同協作者</td>
-              <td data-label="月費">$10 / 位 / 月</td>
-              <td data-label="說明">可協助上傳、編輯、查看資料，不可更改付款與成員權限。最多 5 位。</td>
-            </tr>
-            <tr>
-              <td data-label="項目">主帳號</td>
-              <td data-label="月費">$0</td>
-              <td data-label="說明">主帳號是主要管理者，不計入協作者費用。</td>
-            </tr>
-          </tbody>
-        </table>
+        <h2 id="calc-title">需要加人時，才按月增加。</h2>
+        <div class="price-list">
+          <article class="price-item">
+            <h3>每增加 1 位照護對象</h3>
+            <strong>$30 / 月</strong>
+            <p>可為另一位家人保存與整理照護資料。每個家庭群組最多 4 位。</p>
+          </article>
+          <article class="price-item">
+            <h3>每增加 1 位協作者</h3>
+            <strong>$10 / 月</strong>
+            <p>可協助上傳、編輯與查看照護資料，不可更改付款與成員權限。最多 5 位。</p>
+          </article>
+          <article class="price-item">
+            <h3>主帳號</h3>
+            <strong>$0</strong>
+            <p>主帳號是主要管理者，不計入協作者費用。</p>
+          </article>
+        </div>
       </section>
 
       <section class="section note">
         <h2>測試期間不會靜默收費。</h2>
-        <p>正式版會先顯示費用確認。付款方式將優先支援 LINE Pay；正式收費前會清楚公告。</p>
+        <p>每次付款前都會先顯示本次月費。付款由綠界安全處理，Care WEDO 不保存信用卡資料。</p>
         <p>資料問題、匯出或刪除需求，可聯絡 <a href="mailto:Care@wedopr.com">Care@wedopr.com</a>。</p>
       </section>
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 const SCAN_STEPS = ["讀取照片", "辨識文字", "整理提醒"];
 
@@ -27,7 +27,7 @@ export function ScanProgress({ step }) {
   );
 }
 
-export function UploadGuide({ onConfirm, onTextSubmit, onClose }) {
+export function UploadGuide({ onConfirm, onTextSubmit, onClose, careRecipientName = "目前照護對象" }) {
   const [text, setText] = useState("");
 
   return (
@@ -38,6 +38,10 @@ export function UploadGuide({ onConfirm, onTextSubmit, onClose }) {
           <button type="button" onClick={onClose} className="btn-close" aria-label="關閉">✕</button>
         </div>
         <div className="modal-body upload-guide-body">
+          <p className="care-recipient-notice">
+            <span>將新增至：</span>
+            <strong>{careRecipientName || "目前照護對象"}</strong>
+          </p>
           <p className="upload-guide-intro">
             不用先分類。請拍下<strong>藥袋、處方箋、掛號單或提醒單</strong>，系統會先幫你整理。
           </p>
@@ -74,19 +78,27 @@ export function UploadGuide({ onConfirm, onTextSubmit, onClose }) {
   );
 }
 
-export function CareDocumentUploadModal({ onClose, onSave }) {
+export function CareDocumentUploadModal({ onClose, onSave, careRecipientName = "目前照護對象" }) {
   const [file, setFile] = useState(null);
   const [documentType, setDocumentType] = useState("medical_record");
   const [preserveOriginalFile, setPreserveOriginalFile] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const savingRef = useRef(false);
+
+  function requestClose() {
+    if (savingRef.current) return;
+    onClose();
+  }
 
   async function handleSubmit(event) {
     event.preventDefault();
+    if (savingRef.current) return;
     if (!file) {
       setError("請先選擇 PDF 或圖片。");
       return;
     }
+    savingRef.current = true;
     setSaving(true);
     setError("");
     try {
@@ -94,21 +106,29 @@ export function CareDocumentUploadModal({ onClose, onSave }) {
     } catch (err) {
       setError(err instanceof Error ? err.message : "文件上傳失敗。");
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <form className="modal-content care-document-upload-modal" onSubmit={handleSubmit} role="dialog" aria-modal="true" aria-labelledby="care-document-upload-title" onClick={(event) => event.stopPropagation()}>
+    <div className="modal-overlay" onClick={requestClose}>
+      <form className="modal-content care-document-upload-modal" onSubmit={handleSubmit} role="dialog" aria-modal="true" aria-labelledby="care-document-upload-title" aria-busy={saving} onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
           <div>
             <p className="modal-kicker">醫療文件庫</p>
             <h2 id="care-document-upload-title">上傳病歷或用藥紀錄</h2>
           </div>
-          <button type="button" className="btn-close" onClick={onClose} aria-label="關閉">×</button>
+          <button type="button" className="btn-close" onClick={requestClose} aria-label="關閉" disabled={saving}>×</button>
         </div>
         <div className="modal-body">
+          <p className="care-recipient-notice">
+            <span>將新增至：</span>
+            <strong>{careRecipientName || "目前照護對象"}</strong>
+          </p>
+          {saving && (
+            <p className="care-document-upload-status" role="status">文件正在上傳並整理，請先不要關閉。</p>
+          )}
           <div className="form-group">
             <label htmlFor="care-document-file">文件</label>
             <input
@@ -116,11 +136,12 @@ export function CareDocumentUploadModal({ onClose, onSave }) {
               type="file"
               accept="application/pdf,image/jpeg,image/png,image/webp"
               onChange={(event) => setFile(event.target.files?.[0] || null)}
+              disabled={saving}
             />
           </div>
           <div className="form-group">
             <label htmlFor="care-document-type">類型</label>
-            <select id="care-document-type" value={documentType} onChange={(event) => setDocumentType(event.target.value)}>
+            <select id="care-document-type" value={documentType} onChange={(event) => setDocumentType(event.target.value)} disabled={saving}>
               <option value="medical_record">病歷紀錄</option>
               <option value="medication_record">用藥紀錄</option>
               <option value="lab_report">檢驗報告</option>
@@ -135,6 +156,7 @@ export function CareDocumentUploadModal({ onClose, onSave }) {
               type="checkbox"
               checked={preserveOriginalFile}
               onChange={(event) => setPreserveOriginalFile(event.target.checked)}
+              disabled={saving}
             />
             <span>
               <strong>保存原始檔</strong>
@@ -147,10 +169,10 @@ export function CareDocumentUploadModal({ onClose, onSave }) {
               <span>{file.type || "未知格式"}・{Math.max(file.size / 1024 / 1024, 0.01).toFixed(2)} MB</span>
             </div>
           )}
-          {error && <p className="notice-danger">{error}</p>}
+          {error && <p className="notice-danger" role="alert">{error}</p>}
         </div>
         <div className="modal-footer">
-          <button type="button" className="secondary-action" onClick={onClose}>取消</button>
+          <button type="button" className="secondary-action" onClick={requestClose} disabled={saving}>取消</button>
           <button type="submit" className="primary-action" disabled={saving}>{saving ? "整理中..." : "上傳並整理"}</button>
         </div>
       </form>

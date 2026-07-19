@@ -6,6 +6,8 @@ import {
   setUserActiveProfileId,
 } from "../../_shared/supabase";
 import { getRequestUser } from "../../_shared/auth_context";
+import { logError } from "../../_shared/logger";
+import { resolvePublicApiError } from "../../_shared/public_error";
 
 export const onRequestPatch: PagesFunction<Env> = async (context) => {
   const { request, env } = context;
@@ -35,10 +37,8 @@ export const onRequestPatch: PagesFunction<Env> = async (context) => {
 
     return Response.json({ success: true, active_profile_id: profileId });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "無法更新目前照護對象";
-    return Response.json(
-      { error: message },
-      { status: message.includes("請先登入") ? 401 : 500 },
-    );
+    logError("active_profile.update_failed", error);
+    const publicError = resolvePublicApiError(error, { fallback: "無法更新目前照護對象" });
+    return Response.json({ error: publicError.message }, { status: publicError.status });
   }
 };

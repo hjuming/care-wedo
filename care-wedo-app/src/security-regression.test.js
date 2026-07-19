@@ -88,12 +88,13 @@ test("Family notes are stored as group-scoped reminders", () => {
   assert.match(dashboard, /active_group_id/);
   assert.match(dashboard, /family_notes/);
   assert.match(app, /GroupBadge/);
-  assert.match(app, /FamilyNotesEditor notes=\{familyNotes\} onChange=\{onFamilyNotesChange\}/);
+  assert.match(app, /FamilyNotesEditor notes=\{familyNotes\} scopeId=\{familyNotesScopeId\} loading=\{familyNotesLoading\} onChange=\{onFamilyNotesChange\}/);
   assert.match(app, /family-note-draft-card/);
   assert.match(app, /removeDraft/);
   assert.match(app, />\s*新增\s*</);
-  assert.match(app, />\s*刪除\s*</);
-  assert.match(app, /:\s*"儲存"/);
+  assert.match(app, />\s*移除這則提醒\s*</);
+  assert.match(app, />\s*復原\s*</);
+  assert.match(app, /:\s*"儲存變更"/);
   assert.match(css, /\.family-note-draft-card/);
   assert.match(css, /\.family-notes-actions \.inline-action/);
   assert.match(css, /height:\s*56px/);
@@ -210,14 +211,16 @@ test("Medication view groups medicines by time and keeps one calm taken action",
   const medicationView = readProjectFile("care-wedo-app/src/features/medications/MedicationView.jsx");
   assert.match(medicationView, /groupMedicationsBySchedule/);
   assert.match(medicationView, /medicine-time-group/);
+  assert.match(medicationView, /medicine-caregiver-instructions/);
   assert.match(medicationView, /medicine-slot-actions/);
-  assert.match(medicationView, /medicine-chip-button/);
+  assert.doesNotMatch(medicationView, /medicine-chip-button/);
   assert.doesNotMatch(medicationView, /medicine-slot-picker/);
   assert.doesNotMatch(medicationView, /刪除這顆藥/);
   assert.doesNotMatch(medicationView, /onUpdateMedication/);
   assert.doesNotMatch(medicationView, /onDeleteMedication/);
-  assert.match(medicationView, /getMedicationShortName/);
-  assert.match(medicationView, /"標記本次已服用"/);
+  assert.doesNotMatch(medicationView, /getMedicationShortName/);
+  assert.match(medicationView, /aria-label=\{`記錄\$\{slotLabel\}這些藥已服用`\}/);
+  assert.match(medicationView, /`記錄：\$\{slotLabel\}已服用`/);
   assert.doesNotMatch(medicationView, /我已吃完/);
   assert.match(medicationView, /formatDateLabel\(todayDate\).*已記錄/);
   assert.match(medicationView, /顯示全部藥物/);
@@ -254,14 +257,19 @@ test("Medication view exposes an A4-friendly doctor summary", () => {
 
 test("Version A pricing is visible without wiring live payments", () => {
   const app = readProjectFile("care-wedo-app/src/App.jsx");
+  const pricingContract = readProjectFile("shared/care-wedo-pricing.js");
   const groupSettings = readProjectFile("care-wedo-app/src/components/GroupSettings.jsx");
   const css = readProjectFile("care-wedo-app/src/index.css");
   const staticPricing = readProjectFile("care-wedo-app/public/pricing/index.html");
 
-  assert.match(app, /recipientMonthly:\s*30/);
-  assert.match(app, /collaboratorMonthly:\s*10/);
-  assert.match(app, /maxCareProfiles:\s*4/);
-  assert.match(app, /maxPaidCollaborators:\s*5/);
+  assert.match(app, /SHARED_CARE_WEDO_PRICING\.recipient_monthly/);
+  assert.match(app, /SHARED_CARE_WEDO_PRICING\.collaborator_monthly/);
+  assert.match(app, /SHARED_CARE_WEDO_GROUP_LIMITS\.max_care_profiles/);
+  assert.match(app, /SHARED_CARE_WEDO_GROUP_LIMITS\.max_paid_collaborators/);
+  assert.match(pricingContract, /recipient_monthly:\s*30/);
+  assert.match(pricingContract, /collaborator_monthly:\s*10/);
+  assert.match(pricingContract, /max_care_profiles:\s*4/);
+  assert.match(pricingContract, /max_paid_collaborators:\s*5/);
   assert.match(app, /pricing-mode-panel/);
   assert.match(app, /目前為測試模式：不會實際扣款/);
   const testModeCopy = app.match(/const CARE_WEDO_TEST_MODE_COPY = "([^"]+)"/)?.[1] || "";
@@ -293,7 +301,9 @@ test("Group settings consumes the backend pricing contract instead of duplicatin
   assert.match(component, /resolveGroupPricing/);
   assert.match(component, /recipient_monthly/);
   assert.match(component, /collaborator_monthly/);
+  assert.match(component, /SHARED_CARE_WEDO_GROUP_LIMITS/);
   assert.doesNotMatch(component, /const GROUP_PRICING\s*=/);
+  assert.doesNotMatch(component, /maxCareProfiles:\s*4|maxPaidCollaborators:\s*5|maxMembersIncludingOwner:\s*6/);
 });
 
 test("OCR quota limit opens a plan upgrade prompt instead of a raw error", () => {
@@ -303,15 +313,16 @@ test("OCR quota limit opens a plan upgrade prompt instead of a raw error", () =>
   assert.match(app, /function isQuotaLimitMessage/);
   assert.match(app, /planUpgradePrompt/);
   assert.match(app, /function PlanUpgradeModal/);
-  assert.match(app, /本月免費整理額度已用完/);
+  assert.match(app, /免費整理已達上限/);
   assert.match(app, /showPlanUpgradePrompt\("quota", "image_upload", message\)/);
   assert.match(app, /showPlanUpgradePrompt\("quota", "text_upload", message\)/);
-  assert.match(app, /查看方案/);
-  assert.match(app, /先不要保存/);
+  assert.match(app, /查看費用與升級方式/);
+  assert.match(app, /這次先不保存/);
   assert.match(app, /聯絡客服/);
   assert.match(app, /Care@wedopr\.com/);
   assert.match(css, /\.quota-upgrade-modal/);
-  assert.match(css, /\.quota-upgrade-options/);
+  assert.match(css, /\.quota-upgrade-flow/);
+  assert.match(css, /\.quota-upgrade-fee-list/);
   assert.match(css, /\.quota-upgrade-actions/);
 });
 
@@ -395,6 +406,32 @@ test("Appointment cards expose edit and soft-delete controls with scoped APIs", 
   assert.match(updateApi, /getIdentityAndGroups/);
 });
 
+test("manual reminder mutations share one in-flight lock and cannot be dismissed or submitted twice", () => {
+  const appointmentView = readProjectFile("care-wedo-app/src/features/appointments/AppointmentView.jsx");
+  const css = readProjectFile("care-wedo-app/src/index.css");
+  const modal = appointmentView.slice(
+    appointmentView.indexOf("export function ManualReminderModal"),
+    appointmentView.indexOf("export function CalendarView"),
+  );
+
+  assert.match(appointmentView, /import \{ useMemo, useRef, useState \} from "react"/);
+  assert.match(modal, /const busyRef = useRef\(false\)/);
+  assert.match(modal, /const isBusy = saving \|\| deleting \|\| copying/);
+  assert.match(modal, /function requestClose\(\)[\s\S]*if \(busyRef\.current\) return;[\s\S]*onClose\(\)/);
+  assert.match(modal, /async function handleSubmit[\s\S]*if \(busyRef\.current\) return;[\s\S]*busyRef\.current = true/);
+  assert.match(modal, /async function handleCopySubmit[\s\S]*if \(busyRef\.current\) return;[\s\S]*busyRef\.current = true/);
+  assert.match(modal, /async function handleDelete[\s\S]*if \(busyRef\.current\) return;[\s\S]*busyRef\.current = true/);
+  assert.match(modal, /busyRef\.current = false/);
+  assert.match(modal, /role="dialog"[\s\S]*aria-busy=\{isBusy\}/);
+  assert.match(modal, /onClick=\{requestClose\} className="btn-close" aria-label="關閉" disabled=\{isBusy\}/);
+  assert.match(modal, /<div className="modal-body">[\s\S]*<fieldset className="manual-reminder-fieldset" disabled=\{isBusy\}/);
+  assert.match(modal, /className="calendar-action-notice" role="status">\{busyLabel\}/);
+  assert.match(modal, /className="error-msg" role="alert"/);
+  assert.match(modal, /className="secondary-action" onClick=\{requestClose\} disabled=\{isBusy\}/);
+  assert.match(modal, /type="submit" className="primary-action" disabled=\{isBusy\}/);
+  assert.match(css, /\.manual-reminder-fieldset\s*\{[\s\S]*display:\s*grid[\s\S]*min-width:\s*0[\s\S]*border:\s*0/);
+});
+
 test("Care reminder detail text is highlighted on cards", () => {
   const css = readProjectFile("care-wedo-app/src/index.css");
   assert.match(css, /\.event-row \.soft-note,\s*\.elder-task-body \.elder-task-detail/);
@@ -419,17 +456,52 @@ test("Today task cards keep only the primary elder action", () => {
 
 test("Today page makes photo-first care upload the primary action", () => {
   const app = readProjectFile("care-wedo-app/src/App.jsx");
+  const css = readProjectFile("care-wedo-app/src/index.css");
   const ocrWorkflow = readProjectFile("care-wedo-app/src/features/ocr/OcrWorkflow.jsx");
   const overviewView = app.slice(app.indexOf("function OverviewView"), app.indexOf("function appointmentTimeValue"));
   const uploadGuide = ocrWorkflow.slice(ocrWorkflow.indexOf("export function UploadGuide"), ocrWorkflow.indexOf("export function CareDocumentUploadModal"));
 
-  assert.match(overviewView, /今天要照顧的事/);
-  assert.match(overviewView, /拍照新增照護資料/);
-  assert.match(overviewView, /用藥、回診、處方箋、掛號單都從這裡開始。/);
+  assert.match(overviewView, /今天照護/);
+  assert.match(overviewView, />拍照新增<\/button>/);
+  assert.match(overviewView, /藥袋、處方箋、掛號單都可以拍。/);
+  assert.match(overviewView, /className="today-hero-status"/);
+  assert.ok(overviewView.indexOf('className="today-main-actions"') < overviewView.indexOf('className="today-hero-status"'));
+  assert.doesNotMatch(overviewView, /今天要照顧的事|拍照新增照護資料|拍照新增資料|用藥、回診、處方箋、掛號單都從這裡開始。/);
+  assert.match(css, /@media \(max-width:\s*420px\)[\s\S]*\.today-hero-panel\s*\{[\s\S]*padding:\s*18px/);
+  assert.match(css, /\.today-main-actions\s*\{[\s\S]*grid-column:\s*2[\s\S]*grid-row:\s*1 \/ span 2/);
+  assert.match(css, /@media \(max-width:\s*900px\)[\s\S]*\.today-main-actions,\s*\.today-hero-status\s*\{[\s\S]*grid-column:\s*1[\s\S]*grid-row:\s*auto/);
   assert.doesNotMatch(overviewView, /手動新增提醒/);
   assert.doesNotMatch(overviewView, /最近下一筆照護事項/);
   assert.match(uploadGuide, /不用先分類/);
   assert.match(uploadGuide, /系統會先幫你整理/);
+});
+
+test("Elder preview never asks a read-only user to complete or upload care data", () => {
+  const app = readProjectFile("care-wedo-app/src/App.jsx");
+  const overviewView = app.slice(app.indexOf("function OverviewView"), app.indexOf("function appointmentTimeValue"));
+
+  assert.match(overviewView, /今天有 \$\{todayTasks\.length\} 件事，照順序查看。/);
+  assert.match(overviewView, /需要回報的事項再記錄完成/);
+  assert.match(overviewView, /readOnly \? "今天還沒有照護事項。" : "拍照上傳，系統會幫你整理。"/);
+  assert.match(overviewView, /家人會幫你更新照護資料。/);
+  assert.match(overviewView, /家人新增行程或用藥後，會顯示在這裡。/);
+  assert.doesNotMatch(overviewView, /照順序完成即可|目前是唯讀查看模式/);
+});
+
+test("Elder today medication cards show the full instruction without another tap", () => {
+  const app = readProjectFile("care-wedo-app/src/App.jsx");
+  const css = readProjectFile("care-wedo-app/src/index.css");
+  const overviewView = app.slice(app.indexOf("function OverviewView"), app.indexOf("function appointmentTimeValue"));
+
+  assert.match(overviewView, /className="today-medication-items"/);
+  assert.match(overviewView, /medication\.name \|\| "藥名待家人確認"/);
+  assert.match(overviewView, /medication\.dosage \|\| "份量待家人確認"/);
+  assert.match(overviewView, /medication\.schedule\?\.mealTimingLabel \|\| "飯前或飯後待家人確認"/);
+  assert.match(overviewView, /請照藥袋或醫師指示服用/);
+  assert.doesNotMatch(overviewView, /group\.medications\.map\(\(medication\) => medication\.name[\s\S]*\.join\("、"\)/);
+  assert.match(css, /\.today-medication-item\s*\{[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\)/);
+  assert.match(css, /\.today-medication-instruction\s*\{[\s\S]*overflow-wrap:\s*anywhere/);
+  assert.match(css, /@media \(max-width: 420px\)[\s\S]*\.today-medication-row\s*\{[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\)/);
 });
 
 test("LINE setup check does not treat auth check failures as first-time setup", () => {
@@ -560,21 +632,29 @@ test("Medication records expose schedule fields for elder-friendly medicine inst
 test("Medication slot status API records dated logs with ownership checks", () => {
   const schema = readProjectFile("supabase/schema.sql");
   const migration = readProjectFile("supabase/migration_phase50_medication_logs.sql");
+  const idempotencyMigration = readProjectFile("supabase/migrations/20260719003000_phase64_medication_log_idempotency.sql");
   const api = readProjectFile("functions/api/medications/taken.ts");
+  const idempotency = readProjectFile("functions/_shared/medication_idempotency.ts");
   const dashboard = readProjectFile("functions/api/dashboard.ts");
   assert.match(schema, /create table if not exists public\.medication_logs/);
   assert.match(migration, /create table if not exists public\.medication_logs/);
   assert.match(schema, /taken_date date not null/);
   assert.match(schema, /confirmed_by_user_id bigint/);
+  assert.match(schema, /idempotency_key text/);
+  assert.match(idempotencyMigration, /add column if not exists idempotency_key text/);
+  assert.match(idempotencyMigration, /unique index if not exists medication_logs_medication_idempotency_key_uidx/);
   assert.match(api, /getBearerToken/);
   assert.match(api, /getUserMemberships/);
   assert.match(api, /medication_ids/);
   assert.match(api, /medications\?id=in\.\(\$\{medicationIds\.join\(","\)\}\)/);
-  assert.match(api, /medication_logs\?select=/);
-  assert.match(api, /status:\s*status/);
+  assert.match(api, /parseMedicationIdempotencyKey/);
+  assert.match(api, /writeMedicationLogsIdempotently/);
+  assert.match(idempotency, /resolution=ignore-duplicates,return=representation/);
+  assert.match(idempotency, /on_conflict=medication_id%2Cidempotency_key/);
+  assert.match(api, /\n\s*status,\n/);
   assert.match(api, /dependencyUnavailable/);
   assert.match(api, /服藥紀錄暫時無法儲存，請稍後重試/);
-  assert.match(api, /status: dependencyUnavailable \? 503 : 500/);
+  assert.match(api, /idempotencyConflict \? 409 : dependencyUnavailable \? 503 : 500/);
   assert.doesNotMatch(api, /body:\s*JSON\.stringify\(\{\s*taken_status:\s*status\s*\}\)/);
   assert.match(dashboard, /fetchTodayMedicationLogs/);
   assert.match(dashboard, /taken_date=eq\.\$\{todayInTaipei\(\)\}/);
@@ -665,8 +745,8 @@ test("Group settings exposes plan limits before adding care recipients", () => {
   assert.match(groupsApi, /max_recipients/);
   assert.match(groupsApi, /billing_entitlement/);
   assert.match(component, /selectedRecipientLimitReached/);
-  assert.match(component, /maxCareProfiles:\s*4/);
-  assert.match(component, /maxPaidCollaborators:\s*5/);
+  assert.match(component, /maxCareProfiles:\s*SHARED_CARE_WEDO_GROUP_LIMITS\.max_care_profiles/);
+  assert.match(component, /maxPaidCollaborators:\s*SHARED_CARE_WEDO_GROUP_LIMITS\.max_paid_collaborators/);
   assert.match(component, /另外開設家庭群組/);
   assert.match(component, /quota-note/);
   assert.match(component, /showLimitModal\("profile", selectedGroup\)/);
@@ -877,12 +957,14 @@ test("Future appointment cards expose a calendar file export action", () => {
   assert.match(calendarView, />\s*加入 Google 行事曆\s*</);
   assert.match(calendarView, />\s*Apple \/ 手機行事曆\s*</);
   assert.match(calendarView, />\s*複製提醒文字\s*</);
-  assert.match(calendarView, /event-card-actions[\s\S]*card-corner-calendar/);
-  assert.match(calendarView, /event-card-edit-actions[\s\S]*card-corner-edit/);
-  assert.doesNotMatch(calendarView.slice(calendarView.indexOf('<div className="event-card-actions"'), calendarView.indexOf('<div className="event-type">')), /card-corner-edit/);
+  assert.match(calendarView, /event-card-primary-actions[\s\S]*card-corner-calendar/);
+  assert.match(calendarView, /event-card-management[\s\S]*card-corner-edit/);
+  assert.match(calendarView, /<summary>管理這筆提醒<\/summary>/);
+  assert.doesNotMatch(calendarView.slice(calendarView.indexOf('<div className="event-card-primary-actions"'), calendarView.indexOf('<details className="event-card-management">')), /card-corner-edit/);
   assert.match(calendarView, /onEditAppointment\?\.\(apt\)/);
   assert.doesNotMatch(calendarView, /event-edit-action/);
-  assert.match(calendarView, />\s*拍照新增照護資料\s*</);
+  assert.match(source, /calendar-primary-upload[\s\S]*拍照新增照護資料/);
+  assert.doesNotMatch(calendarView, />\s*拍照新增照護資料\s*</);
   assert.doesNotMatch(calendarView, />\s*手動新增提醒\s*</);
   assert.doesNotMatch(calendarView, />\s*拍照上傳\s*</);
 });

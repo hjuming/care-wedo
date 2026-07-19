@@ -28,8 +28,8 @@ test("landing page copy matches elder-friendly beta positioning", () => {
   assert.match(app, /不會操作就問小管家/);
   assert.match(app, /先完成綁定，再拍單子/);
   assert.match(app, /資料完整保存，LINE 只講重點/);
-  assert.match(app, /Free \/ 照護圈升級/);
-  assert.match(app, /Free 先試用，照護圈升級才做長期保存/);
+  assert.match(app, /免費使用 \/ 照護圈升級/);
+  assert.match(app, /先免費使用，需要增加家人或協作者時再升級/);
   assert.match(app, /variant="guide"/);
   assert.match(app, /variant="pricing"/);
   assert.match(app, /plan-name-trigger/);
@@ -48,7 +48,7 @@ test("landing page copy matches elder-friendly beta positioning", () => {
   assert.match(app, /\+\$30\/人\/月/);
   assert.match(app, /完整歷史紀錄與健康時間線/);
   assert.match(app, /PLAN_TIERS/);
-  assert.match(app, /版本 A 收費方式/);
+  assert.match(app, /查看費用說明/);
   assert.match(app, /Care Circle/);
   assert.match(app, /Care@wedopr\.com/);
   assert.match(app, /推薦方案/);

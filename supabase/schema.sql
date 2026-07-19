@@ -279,12 +279,16 @@ create table if not exists public.medication_logs (
   taken_date date not null,
   time_slot text not null,
   status text not null default 'taken',
+  idempotency_key text,
   confirmed_by_user_id bigint references public.users(id) on delete set null,
   created_at timestamptz not null default now()
 );
 
 create index if not exists medication_logs_medication_date_idx
   on public.medication_logs (medication_id, taken_date, time_slot);
+
+create unique index if not exists medication_logs_medication_idempotency_key_uidx
+  on public.medication_logs (medication_id, idempotency_key);
 
 create index if not exists care_profiles_group_id_idx
   on public.care_profiles (group_id, is_default desc, created_at asc);

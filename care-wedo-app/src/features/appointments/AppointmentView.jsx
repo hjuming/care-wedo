@@ -1,6 +1,8 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { buildGoogleCalendarEventUrl } from "../../services/api";
-import { buildAppointmentTitle, formatDateLabel, isDateTodayOrFuture, normalizeDateInput, todayInTaipei, typeIcon, typeLabel } from "../shared/careFormatters";
+import { buildAppointmentTitle, formatDateLabel, formatDoctorName, normalizeDateInput, sortUpcomingAppointments, todayInTaipei, typeIcon, typeLabel } from "../shared/careFormatters";
+
+const INITIAL_VISIBLE_APPOINTMENTS = 3;
 
 const REMINDER_TYPE_OPTIONS = [
   { value: "clinic_visit", label: "門診" },
@@ -29,7 +31,7 @@ function addMonthsInTaipei(months) {
 
 function buildCalendarReminderCopy(appointment = {}, careName = "") {
   const title = appointment.title || appointment.department || typeLabel(appointment.type);
-  const place = [appointment.hospital, appointment.doctor && `${appointment.doctor}醫師`, appointment.number && `${appointment.number}號`].filter(Boolean).join(" ｜ ");
+  const place = [appointment.hospital, formatDoctorName(appointment.doctor), appointment.number && `${appointment.number}號`].filter(Boolean).join(" ｜ ");
   return [
     careName && `${careName} 的照護排程`,
     formatDateLabel(appointment.date, appointment.time),
@@ -106,7 +108,7 @@ function buildReminderPayload(formData) {
   };
 }
 
-export function ManualReminderModal({ mode = "create", initialAppointment = null, onClose, onSave, onDelete, onCopy }) {
+export function ManualReminderModal({ mode = "create", initialAppointment = null, onClose, onSave, onDelete, onCopy, careRecipientName = "目前照護對象" }) {
   const [formData, setFormData] = useState(() => initialAppointment ? buildReminderFormData(initialAppointment) : {
     type: "clinic_visit",
     date: todayInTaipei(),
@@ -124,9 +126,25 @@ export function ManualReminderModal({ mode = "create", initialAppointment = null
   const [copying, setCopying] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState("");
+  const busyRef = useRef(false);
+  const isBusy = saving || deleting || copying;
+  const busyLabel = saving
+    ? "正在儲存提醒，請先不要關閉。"
+    : copying
+      ? "正在複製提醒，請先不要關閉。"
+      : deleting
+        ? "正在刪除提醒，請先不要關閉。"
+        : "";
+
+  function requestClose() {
+    if (busyRef.current) return;
+    onClose();
+  }
 
   async function handleSubmit(event) {
     event.preventDefault();
+    if (busyRef.current) return;
+    busyRef.current = true;
     setSaving(true);
     setError("");
     try {
@@ -134,46 +152,61 @@ export function ManualReminderModal({ mode = "create", initialAppointment = null
     } catch (err) {
       setError(err.message || "新增提醒失敗");
     } finally {
+      busyRef.current = false;
       setSaving(false);
     }
   }
 
   async function handleCopySubmit() {
+    if (busyRef.current) return;
+    busyRef.current = true;
     setCopying(true);
     setError("");
     try {
       await onCopy?.(buildReminderPayload(formData));
     } catch (err) {
       setError(err.message || "複製失敗，請再試一次");
+    } finally {
+      busyRef.current = false;
       setCopying(false);
     }
   }
 
   async function handleDelete() {
+    if (busyRef.current) return;
     if (!confirmDelete) {
       setConfirmDelete(true);
       return;
     }
+    busyRef.current = true;
     setDeleting(true);
     setError("");
     try {
       await onDelete?.();
     } catch (err) {
       setError(err.message || "刪除失敗，請再試一次");
+    } finally {
+      busyRef.current = false;
       setDeleting(false);
     }
   }
 
   return (
     <div className="modal-overlay">
-      <div className="modal-content manual-reminder-modal">
+      <div className="modal-content manual-reminder-modal" role="dialog" aria-modal="true" aria-labelledby="manual-reminder-title" aria-busy={isBusy}>
         <div className="modal-header">
-          <h2>{mode === "edit" ? "編輯提醒" : "手動新增提醒"}</h2>
-          <button type="button" onClick={onClose} className="btn-close" aria-label="關閉">✕</button>
+          <h2 id="manual-reminder-title">{mode === "edit" ? "編輯提醒" : "手動新增提醒"}</h2>
+          <button type="button" onClick={requestClose} className="btn-close" aria-label="關閉" disabled={isBusy}>✕</button>
         </div>
         <form onSubmit={handleSubmit}>
           <div className="modal-body">
-            {error && <p className="error-msg">{error}</p>}
+            <fieldset className="manual-reminder-fieldset" disabled={isBusy}>
+            {error && <p className="error-msg" role="alert">{error}</p>}
+            {isBusy && <p className="calendar-action-notice" role="status">{busyLabel}</p>}
+            <p className="care-recipient-notice">
+              <span>{mode === "edit" ? "正在編輯：" : "將新增至："}</span>
+              <strong>{careRecipientName || "目前照護對象"}</strong>
+            </p>
             <div className="form-group">
               <label>提醒類型</label>
               <div className="segmented-choice-grid" role="group" aria-label="提醒類型">
@@ -305,7 +338,7 @@ export function ManualReminderModal({ mode = "create", initialAppointment = null
                   <strong>複製提醒</strong>
                   <p>會用目前表單內容建立新提醒。先改日期再複製，原本那筆不會被修改。</p>
                 </div>
-                <button type="button" className="secondary-action subtle copy-subtle" onClick={handleCopySubmit} disabled={saving || deleting || copying}>
+                <button type="button" className="secondary-action subtle copy-subtle" onClick={handleCopySubmit} disabled={isBusy}>
                   {copying ? "複製中..." : "複製成新提醒"}
                 </button>
               </div>
@@ -318,20 +351,21 @@ export function ManualReminderModal({ mode = "create", initialAppointment = null
                 </div>
                 <div className="modal-danger-actions">
                   {confirmDelete && (
-                    <button type="button" className="secondary-action subtle" onClick={() => setConfirmDelete(false)} disabled={deleting}>
+                    <button type="button" className="secondary-action subtle" onClick={() => setConfirmDelete(false)} disabled={isBusy}>
                       取消刪除
                     </button>
                   )}
-                  <button type="button" className="secondary-action subtle danger-subtle" onClick={handleDelete} disabled={saving || deleting}>
+                  <button type="button" className="secondary-action subtle danger-subtle" onClick={handleDelete} disabled={isBusy}>
                     {deleting ? "刪除中..." : confirmDelete ? "確認刪除" : "刪除這筆提醒"}
                   </button>
                 </div>
               </div>
             )}
+            </fieldset>
           </div>
           <div className="modal-footer">
-            <button type="button" className="secondary-action" onClick={onClose} disabled={saving}>取消</button>
-            <button type="submit" className="primary-action" disabled={saving}>{saving ? "儲存中..." : mode === "edit" ? "儲存修改" : "儲存提醒"}</button>
+            <button type="button" className="secondary-action" onClick={requestClose} disabled={isBusy}>取消</button>
+            <button type="submit" className="primary-action" disabled={isBusy}>{saving ? "儲存中..." : mode === "edit" ? "儲存修改" : "儲存提醒"}</button>
           </div>
         </form>
       </div>
@@ -339,14 +373,19 @@ export function ManualReminderModal({ mode = "create", initialAppointment = null
   );
 }
 
-export function CalendarView({ appointments, careName = "", onUpload, onAddToCalendar, onEditAppointment }) {
+export function CalendarView({ appointments, careName = "", onAddToCalendar, onEditAppointment, readOnly = false }) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [calendarActionAppointment, setCalendarActionAppointment] = useState(null);
   const [calendarActionNotice, setCalendarActionNotice] = useState("");
+  const [showAllAppointments, setShowAllAppointments] = useState(false);
   const futureAppointments = useMemo(
-    () => appointments.filter((apt) => apt.status !== "completed" && isDateTodayOrFuture(apt.date)),
+    () => sortUpcomingAppointments(appointments),
     [appointments],
   );
+  const hiddenAppointmentCount = Math.max(0, futureAppointments.length - INITIAL_VISIBLE_APPOINTMENTS);
+  const visibleAppointments = showAllAppointments
+    ? futureAppointments
+    : futureAppointments.slice(0, INITIAL_VISIBLE_APPOINTMENTS);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -370,10 +409,14 @@ export function CalendarView({ appointments, careName = "", onUpload, onAddToCal
 
   function scrollToDate(day) {
     const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-    const element = document.getElementById(`event-${dateStr}`);
-    if (element) {
-      element.scrollIntoView({ behavior: "smooth", block: "center" });
-    }
+    const scrollToVisibleCard = () => document
+      .getElementById(`event-${dateStr}`)
+      ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (document.getElementById(`event-${dateStr}`)) return scrollToVisibleCard();
+    if (!futureAppointments.some((appointment) => appointment.date === dateStr)) return;
+
+    setShowAllAppointments(true);
+    window.requestAnimationFrame(() => window.requestAnimationFrame(scrollToVisibleCard));
   }
 
   function closeCalendarActions() {
@@ -411,39 +454,40 @@ export function CalendarView({ appointments, careName = "", onUpload, onAddToCal
             const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
             const hasEvent = futureAppointments.some((apt) => apt.date === dateStr);
             const isToday = new Date().toDateString() === new Date(year, month, day).toDateString();
+            const dateLabel = `${year} 年 ${month + 1} 月 ${day} 日${hasEvent ? "，有照護事項" : "，沒有照護事項"}`;
+            const dayClassName = `calendar-day ${hasEvent ? "has-event" : ""} ${isToday ? "is-today" : ""}`;
 
             return (
-              <button
-                key={day}
-                type="button"
-                className={`calendar-day ${hasEvent ? "has-event" : ""} ${isToday ? "is-today" : ""}`}
-                onClick={() => scrollToDate(day)}
-              >
-                {day}
-              </button>
+              readOnly ? (
+                <time key={day} dateTime={dateStr} aria-label={dateLabel} aria-current={isToday ? "date" : undefined} className={dayClassName}>
+                  {day}
+                </time>
+              ) : (
+                <button
+                  key={day}
+                  type="button"
+                  className={dayClassName}
+                  onClick={() => scrollToDate(day)}
+                  aria-label={dateLabel}
+                  aria-current={isToday ? "date" : undefined}
+                >
+                  {day}
+                </button>
+              )
             );
           })}
         </div>
       </section>
 
       <section className="event-list" aria-label="看診和領藥清單">
-        {onUpload && (
-          <div className="inline-action-row event-list-actions">
-            <button type="button" className="primary-action" onClick={onUpload}>拍照新增照護資料</button>
-          </div>
-        )}
-        {futureAppointments.length ? futureAppointments.map((apt) => (
+        <div className="event-list-items" id="future-appointment-cards">
+        {futureAppointments.length ? visibleAppointments.map((apt) => (
           <article key={apt.id} id={`event-${apt.date}`} className="event-row">
-            <div className="event-card-actions">
-              <button type="button" className="card-corner-calendar" onClick={() => setCalendarActionAppointment(apt)} aria-label={`加入 ${apt.title || apt.department || "提醒"} 到行事曆`}>
-                加入行事曆
-              </button>
-            </div>
             <div className="event-type">{typeIcon(apt.type)}</div>
-            <div>
+            <div className="event-card-copy">
               <p className="event-date">{formatDateLabel(apt.date, apt.time)}</p>
               <h3>{apt.title || apt.department}</h3>
-              <p>{[apt.hospital, apt.doctor && `${apt.doctor}醫師`, apt.number && `${apt.number}號`].filter(Boolean).join(" ｜ ")}</p>
+              <p>{[apt.hospital, formatDoctorName(apt.doctor), apt.number && `${apt.number}號`].filter(Boolean).join(" ｜ ")}</p>
               {apt.duplicate_count > 1 && (
                 <p className="duplicate-appointment-note" role="status">
                   已將 {apt.duplicate_count} 筆相同資料合併顯示，原始紀錄未刪除。
@@ -452,21 +496,39 @@ export function CalendarView({ appointments, careName = "", onUpload, onAddToCal
               {apt.location && <p className="location-line">地點：{apt.location}</p>}
               {apt.notes && <p className="soft-note">{apt.notes}</p>}
             </div>
+            <div className="event-card-primary-actions">
+              <button type="button" className="card-corner-calendar" onClick={() => setCalendarActionAppointment(apt)} aria-label={`加入 ${apt.title || apt.department || "提醒"} 到行事曆`}>
+                加入行事曆
+              </button>
+            </div>
             {onEditAppointment && (
-              <div className="event-card-edit-actions">
+              <details className="event-card-management">
+                <summary>管理這筆提醒</summary>
                 <button type="button" className="card-corner-edit" onClick={() => onEditAppointment?.(apt)} aria-label={`編輯 ${apt.title || apt.department || "提醒"}`}>
-                  編輯
+                  編輯提醒
                 </button>
-              </div>
+              </details>
             )}
           </article>
         )) : (
           <EmptyGuide
             title="目前還沒有看診提醒。"
             description="可以先拍掛號單、處方箋或提醒單，Care WEDO 會幫你整理下一次回診、檢查或領藥時間。"
-            primaryLabel={onUpload ? "拍照新增照護資料" : undefined}
-            onPrimary={onUpload}
           />
+        )}
+        </div>
+        {hiddenAppointmentCount > 0 && (
+          <button
+            type="button"
+            className="event-list-more"
+            aria-controls="future-appointment-cards"
+            aria-expanded={showAllAppointments}
+            onClick={() => setShowAllAppointments((current) => !current)}
+          >
+            {showAllAppointments
+              ? `只看最近 ${INITIAL_VISIBLE_APPOINTMENTS} 筆`
+              : `查看其餘 ${hiddenAppointmentCount} 筆`}
+          </button>
         )}
       </section>
       {calendarActionAppointment && (
