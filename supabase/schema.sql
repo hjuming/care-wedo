@@ -579,6 +579,7 @@ create index if not exists line_push_logs_status_created_idx
 -- Do not expose protected tables to anon/authenticated clients without adding
 -- user/group-scoped policies first.
 alter table public.users enable row level security;
+alter table public.plans enable row level security;
 alter table public.user_feature_flags enable row level security;
 alter table public.family_groups enable row level security;
 alter table public.care_profiles enable row level security;
@@ -654,6 +655,8 @@ grant execute on function public.care_wedo_has_group_access(bigint) to authentic
 grant execute on function public.care_wedo_can_access_storage_object(text, text) to authenticated, service_role;
 
 revoke insert, update, delete on public.users from anon, authenticated;
+revoke all on public.plans from anon, authenticated;
+grant select on public.plans to service_role;
 revoke insert, update, delete on public.user_feature_flags from anon, authenticated;
 revoke insert, update, delete on public.family_groups from anon, authenticated;
 revoke insert, update, delete on public.care_profiles from anon, authenticated;

@@ -41,6 +41,7 @@ test("protected Care WEDO tables have defensive authenticated read RLS policies"
 
   for (const table of [
     "users",
+    "plans",
     "user_feature_flags",
     "family_groups",
     "care_profiles",
@@ -82,6 +83,7 @@ test("protected Care WEDO tables do not grant direct writes to anon or authentic
   const combined = `${schema}\n${migration}`;
   const protectedTables = [
     "users",
+    "plans",
     "user_feature_flags",
     "family_groups",
     "care_profiles",
@@ -104,10 +106,21 @@ test("protected Care WEDO tables do not grant direct writes to anon or authentic
 
   assert.doesNotMatch(combined, directWriteGrant);
   assert.doesNotMatch(combined, /grant\s+[^;\n]*(insert|update|delete)[^;\n]*on\s+storage\.objects\s+to\s+(anon|authenticated)/i);
+  assert.match(combined, /revoke all on public\.plans from anon, authenticated/i);
+  assert.match(combined, /grant select on public\.plans to service_role/i);
   assert.match(combined, /revoke insert, update, delete on public\.appointments from anon, authenticated/i);
   assert.match(combined, /revoke insert, update, delete on public\.medication_logs from anon, authenticated/i);
   assert.match(combined, /revoke insert, update, delete on public\.care_documents from anon, authenticated/i);
   assert.match(combined, /revoke insert, update, delete on storage\.objects from anon, authenticated/i);
+});
+
+test("server-owned plan catalog is closed to browser database roles", () => {
+  const migration = readProjectFile("supabase/migrations/20260722132637_phase65_plans_rls.sql");
+
+  assert.match(migration, /alter table public\.plans enable row level security/i);
+  assert.match(migration, /revoke all on public\.plans from anon, authenticated/i);
+  assert.match(migration, /grant select on public\.plans to service_role/i);
+  assert.doesNotMatch(migration, /create\s+policy/i);
 });
 
 test("care document storage policy smoke uses authenticated user access without logging secrets", () => {
